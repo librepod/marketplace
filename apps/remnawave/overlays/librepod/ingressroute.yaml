@@ -1,0 +1,20 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: remnawave
+spec:
+  entryPoints:
+  - web
+  - websecure
+  routes:
+  - kind: Rule
+    match: Host(`remnawave.${BASE_DOMAIN:=libre.pod}`)
+    priority: 1
+    middlewares:
+    - name: oauth2-errors
+      namespace: oauth2-proxy
+    - name: oauth2-forwardauth
+      namespace: oauth2-proxy
+    services:
+    - name: remnawave
+      port: 80

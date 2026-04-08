@@ -1,0 +1,121 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: remnawave
+spec:
+  displayName: "Remnawave"
+  description: "Proxy and user management solution built on Xray Core"
+  icon: "https://docs.rw/assets/images/favicon.ico"
+  category: "Networking"
+  website: "https://remnawave.com"
+
+  version: "1.0.0"
+  appVersion: "2.7.4"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/remnawave"
+    path: ./overlays/librepod
+
+  params:
+    required:
+      - name: BASE_DOMAIN
+        description: "Base domain (app will be at remnawave.BASE_DOMAIN)"
+        type: string
+        example: "example.com"
+
+  secrets:
+    - name: JWT_AUTH_SECRET
+      description: "Secret key for auth JWT (64-char hex)"
+      required: true
+      generate:
+        type: random
+        length: 64
+    - name: JWT_API_TOKENS_SECRET
+      description: "Secret key for API tokens JWT (64-char hex)"
+      required: true
+      generate:
+        type: random
+        length: 64
+    - name: POSTGRES_PASSWORD
+      description: "PostgreSQL password"
+      required: true
+      generate:
+        type: random
+        length: 32
+
+  dependencies:
+    required:
+      - kind: IngressController
+        description: "Traefik (provided by traefik app)"
+      - kind: AuthProxy
+        description: "oauth2-proxy (provided by oauth2-proxy app)"
+      - kind: StorageClass
+        description: "nfs-client (provided by nfs-provisioner app)"
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1beta2
+      kind: OCIRepository
+      metadata:
+        name: marketplace-remnawave
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "remnawave"
+          marketplace.io/version: "1.0.0"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/remnawave
+        ref:
+          tag: "1.0.0"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-remnawave
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "remnawave"
+          marketplace.io/version: "1.0.0"
+      spec:
+        dependsOn:
+          - name: traefik
+          - name: oauth2-proxy
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-remnawave
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+        postBuild:
+          substitute:
+            BASE_DOMAIN: "${BASE_DOMAIN}"
+          substituteFrom:
+            - kind: Secret
+              name: remnawave-config
+    secret: |
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: remnawave-config
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "remnawave"
+      type: Opaque
+      stringData:
+        JWT_AUTH_SECRET: "${JWT_AUTH_SECRET}"
+        JWT_API_TOKENS_SECRET: "${JWT_API_TOKENS_SECRET}"
+        POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml
+        - secret.yaml

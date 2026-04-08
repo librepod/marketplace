@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remnawave
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: remnawave
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: remnawave
+    spec:
+      containers:
+        - name: remnawave
+          image: remnawave/backend
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: remnawave-env
+          ports:
+            - name: http
+              containerPort: 3000
+            - name: metrics
+              containerPort: 3001
+          volumeMounts:
+            - name: valkey-socket
+              mountPath: /var/run/valkey
+        - name: valkey
+          image: valkey/valkey
+          imagePullPolicy: IfNotPresent
+          command:
+            - valkey-server
+            - --save
+            - ""
+            - --appendonly
+            - "no"
+            - --maxmemory-policy
+            - noeviction
+            - --loglevel
+            - warning
+            - --unixsocket
+            - /var/run/valkey/valkey.sock
+            - --unixsocketperm
+            - "777"
+            - --port
+            - "0"
+          volumeMounts:
+            - name: valkey-socket
+              mountPath: /var/run/valkey
+      volumes:
+        - name: valkey-socket
+          emptyDir: {}
