@@ -3,6 +3,9 @@
 /node_modules
 /build
 
+# npm workspace — lock managed at workspace root
+package-lock.json
+
 # Logs
 logs
 *.log
