@@ -9,7 +9,7 @@ export default defineConfig({
   },
   plugins: [
     swc.vite({
-      module: { type: 'commonjs' },
+      module: { type: 'es6' },
     }),
   ],
 });
