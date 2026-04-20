@@ -41,7 +41,11 @@ export class CatalogService implements OnModuleInit, OnModuleDestroy {
   private loadCatalog(): void {
     try {
       const content = fs.readFileSync(this.catalogPath, 'utf-8');
-      const catalog = yaml.load(content) as CatalogFile;
+      const raw = yaml.load(content);
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        throw new Error('Invalid catalog.yaml: expected a YAML mapping at root');
+      }
+      const catalog = raw as CatalogFile;
       this.apps = (catalog.apps ?? []).filter(
         (app) => app.category !== 'Infrastructure',
       );
