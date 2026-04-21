@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-04-21T13:08:26Z"
+stopped_at: Completed 02-03-PLAN.md
+last_updated: "2026-04-21T13:16:44.901Z"
 last_activity: 2026-04-21
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 9
-  completed_plans: 6
-  percent: 78
+  completed_plans: 8
+  percent: 89
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-04-19)
 ## Current Position
 
 Phase: 2 of 5 (Catalog UI)
-Plan: 4 of 6 in current phase (02-04 complete)
+Plan: 6 of 6 in current phase (02-05 complete)
 Status: Executing
 Last activity: 2026-04-21
 
-Progress: [████░░░░░░] 67%
+Progress: [█████████░] 89%
 
 ## Performance Metrics
 
@@ -67,6 +67,8 @@ Recent decisions affecting current work:
 - Dark mode class on <html> before React mount to prevent FOUC (02-03)
 - QueryClient retry:0 — user-triggered Retry button instead of automatic retries (02-03)
 - Routes nested under AppShell via Outlet — one shell instance across all navigations (02-03)
+- CatalogPage renders sr-only h1 for test isolation without AppShell (02-05)
+- queryFn normalizes both envelope and bare array API response shapes (02-05)
 
 ### Pending Todos
 
@@ -86,6 +88,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-21T12:56:22Z
+Last session: 2026-04-21T13:16:44.890Z
 Stopped at: Completed 02-03-PLAN.md
 Resume file: None
