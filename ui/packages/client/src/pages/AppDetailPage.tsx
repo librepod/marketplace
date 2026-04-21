@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
+import { ErrorBlock } from "@/components/ErrorBlock"
 
 function DetailSkeleton() {
   return (
@@ -36,7 +37,7 @@ function NotFoundBlock() {
 export function AppDetailPage() {
   const { name } = useParams<{ name: string }>()
 
-  const { isPending, isError, error, data } = useQuery<CatalogApp>({
+  const { isPending, isError, error, data, refetch } = useQuery<CatalogApp>({
     queryKey: ["apps", name],
     queryFn: async () => {
       const res = await fetch(`/api/apps/${name}`)
@@ -46,11 +47,14 @@ export function AppDetailPage() {
       return res.json()
     },
     retry: 0,
+    enabled: !!name,
   })
 
+  if (!name) return <NotFoundBlock />
   if (isPending) return <DetailSkeleton />
   if (isError && (error as Error)?.message === "NOT_FOUND") return <NotFoundBlock />
-  if (isError || !data) return <NotFoundBlock />
+  if (isError) return <ErrorBlock onRetry={() => void refetch()} />
+  if (!data) return <NotFoundBlock />
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -80,14 +84,16 @@ export function AppDetailPage() {
         <p className="text-sm leading-relaxed">{data.description}</p>
 
         <div className="mt-4">
-          <a
-            href={data.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm underline text-muted-foreground hover:text-foreground"
-          >
-            View source
-          </a>
+          {/^(?:https?|oci|git):\/\//.test(data.sourceUrl) && (
+            <a
+              href={data.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm underline text-muted-foreground hover:text-foreground"
+            >
+              View source
+            </a>
+          )}
         </div>
 
         <div className="mt-8">
