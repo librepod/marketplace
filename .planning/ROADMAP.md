@@ -54,7 +54,7 @@ Plans:
 - [x] 02-03-PLAN.md — App shell: main.tsx entry point, router.tsx with 2 routes, AppShell layout with Outlet (Wave 2, parallel)
 - [x] 02-04-PLAN.md — Shared components: AppIcon, AppCard, AppCardSkeleton, ErrorBlock, EmptyState (Wave 3, parallel)
 - [x] 02-05-PLAN.md — Page components: CatalogPage (auto-fill grid + all states), AppDetailPage (full detail view) (Wave 3, parallel)
-- [ ] 02-06-PLAN.md — Test integration: all 21 tests pass, TypeScript clean, workspace scripts wired (Wave 4)
+- [x] 02-06-PLAN.md — Test integration: all 21 tests pass, TypeScript clean, workspace scripts wired (Wave 4)
 
 ### Phase 3: Installed Apps + Live Status
 **Goal**: Users can see which apps are installed and their live health status
@@ -109,7 +109,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Backend Foundation + Catalog API | 3/3 | Complete | 2026-04-20 |
-| 2. Catalog UI | 5/6 | In Progress|  |
+| 2. Catalog UI | 6/6 | Complete | 2026-04-21 |
 | 3. Installed Apps + Live Status | 0/0 | Not started | - |
 | 4. Install & Uninstall | 0/0 | Not started | - |
 | 5. Containerization & Deployment | 0/0 | Not started | - |
