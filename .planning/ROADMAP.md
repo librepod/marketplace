@@ -49,8 +49,8 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 02-01-PLAN.md — Vite scaffold: package.json deps, tsconfig trio, vite.config.ts, vitest.config.ts, index.html, shadcn init + 5 components (Wave 1)
-- [ ] 02-02-PLAN.md — Test scaffold: vitest setup.ts + 5 failing test stubs covering all requirements (Wave 2, parallel)
+- [x] 02-01-PLAN.md — Vite scaffold: package.json deps, tsconfig trio, vite.config.ts, vitest.config.ts, index.html, shadcn init + 5 components (Wave 1)
+- [x] 02-02-PLAN.md — Test scaffold: vitest setup.ts + 5 failing test stubs covering all requirements (Wave 2, parallel)
 - [ ] 02-03-PLAN.md — App shell: main.tsx entry point, router.tsx with 2 routes, AppShell layout with Outlet (Wave 2, parallel)
 - [ ] 02-04-PLAN.md — Shared components: AppIcon, AppCard, AppCardSkeleton, ErrorBlock, EmptyState (Wave 3, parallel)
 - [ ] 02-05-PLAN.md — Page components: CatalogPage (auto-fill grid + all states), AppDetailPage (full detail view) (Wave 3, parallel)
@@ -109,7 +109,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Backend Foundation + Catalog API | 3/3 | Complete | 2026-04-20 |
-| 2. Catalog UI | 0/6 | Not started | - |
+| 2. Catalog UI | 2/6 | In Progress|  |
 | 3. Installed Apps + Live Status | 0/0 | Not started | - |
 | 4. Install & Uninstall | 0/0 | Not started | - |
 | 5. Containerization & Deployment | 0/0 | Not started | - |
