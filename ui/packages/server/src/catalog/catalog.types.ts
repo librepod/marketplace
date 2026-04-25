@@ -1,8 +1,12 @@
 /**
  * TypeScript interfaces mirroring the catalog.yaml schema.
  * Kept here for server-internal use. Shared interface (CatalogApp) also
- * exported from @librepod/shared for client consumption in Phase 2.
+ * exported from @librepod/shared for client consumption.
  */
+import type { AppStatus } from '@librepod/shared';
+
+export type { AppStatus };
+
 export interface CatalogApp {
   name: string;
   version: string;
@@ -12,6 +16,7 @@ export interface CatalogApp {
   icon: string;
   sourceType: string;
   sourceUrl: string;
+  installedStatus?: AppStatus;
 }
 
 export interface CatalogFile {

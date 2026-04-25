@@ -16,6 +16,7 @@
     "test:e2e": "vitest run --config vitest.e2e-config.ts"
   },
   "dependencies": {
+    "@kubernetes/client-node": "^1.4.0",
     "@librepod/shared": "*",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
