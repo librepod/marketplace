@@ -13,7 +13,7 @@ Build a web-based marketplace UI that lets non-technical users browse, install, 
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Backend Foundation + Catalog API** - Express server serving app catalog data from catalog.yaml with system app filtering
-- [ ] **Phase 2: Catalog UI** - React SPA with browsable app grid, detail pages, and loading states
+- [x] **Phase 2: Catalog UI** - React SPA with browsable app grid, detail pages, and loading states *(completed 2026-04-21)*
 - [ ] **Phase 3: Installed Apps + Live Status** - Gogs integration for reading installed state, K8s health queries, and My Apps view
 - [ ] **Phase 4: Install & Uninstall** - One-click install/uninstall with Git write operations, serialized queue, and error feedback
 - [ ] **Phase 5: Containerization & Deployment** - Dockerfile, K8s manifests, and integration into bootstrap system apps
@@ -65,11 +65,14 @@ Plans:
   2. Each app displays a status indicator reflecting its actual state (not installed / installing / running / error)
   3. User can view a "My Apps" page showing all currently installed apps with their live status
   4. App detail page shows the current install status and health of the app
-**Plans**: TBD
+**Plans**: 4 plans
 **UI hint**: yes
 
 Plans:
-- [ ] 03-01: TBD
+- [ ] 03-01-PLAN.md — Server test scaffolds: gogs.service.spec.ts, flux-status.service.spec.ts, installed.service.spec.ts, e2e extension (Wave 1, parallel)
+- [ ] 03-02-PLAN.md — Client test scaffolds: StatusBadge.test.tsx, MyAppsPage.test.tsx (Wave 1, parallel)
+- [ ] 03-03-PLAN.md — Backend implementation: InstalledModule (GogsService + FluxStatusService + InstalledService + InstalledController), types, module wiring, all server tests GREEN (Wave 2)
+- [ ] 03-04-PLAN.md — Frontend implementation: StatusBadge, AppCard overlay, AppShell nav bar, MyAppsPage, router, all client tests GREEN (Wave 3)
 
 ### Phase 4: Install & Uninstall
 **Goal**: Users can install and uninstall apps with one click, with the backend handling all Git operations safely
@@ -110,6 +113,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. Backend Foundation + Catalog API | 3/3 | Complete | 2026-04-20 |
 | 2. Catalog UI | 6/6 | Complete | 2026-04-21 |
-| 3. Installed Apps + Live Status | 0/0 | Not started | - |
+| 3. Installed Apps + Live Status | 0/4 | In Progress | - |
 | 4. Install & Uninstall | 0/0 | Not started | - |
 | 5. Containerization & Deployment | 0/0 | Not started | - |
