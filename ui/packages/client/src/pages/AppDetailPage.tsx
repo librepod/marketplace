@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
 import { ErrorBlock } from "@/components/ErrorBlock"
+import { StatusBadge } from "@/components/StatusBadge"
 
 function DetailSkeleton() {
   return (
@@ -78,6 +79,12 @@ export function AppDetailPage() {
             {data.version}
           </span>
         </div>
+
+        {data.installedStatus && data.installedStatus !== 'not_installed' && (
+          <div className="mt-3">
+            <StatusBadge status={data.installedStatus} />
+          </div>
+        )}
 
         <Separator className="my-6" />
 
