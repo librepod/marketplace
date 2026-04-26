@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Backend Foundation + Catalog API** - Express server serving app catalog data from catalog.yaml with system app filtering
 - [x] **Phase 2: Catalog UI** - React SPA with browsable app grid, detail pages, and loading states *(completed 2026-04-21)*
-- [ ] **Phase 3: Installed Apps + Live Status** - Gogs integration for reading installed state, K8s health queries, and My Apps view
+- [x] **Phase 3: Installed Apps + Live Status** - Gogs integration for reading installed state, K8s health queries, and My Apps view (completed 2026-04-26)
 - [ ] **Phase 4: Install & Uninstall** - One-click install/uninstall with Git write operations, serialized queue, and error feedback
 - [ ] **Phase 5: Containerization & Deployment** - Dockerfile, K8s manifests, and integration into bootstrap system apps
 
@@ -69,10 +69,10 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 03-01-PLAN.md — Server test scaffolds: gogs.service.spec.ts, flux-status.service.spec.ts, installed.service.spec.ts, e2e extension (Wave 1, parallel)
-- [ ] 03-02-PLAN.md — Client test scaffolds: StatusBadge.test.tsx, MyAppsPage.test.tsx (Wave 1, parallel)
-- [ ] 03-03-PLAN.md — Backend implementation: InstalledModule (GogsService + FluxStatusService + InstalledService + InstalledController), types, module wiring, all server tests GREEN (Wave 2)
-- [ ] 03-04-PLAN.md — Frontend implementation: StatusBadge, AppCard overlay, AppShell nav bar, MyAppsPage, router, all client tests GREEN (Wave 3)
+- [x] 03-01-PLAN.md — Server test scaffolds: gogs.service.spec.ts, flux-status.service.spec.ts, installed.service.spec.ts, e2e extension (Wave 1, parallel)
+- [x] 03-02-PLAN.md — Client test scaffolds: StatusBadge.test.tsx, MyAppsPage.test.tsx (Wave 1, parallel)
+- [x] 03-03-PLAN.md — Backend implementation: InstalledModule (GogsService + FluxStatusService + InstalledService + InstalledController), types, module wiring, all server tests GREEN (Wave 2)
+- [x] 03-04-PLAN.md — Frontend implementation: StatusBadge, AppCard overlay, AppShell nav bar, MyAppsPage, router, all client tests GREEN (Wave 3)
 
 ### Phase 4: Install & Uninstall
 **Goal**: Users can install and uninstall apps with one click, with the backend handling all Git operations safely
@@ -84,11 +84,13 @@ Plans:
   3. Two simultaneous install/uninstall requests do not cause Git conflicts (serialized writes)
   4. Failed operations display a toast notification with a meaningful error message
   5. After install, the app appears in "My Apps" and transitions through installing to running status
-**Plans**: TBD
+**Plans**: 3 plans
 **UI hint**: yes
 
 Plans:
-- [ ] 04-01: TBD
+- [ ] 04-01-PLAN.md — Types, generate-catalog.sh template embedding, and failing test scaffolds for all Phase 4 behaviors (Wave 1)
+- [ ] 04-02-PLAN.md — Backend: GogsService write methods, InstalledService install/uninstall with mutex, CatalogController POST endpoints (Wave 2)
+- [ ] 04-03-PLAN.md — Frontend: shadcn components, mutation hooks, AppDetailPage buttons, AppShell Toaster, all client tests GREEN (Wave 3)
 
 ### Phase 5: Containerization & Deployment
 **Goal**: The marketplace UI is packaged and deployed as a system app in the LibrePod cluster bootstrap
@@ -113,6 +115,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. Backend Foundation + Catalog API | 3/3 | Complete | 2026-04-20 |
 | 2. Catalog UI | 6/6 | Complete | 2026-04-21 |
-| 3. Installed Apps + Live Status | 0/4 | In Progress | - |
-| 4. Install & Uninstall | 0/0 | Not started | - |
+| 3. Installed Apps + Live Status | 4/4 | Complete    | 2026-04-26 |
+| 4. Install & Uninstall | 0/3 | Planning complete | - |
 | 5. Containerization & Deployment | 0/0 | Not started | - |
