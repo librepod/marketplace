@@ -100,4 +100,113 @@ describe('AppDetailPage', () => {
       expect(screen.getByText('App not found')).toBeInTheDocument()
     })
   })
+
+  describe('install/uninstall actions', () => {
+    it('shows enabled Install App button when app is not_installed (INST-01, D-07)', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ...mockApp, installedStatus: 'not_installed' }),
+      } as Response)
+      render(<AppDetailPage />, { wrapper: createWrapper() })
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Install App' })).toBeInTheDocument()
+      })
+      const btn = screen.getByRole('button', { name: 'Install App' })
+      expect(btn).not.toBeDisabled()
+    })
+
+    it('shows Uninstall App button when app is running (INST-02, D-07)', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ...mockApp, installedStatus: 'running' }),
+      } as Response)
+      render(<AppDetailPage />, { wrapper: createWrapper() })
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Uninstall App' })).toBeInTheDocument()
+      })
+    })
+
+    it('shows disabled Installing... button when app is installing (D-07)', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ...mockApp, installedStatus: 'installing' }),
+      } as Response)
+      render(<AppDetailPage />, { wrapper: createWrapper() })
+      await waitFor(() => {
+        expect(screen.getByText('Installing...')).toBeInTheDocument()
+      })
+      const btn = screen.getByText('Installing...').closest('button')!
+      expect(btn).toBeDisabled()
+    })
+
+    it('shows confirmation dialog when Uninstall App is clicked (INST-02, D-08)', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ...mockApp, installedStatus: 'running' }),
+      } as Response)
+      render(<AppDetailPage />, { wrapper: createWrapper() })
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Uninstall App' })).toBeInTheDocument()
+      })
+      screen.getByRole('button', { name: 'Uninstall App' }).click()
+      await waitFor(() => {
+        expect(screen.getByText('Uninstall Vaultwarden?')).toBeInTheDocument()
+      })
+      expect(screen.getByRole('button', { name: 'Keep App' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Uninstall' })).toBeInTheDocument()
+    })
+
+    it('shows success toast after install (STAT-03, D-11)', async () => {
+      // Mock app data fetch (not_installed)
+      vi.spyOn(global, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ ...mockApp, installedStatus: 'not_installed' }),
+        } as Response)
+        // Mock install POST
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true, message: 'App is being deployed' }),
+        } as Response)
+
+      render(<AppDetailPage />, { wrapper: createWrapper() })
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Install App' })).toBeInTheDocument()
+      })
+      screen.getByRole('button', { name: 'Install App' }).click()
+      await waitFor(() => {
+        expect(screen.getByText(/is being deployed/)).toBeInTheDocument()
+      })
+    })
+
+    it('shows error toast when install fails (STAT-03, D-12)', async () => {
+      vi.spyOn(global, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ ...mockApp, installedStatus: 'not_installed' }),
+        } as Response)
+        // Mock install POST failure
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          json: async () => ({ message: 'Could not reach the app repository' }),
+        } as Response)
+
+      render(<AppDetailPage />, { wrapper: createWrapper() })
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Install App' })).toBeInTheDocument()
+      })
+      screen.getByRole('button', { name: 'Install App' }).click()
+      await waitFor(() => {
+        expect(screen.getByText(/Could not reach the app repository/)).toBeInTheDocument()
+      })
+    })
+  })
 })
