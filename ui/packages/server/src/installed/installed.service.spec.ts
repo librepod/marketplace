@@ -4,6 +4,7 @@ import { InstalledService } from './installed.service';
 import { GogsService } from './gogs.service';
 import { FluxStatusService } from './flux-status.service';
 import { CatalogService } from '../catalog/catalog.service';
+import { ConfigService } from '@nestjs/config';
 
 const mockCatalogApps = [
   {
@@ -84,6 +85,15 @@ describe('InstalledService', () => {
         { provide: GogsService, useValue: mockGogsService },
         { provide: FluxStatusService, useValue: mockFluxService },
         { provide: CatalogService, useValue: mockCatalogService },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: (key: string, defaultValue?: string) => {
+              if (key === 'BASE_DOMAIN') return 'libre.pod';
+              return defaultValue;
+            },
+          },
+        },
       ],
     }).compile();
 

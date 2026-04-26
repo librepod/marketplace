@@ -1,7 +1,8 @@
-import { Controller, Get, Param, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Post, Param, NotFoundException, HttpCode } from '@nestjs/common';
 import { CatalogService } from './catalog.service';
 import { InstalledService } from '../installed/installed.service';
 import { CatalogApp } from './catalog.types';
+import type { InstallResult } from '@librepod/shared';
 
 @Controller('apps')
 export class CatalogController {
@@ -24,5 +25,17 @@ export class CatalogController {
     }
     const enriched = await this.installedService.enrich([app]);
     return enriched[0];
+  }
+
+  @Post(':name/install')
+  @HttpCode(200)
+  async install(@Param('name') name: string): Promise<InstallResult> {
+    return this.installedService.install(name);
+  }
+
+  @Post(':name/uninstall')
+  @HttpCode(200)
+  async uninstall(@Param('name') name: string): Promise<InstallResult> {
+    return this.installedService.uninstall(name);
   }
 }
