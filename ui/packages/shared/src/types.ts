@@ -4,6 +4,35 @@
  */
 export type AppStatus = 'not_installed' | 'installing' | 'running' | 'error';
 
+export interface AppTemplate {
+  source: string;
+  release: string;
+  secret?: string;
+  kustomization: string;
+}
+
+export interface AppParam {
+  name: string;
+  description: string;
+  type: string;
+  example?: string;
+}
+
+export interface AppSecretDef {
+  name: string;
+  description?: string;
+  required: boolean;
+  generate?: {
+    type: string;
+    length: number;
+  };
+}
+
+export interface InstallResult {
+  success: boolean;
+  message: string;
+}
+
 export interface CatalogApp {
   name: string;
   version: string;
@@ -14,6 +43,9 @@ export interface CatalogApp {
   sourceType: string;
   sourceUrl: string;
   installedStatus?: AppStatus;
+  templates?: AppTemplate;
+  params?: { required?: AppParam[] };
+  secrets?: AppSecretDef[];
 }
 
 export interface CatalogFile {
