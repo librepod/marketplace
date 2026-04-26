@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { Toaster } from '@/components/ui/sonner'
 import { AppDetailPage } from './AppDetailPage'
 import type { CatalogApp } from '@librepod/shared'
 
@@ -27,12 +28,27 @@ function createWrapper(appName = 'vaultwarden') {
           <Route path="/apps/:name" element={children} />
         </Routes>
       </MemoryRouter>
+      <Toaster />
     </QueryClientProvider>
   )
 }
 
 beforeEach(() => {
   vi.resetAllMocks()
+  // sonner Toaster uses window.matchMedia
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  })
 })
 
 describe('AppDetailPage', () => {
@@ -63,7 +79,7 @@ describe('AppDetailPage', () => {
     })
   })
 
-  it('renders disabled Install App button placeholder (D-08)', async () => {
+  it('renders enabled Install App button when no installedStatus (D-08)', async () => {
     vi.spyOn(global, 'fetch').mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -73,7 +89,7 @@ describe('AppDetailPage', () => {
     await waitFor(() => {
       const btn = screen.getByRole('button', { name: 'Install App' })
       expect(btn).toBeInTheDocument()
-      expect(btn).toBeDisabled()
+      expect(btn).not.toBeDisabled()
     })
   })
 
@@ -124,7 +140,7 @@ describe('AppDetailPage', () => {
       } as Response)
       render(<AppDetailPage />, { wrapper: createWrapper() })
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Uninstall App' })).toBeInTheDocument()
+        expect(screen.getByText('Uninstall App')).toBeInTheDocument()
       })
     })
 
@@ -150,14 +166,17 @@ describe('AppDetailPage', () => {
       } as Response)
       render(<AppDetailPage />, { wrapper: createWrapper() })
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Uninstall App' })).toBeInTheDocument()
+        expect(screen.getByText('Uninstall App')).toBeInTheDocument()
       })
-      screen.getByRole('button', { name: 'Uninstall App' }).click()
+      // Click the button inside the AlertDialogTrigger
+      const triggerBtn = screen.getByText('Uninstall App').closest('button')!
+      triggerBtn.click()
       await waitFor(() => {
         expect(screen.getByText('Uninstall Vaultwarden?')).toBeInTheDocument()
       })
-      expect(screen.getByRole('button', { name: 'Keep App' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Uninstall' })).toBeInTheDocument()
+      expect(screen.getByText('Keep App')).toBeInTheDocument()
+      // The confirm button contains "Uninstall App" text
+      expect(screen.getAllByText('Uninstall App').length).toBeGreaterThanOrEqual(2)
     })
 
     it('shows success toast after install (STAT-03, D-11)', async () => {

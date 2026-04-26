@@ -8,6 +8,20 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
 import { ErrorBlock } from "@/components/ErrorBlock"
 import { StatusBadge } from "@/components/StatusBadge"
+import { Loader2 } from "lucide-react"
+import { useInstallApp } from "@/hooks/useInstallApp"
+import { useUninstallApp } from "@/hooks/useUninstallApp"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 function DetailSkeleton() {
   return (
@@ -42,7 +56,6 @@ export function AppDetailPage() {
     queryKey: ["apps", name],
     queryFn: async () => {
       const res = await fetch(`/api/apps/${name}`)
-      // Check 404 BEFORE !res.ok (RESEARCH.md Pitfall 7)
       if (res.status === 404) throw new Error("NOT_FOUND")
       if (!res.ok) throw new Error("Failed to fetch app")
       return res.json()
@@ -50,6 +63,9 @@ export function AppDetailPage() {
     retry: 0,
     enabled: !!name,
   })
+
+  const installMutation = useInstallApp(name ?? '', data?.displayName ?? '')
+  const uninstallMutation = useUninstallApp(name ?? '', data?.displayName ?? '')
 
   if (!name) return <NotFoundBlock />
   if (isPending) return <DetailSkeleton />
@@ -104,13 +120,59 @@ export function AppDetailPage() {
         </div>
 
         <div className="mt-8">
-          <Button
-            disabled
-            title="Install coming soon"
-            className="opacity-50 cursor-not-allowed"
-          >
-            Install App
-          </Button>
+          {(!data.installedStatus || data.installedStatus === 'not_installed') && (
+            <Button
+              onClick={() => installMutation.mutate()}
+              disabled={installMutation.isPending}
+            >
+              {installMutation.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              {installMutation.isPending ? 'Installing...' : 'Install App'}
+            </Button>
+          )}
+
+          {data.installedStatus === 'installing' && (
+            <Button disabled>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Installing...
+            </Button>
+          )}
+
+          {(data.installedStatus === 'running' || data.installedStatus === 'error') && (
+            <AlertDialog>
+              <AlertDialogTrigger
+                className="inline-flex"
+              >
+                <Button
+                  variant="destructive"
+                  disabled={uninstallMutation.isPending}
+                >
+                  {uninstallMutation.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {uninstallMutation.isPending ? 'Uninstalling...' : 'Uninstall App'}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Uninstall {data.displayName}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will remove {data.displayName} and all its data from your server.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep App</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => uninstallMutation.mutate()}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Uninstall App
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
       </div>
     </div>

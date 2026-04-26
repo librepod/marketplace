@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom"
 import { Separator } from "@/components/ui/separator"
+import { Toaster } from "@/components/ui/sonner"
 import { cn } from "@/lib/utils"
 
 export function AppShell() {
@@ -42,6 +43,7 @@ export function AppShell() {
           <Outlet />
         </main>
       </div>
+      <Toaster position="bottom-right" />
     </div>
   )
 }
