@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_plan
-stopped_at: Phase 5 context gathered
-last_updated: "2026-04-29T00:00:00.000Z"
-last_activity: 2026-04-29 -- Phase 5 context gathered
+status: executing
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-05-04T12:54:24Z"
+last_activity: 2026-05-04 -- Completed 05-03 plan
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 16
-  completed_plans: 13
-  percent: 80
+  total_plans: 19
+  completed_plans: 17
+  percent: 89
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-19)
 
 **Core value:** Users can discover, install, and manage self-hosted apps with zero DevOps knowledge
-**Current focus:** Phase 05 — Containerization & Deployment
+**Current focus:** Phase --phase — 05
 
 ## Current Position
 
-Phase: 5
-Plan: Not started
-Status: Context gathered
-Last activity: 2026-04-29
+Phase: 05 (containerization-deployment) — EXECUTING
+Plan: 3 of 3 complete
+Status: Phase 5 complete
+Last activity: 2026-05-04 -- Completed 05-03 plan
 
-Progress: [████░░░░░░] 40% (phases 1-2 complete, phase 3 context captured)
+Progress: [█████████░] 95% (phases 1-5 complete, phase 5 all plans done)
 
 ## Performance Metrics
 
@@ -74,6 +74,9 @@ Recent decisions affecting current work:
 - queryFn normalizes both envelope and bare array API response shapes (02-05)
 - ignoreDeprecations:6.0 silences TypeScript baseUrl deprecation without changing paths config (02-06)
 - types:[vitest/globals,vite/client,node] in tsconfig.app.json resolves global and asset module types (02-06)
+- marketplace-ui depends on gogs + cert-manager only, not oauth2-proxy (05-03, DEPL-03)
+- Separate CI workflow for marketplace-ui Docker image + OCI artifact publishing (05-03)
+- Cluster system-apps files need no changes when adding infrastructure system app (05-03)
 
 ### Pending Todos
 
@@ -93,8 +96,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: Phase 5 context gathered
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-containerization-deployment/05-CONTEXT.md
+Last session: Completed 05-03-PLAN.md
+Stopped at: Completed 05-03-PLAN.md
+Resume file: None
 
-**Planned Phase:** 5 (Containerization & Deployment) — 0 plans — 2026-04-29
+**Planned Phase:** 5 (Containerization & Deployment) — 3 plans — 2026-05-04

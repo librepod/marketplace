@@ -88,9 +88,9 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 04-01-PLAN.md — Types, generate-catalog.sh template embedding, and failing test scaffolds for all Phase 4 behaviors (Wave 1)
-- [ ] 04-02-PLAN.md — Backend: GogsService write methods, InstalledService install/uninstall with mutex, CatalogController POST endpoints (Wave 2)
-- [ ] 04-03-PLAN.md — Frontend: shadcn components, mutation hooks, AppDetailPage buttons, AppShell Toaster, all client tests GREEN (Wave 3)
+- [x] 04-01-PLAN.md — Types, generate-catalog.sh template embedding, and failing test scaffolds for all Phase 4 behaviors (Wave 1)
+- [x] 04-02-PLAN.md — Backend: GogsService write methods, InstalledService install/uninstall with mutex, CatalogController POST endpoints (Wave 2)
+- [x] 04-03-PLAN.md — Frontend: shadcn components, mutation hooks, AppDetailPage buttons, AppShell Toaster, all client tests GREEN (Wave 3)
 
 ### Phase 5: Containerization & Deployment
 **Goal**: The marketplace UI is packaged and deployed as a system app in the LibrePod cluster bootstrap
@@ -101,10 +101,12 @@ Plans:
   2. The marketplace-ui deploys as part of the bootstrap system apps via FluxCD
   3. The UI is accessible without authentication from within the local cluster network
   4. The marketplace-ui starts successfully on a fresh cluster bootstrap alongside other system apps
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 05-01: TBD
+- [ ] 05-01-PLAN.md — Dockerfile, .dockerignore, ServeStaticModule wiring (Wave 1)
+- [ ] 05-02-PLAN.md — K8s manifests: namespace, SA+RBAC, ConfigMap, Deployment, Service, IngressRoute, metadata.yaml (Wave 1, parallel)
+- [x] 05-03-PLAN.md — Bootstrap integration: FluxCD Kustomization, system-apps wiring, CI workflow (Wave 2)
 
 ## Progress
 
@@ -117,4 +119,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. Catalog UI | 6/6 | Complete | 2026-04-21 |
 | 3. Installed Apps + Live Status | 4/4 | Complete    | 2026-04-26 |
 | 4. Install & Uninstall | 0/3 | Planning complete | - |
-| 5. Containerization & Deployment | 0/0 | Not started | - |
+| 5. Containerization & Deployment | 3/3 | Complete | 2026-05-04 |
