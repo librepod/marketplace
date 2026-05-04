@@ -1,0 +1,100 @@
+name: Publish Marketplace UI
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'ui/**'
+      - 'apps/marketplace-ui/**'
+  workflow_dispatch:
+
+jobs:
+  publish-image:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Login to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push Docker image
+        run: |
+          docker buildx build --push \
+            -t ghcr.io/librepod/marketplace-ui:latest \
+            -t ghcr.io/librepod/marketplace-ui:${{ github.sha }} \
+            ./ui
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v4.1.1
+        with:
+          cosign-release: 'v3.0.6'
+
+      - name: Sign Docker image
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          DIGEST=$(docker buildx imagetools inspect \
+            ghcr.io/librepod/marketplace-ui:latest \
+            --format '{{.Manifest.Digest}}')
+          cosign sign --key env://COSIGN_PRIVATE_KEY --yes \
+            "ghcr.io/librepod/marketplace-ui@${DIGEST}"
+
+  publish-manifests:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: fluxcd/flux2/action@main
+
+      - name: Login to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v4.1.1
+        with:
+          cosign-release: 'v3.0.6'
+
+      - name: Get app version
+        id: version
+        run: |
+          VERSION=$(grep 'version:' apps/marketplace-ui/metadata.yaml \
+            | head -1 | sed 's/.*version: *//' | tr -d '"')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Push and sign manifest artifact
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          echo "Pushing versioned artifact..."
+          DIGEST_V=$(flux push artifact \
+            oci://ghcr.io/${{ github.repository_owner }}/marketplace/apps/marketplace-ui:${{ steps.version.outputs.version }} \
+            --path=./apps/marketplace-ui \
+            --source="$(git config --get remote.origin.url)" \
+            --revision="$(git rev-parse HEAD)" \
+            --ignore-paths=.git/,.gitignore,.gitmodules,.gitattributes,*.jpg,*.jpeg,*.gif,*.png,*.wmv,*.flv,*.tar.gz \
+            --output json | jq -r '.repository + "@" + .digest')
+
+          echo "Signing versioned artifact: $DIGEST_V"
+          cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST_V"
+
+          echo "Pushing latest artifact..."
+          DIGEST_L=$(flux push artifact \
+            oci://ghcr.io/${{ github.repository_owner }}/marketplace/apps/marketplace-ui:latest \
+            --path=./apps/marketplace-ui \
+            --source="$(git config --get remote.origin.url)" \
+            --revision="$(git rev-parse HEAD)" \
+            --ignore-paths=.git/,.gitignore,.gitmodules,.gitattributes,*.jpg,*.jpeg,*.gif,*.png,*.wmv,*.flv,*.tar.gz \
+            --output json | jq -r '.repository + "@" + .digest')
+
+          echo "Signing latest artifact: $DIGEST_L"
+          cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST_L"
