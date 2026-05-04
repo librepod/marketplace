@@ -1,0 +1,16 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: marketplace-ui
+spec:
+  entryPoints:
+  - web
+  - websecure
+  routes:
+  - kind: Rule
+    match: Host(`marketplace.${BASE_DOMAIN:=libre.pod}`)
+    priority: 1
+    services:
+    - name: marketplace-ui
+      port: 80
+  tls: {}
