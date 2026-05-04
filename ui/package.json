@@ -18,5 +18,8 @@
     "test:client": "npm run test --workspace=packages/client -- --run",
     "test:client:watch": "npm run test --workspace=packages/client",
     "test:e2e": "npm run test:e2e --workspace=packages/server"
+  },
+  "dependencies": {
+    "@nestjs/serve-static": "^5.0.5"
   }
 }
