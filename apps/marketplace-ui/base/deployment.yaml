@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: marketplace-ui
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: marketplace-ui
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: marketplace-ui
+    spec:
+      serviceAccountName: marketplace-ui
+      containers:
+        - name: marketplace-ui
+          image: ghcr.io/librepod/marketplace-ui:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: marketplace-ui-env
+          env:
+            - name: GOGS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: gogs-auth
+                  key: password
+          volumeMounts:
+            - name: catalog
+              mountPath: /data
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            failureThreshold: 3
+            timeoutSeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: catalog
+          configMap:
+            name: marketplace-ui-catalog
