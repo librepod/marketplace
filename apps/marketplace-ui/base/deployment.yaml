@@ -36,11 +36,19 @@ spec:
             - name: catalog
               mountPath: /data
               readOnly: true
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            failureThreshold: 30
+            periodSeconds: 5
+            timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /api/health
               port: http
-            initialDelaySeconds: 10
+            initialDelaySeconds: 30
             failureThreshold: 3
             timeoutSeconds: 5
             periodSeconds: 30
@@ -54,11 +62,11 @@ spec:
             periodSeconds: 10
           resources:
             requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
-              cpu: 500m
+              cpu: 200m
               memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
       volumes:
         - name: catalog
           configMap:

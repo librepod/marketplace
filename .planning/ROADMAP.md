@@ -104,8 +104,8 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Dockerfile, .dockerignore, ServeStaticModule wiring (Wave 1)
-- [ ] 05-02-PLAN.md — K8s manifests: namespace, SA+RBAC, ConfigMap, Deployment, Service, IngressRoute, metadata.yaml (Wave 1, parallel)
+- [x] 05-01-PLAN.md — Dockerfile, .dockerignore, ServeStaticModule wiring (Wave 1)
+- [x] 05-02-PLAN.md — K8s manifests: namespace, SA+RBAC, ConfigMap, Deployment, Service, IngressRoute, metadata.yaml (Wave 1, parallel)
 - [x] 05-03-PLAN.md — Bootstrap integration: FluxCD Kustomization, system-apps wiring, CI workflow (Wave 2)
 
 ## Progress
