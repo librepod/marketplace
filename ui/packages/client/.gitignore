@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# npm workspace — lock managed at workspace root
+package-lock.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
