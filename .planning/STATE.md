@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-milestone_name: milestone
-status: milestone_complete
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-05-04T12:54:24Z"
-last_activity: 2026-05-04 -- Completed 05-03 plan
+milestone_name: Marketplace UI
+status: archived
+stopped_at: Milestone v1.0 archived
+last_updated: "2026-05-11T12:00:00Z"
+last_activity: 2026-05-11 -- Milestone v1.0 completed and archived
 progress:
   total_phases: 5
   completed_phases: 5
   total_plans: 19
-  completed_plans: 17
+  completed_plans: 19
   percent: 100
 ---
 
@@ -18,87 +18,54 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-19)
+See: .planning/PROJECT.md (updated 2026-05-11)
 
 **Core value:** Users can discover, install, and manage self-hosted apps with zero DevOps knowledge
-**Current focus:** Phase --phase — 05
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 05
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-05-04
+Phase: —
+Plan: —
+Status: Milestone v1.0 archived
+Last activity: 2026-05-11
 
-Progress: [█████████░] 95% (phases 1-5 complete, phase 5 all plans done)
+Progress: [██████████] 100% (v1.0 complete, all 5 phases shipped)
 
 ## Performance Metrics
 
 **Velocity:**
 
 - Total plans completed: 19
-- Average duration: —
-- Total execution time: 0 hours
+- Timeline: 16 days (2026-04-19 → 2026-05-04)
 
 **By Phase:**
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 1. Backend Foundation | 3 | - | - |
-| 2. Catalog UI | 6 | - | - |
-| 3 | 4 | - | - |
-| 04 | 3 | - | - |
-| 05 | 3 | - | - |
-
-**Recent Trend:**
-
-- Last 5 plans: —
-- Trend: —
-
-*Updated after each plan completion*
-
-## Accumulated Context
-
-### Decisions
-
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- Node.js + React stack (user preference)
-- No auth for v1 (local cluster access)
-- Dumb frontend pattern (all logic in backend)
-- Single container serves SPA + API
-- Dark mode class on <html> before React mount to prevent FOUC (02-03)
-- QueryClient retry:0 — user-triggered Retry button instead of automatic retries (02-03)
-- Routes nested under AppShell via Outlet — one shell instance across all navigations (02-03)
-- CatalogPage renders sr-only h1 for test isolation without AppShell (02-05)
-- queryFn normalizes both envelope and bare array API response shapes (02-05)
-- ignoreDeprecations:6.0 silences TypeScript baseUrl deprecation without changing paths config (02-06)
-- types:[vitest/globals,vite/client,node] in tsconfig.app.json resolves global and asset module types (02-06)
-- marketplace-ui depends on gogs + cert-manager only, not oauth2-proxy (05-03, DEPL-03)
-- Separate CI workflow for marketplace-ui Docker image + OCI artifact publishing (05-03)
-- Cluster system-apps files need no changes when adding infrastructure system app (05-03)
-
-### Pending Todos
-
-None yet.
-
-### Blockers/Concerns
-
-- Gogs user-apps repo structure needs validation against live cluster (Phase 3)
-- catalog.yaml schema needs verification against real file (Phase 1)
-- Bootstrap integration point in system-apps dependency chain (Phase 5)
+| Phase | Plans | Completed |
+|-------|-------|-----------|
+| 1. Backend Foundation | 3 | 2026-04-20 |
+| 2. Catalog UI | 6 | 2026-04-21 |
+| 3. Installed Apps + Live Status | 4 | 2026-04-26 |
+| 4. Install & Uninstall | 3 | 2026-04-28 |
+| 5. Containerization & Deployment | 3 | 2026-05-04 |
 
 ## Deferred Items
 
-| Category | Item | Status | Deferred At |
-|----------|------|--------|-------------|
-| *(none)* | | | |
+Items acknowledged and deferred at milestone close on 2026-05-11:
+
+| Category | Item | Status |
+|----------|------|--------|
+| human_verification | Phase 02: Browser back/forward, error states, card click navigation | deferred |
+| human_verification | Phase 03: StatusBadge on live cluster, status transitions, My Apps with Gogs | deferred |
+| human_verification | Phase 04: Install button, uninstall dialog, toast notifications, button states | deferred |
+| tech_debt | Uninstall doesn't delete individual app files from Gogs | accepted |
+| tech_debt | Orphan scaffold file ui/packages/client/src/App.tsx | accepted |
+| tech_debt | Nyquist validation incomplete for all 5 phases | accepted |
 
 ## Session Continuity
 
-Last session: Completed 05-03-PLAN.md
-Stopped at: Completed 05-03-PLAN.md
+Last session: Milestone v1.0 archived
+Stopped at: Milestone v1.0 archived
 Resume file: None
 
-**Planned Phase:** 5 (Containerization & Deployment) — 3 plans — 2026-05-04
+**Next step:** /gsd-new-milestone to start v2 planning
