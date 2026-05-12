@@ -52,7 +52,7 @@ hostAliases:
       - oauth2-proxy.librepod.local
       - wg-easy.librepod.local
       - whoami.librepod.local
-      - marketplace-ui.librepod.local
+      - marketplace.librepod.local
 
 files:
   # Pre-deploy cosign public key before Flux starts reconciling
