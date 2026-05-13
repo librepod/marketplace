@@ -1,37 +1,25 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
 import { GogsService } from './gogs.service';
+
+const mockConfigService = {
+  get: (key: string, defaultValue?: string) => {
+    if (key === 'GOGS_URL') return 'http://mock-gogs.test';
+    if (key === 'GOGS_USERNAME') return 'mock-user';
+    if (key === 'GOGS_TOKEN') return 'mock-token';
+    return defaultValue;
+  },
+} as unknown as ConfigService;
 
 describe('GogsService', () => {
   let service: GogsService;
-  let module: TestingModule;
 
-  beforeEach(async () => {
-    module = await Test.createTestingModule({
-      imports: [ConfigModule.forRoot({ isGlobal: true })],
-      providers: [
-        GogsService,
-        {
-          provide: ConfigService,
-          useValue: {
-            get: (key: string, defaultValue?: string) => {
-              if (key === 'GOGS_URL') return 'http://mock-gogs.test';
-              if (key === 'GOGS_TOKEN') return 'mock-token';
-              return defaultValue;
-            },
-          },
-        },
-      ],
-    }).compile();
-
-    service = module.get<GogsService>(GogsService);
-    await module.init();
+  beforeEach(() => {
+    service = new GogsService(mockConfigService);
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     vi.restoreAllMocks();
-    await module.close();
   });
 
   it('should be defined', () => {
@@ -52,7 +40,7 @@ describe('GogsService', () => {
         'http://mock-gogs.test/api/v1/repos/flux/user-apps/contents/apps/vaultwarden/source.yaml',
         expect.objectContaining({
           method: 'PUT',
-          headers: expect.objectContaining({ Authorization: 'token mock-token' }),
+          headers: expect.objectContaining({ Authorization: `Basic ${Buffer.from('mock-user:mock-token').toString('base64')}` }),
         }),
       );
       const callArgs = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1] as RequestInit;
@@ -216,7 +204,7 @@ describe('GogsService', () => {
       expect(names).toEqual([]);
     });
 
-    it('calls Gogs API with Bearer token auth header (BACK-02)', async () => {
+    it('calls Gogs API with basic auth header (BACK-02)', async () => {
       const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce({
         ok: true,
         text: async () => 'resources: []',
@@ -227,7 +215,7 @@ describe('GogsService', () => {
       expect(fetchSpy).toHaveBeenCalledWith(
         'http://mock-gogs.test/api/v1/repos/flux/user-apps/raw/master/kustomization.yaml',
         expect.objectContaining({
-          headers: expect.objectContaining({ Authorization: 'token mock-token' }),
+          headers: expect.objectContaining({ Authorization: `Basic ${Buffer.from('mock-user:mock-token').toString('base64')}` }),
         }),
       );
     });

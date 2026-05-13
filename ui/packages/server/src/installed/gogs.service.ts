@@ -15,15 +15,24 @@ export class GogsService {
     );
   }
 
-  private get gogsToken(): string {
+  private get gogsUsername(): string {
+    return this.config.get<string>('GOGS_USERNAME', '');
+  }
+
+  private get gogsPassword(): string {
     return this.config.get<string>('GOGS_TOKEN', '');
+  }
+
+  private get authHeader(): string {
+    const credentials = Buffer.from(`${this.gogsUsername}:${this.gogsPassword}`).toString('base64');
+    return `Basic ${credentials}`;
   }
 
   async getInstalledAppNames(): Promise<string[]> {
     const url = `${this.gogsUrl}/api/v1/repos/flux/user-apps/raw/master/kustomization.yaml`;
     try {
       const res = await fetch(url, {
-        headers: { Authorization: `token ${this.gogsToken}` },
+        headers: { Authorization: this.authHeader },
       });
       if (!res.ok) return [];
       const text = await res.text();
@@ -43,7 +52,7 @@ export class GogsService {
     const res = await fetch(url, {
       method: 'PUT',
       headers: {
-        Authorization: `token ${this.gogsToken}`,
+        Authorization: this.authHeader,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -59,7 +68,7 @@ export class GogsService {
   async getFileContents(path: string): Promise<{ content: string; sha: string } | null> {
     const url = `${this.gogsUrl}/api/v1/repos/flux/user-apps/contents/${path}`;
     const res = await fetch(url, {
-      headers: { Authorization: `token ${this.gogsToken}` },
+      headers: { Authorization: this.authHeader },
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { content: string; sha: string };

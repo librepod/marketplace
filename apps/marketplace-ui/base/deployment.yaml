@@ -27,6 +27,11 @@ spec:
             - configMapRef:
                 name: marketplace-ui-env
           env:
+            - name: GOGS_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: gogs-auth
+                  key: username
             - name: GOGS_TOKEN
               valueFrom:
                 secretKeyRef:

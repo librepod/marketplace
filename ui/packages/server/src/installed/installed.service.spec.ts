@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Test, TestingModule } from '@nestjs/testing';
 import { InstalledService } from './installed.service';
 import { GogsService } from './gogs.service';
 import { FluxStatusService } from './flux-status.service';
@@ -52,7 +51,6 @@ const mockCatalogApps = [
 
 describe('InstalledService', () => {
   let service: InstalledService;
-  let module: TestingModule;
   let mockGogsService: {
     getInstalledAppNames: ReturnType<typeof vi.fn>;
     createFile: ReturnType<typeof vi.fn>;
@@ -63,7 +61,7 @@ describe('InstalledService', () => {
   let mockFluxService: { getStatusFor: ReturnType<typeof vi.fn> };
   let mockCatalogService: { findAll: ReturnType<typeof vi.fn>; findOne: ReturnType<typeof vi.fn> };
 
-  beforeEach(async () => {
+  beforeEach(() => {
     mockGogsService = {
       getInstalledAppNames: vi.fn(),
       createFile: vi.fn().mockResolvedValue(undefined),
@@ -79,29 +77,23 @@ describe('InstalledService', () => {
       ),
     };
 
-    module = await Test.createTestingModule({
-      providers: [
-        InstalledService,
-        { provide: GogsService, useValue: mockGogsService },
-        { provide: FluxStatusService, useValue: mockFluxService },
-        { provide: CatalogService, useValue: mockCatalogService },
-        {
-          provide: ConfigService,
-          useValue: {
-            get: (key: string, defaultValue?: string) => {
-              if (key === 'BASE_DOMAIN') return 'libre.pod';
-              return defaultValue;
-            },
-          },
-        },
-      ],
-    }).compile();
+    const mockConfigService = {
+      get: (key: string, defaultValue?: string) => {
+        if (key === 'BASE_DOMAIN') return 'libre.pod';
+        return defaultValue;
+      },
+    } as unknown as ConfigService;
 
-    service = module.get<InstalledService>(InstalledService);
+    service = new InstalledService(
+      mockCatalogService as unknown as CatalogService,
+      mockGogsService as unknown as GogsService,
+      mockFluxService as unknown as FluxStatusService,
+      mockConfigService,
+    );
   });
 
-  afterEach(async () => {
-    await module.close();
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('should be defined', () => {

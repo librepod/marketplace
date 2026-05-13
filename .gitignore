@@ -47,3 +47,4 @@ appsets/**/charts
 docs/superpowers/
 /.k3d-data
 /.claude/scheduled_tasks.lock
+/.vite/vitest/results.json
