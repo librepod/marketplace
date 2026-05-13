@@ -11,7 +11,7 @@ import { HealthModule } from './health/health.module';
     ConfigModule.forRoot({ isGlobal: true }),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', '..', 'client', 'dist'),
-      exclude: ['/api/(.*)'],
+      exclude: ['/api/{*path}'],
     }),
     CatalogModule,
     InstalledModule,
