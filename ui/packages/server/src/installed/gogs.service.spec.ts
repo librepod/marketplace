@@ -16,7 +16,6 @@ const MOCK_API_TOKEN = 'abc123def456';
 async function initServiceWithMockToken(): Promise<GogsService> {
   const service = new GogsService(mockConfigService);
   vi.spyOn(global, 'fetch')
-    .mockResolvedValueOnce({ ok: true, json: async () => [] } as Response)
     .mockResolvedValueOnce({ ok: true, json: async () => ({ sha1: MOCK_API_TOKEN }) } as Response);
   await service.onModuleInit();
   vi.restoreAllMocks();
@@ -42,21 +41,10 @@ describe('GogsService', () => {
     it('creates an API token using Basic Auth with username/password', async () => {
       const svc = new GogsService(mockConfigService);
       const fetchSpy = vi.spyOn(global, 'fetch')
-        .mockResolvedValueOnce({ ok: true, json: async () => [] } as Response)
         .mockResolvedValueOnce({ ok: true, json: async () => ({ sha1: 'new-token' }) } as Response);
 
       await svc.onModuleInit();
 
-      // First call: list existing tokens with Basic Auth
-      expect(fetchSpy).toHaveBeenCalledWith(
-        'http://mock-gogs.test/api/v1/users/mock-user/tokens',
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            Authorization: `Basic ${Buffer.from('mock-user:mock-password').toString('base64')}`,
-          }),
-        }),
-      );
-      // Second call: create token with Basic Auth
       expect(fetchSpy).toHaveBeenCalledWith(
         'http://mock-gogs.test/api/v1/users/mock-user/tokens',
         expect.objectContaining({
@@ -65,22 +53,6 @@ describe('GogsService', () => {
             Authorization: `Basic ${Buffer.from('mock-user:mock-password').toString('base64')}`,
           }),
         }),
-      );
-    });
-
-    it('deletes existing marketplace-ui tokens before creating a new one', async () => {
-      const svc = new GogsService(mockConfigService);
-      const fetchSpy = vi.spyOn(global, 'fetch')
-        .mockResolvedValueOnce({ ok: true, json: async () => [{ id: 42, name: 'marketplace-ui' }] } as Response)
-        .mockResolvedValueOnce({ ok: true } as Response)
-        .mockResolvedValueOnce({ ok: true, json: async () => ({ sha1: 'fresh-token' }) } as Response);
-
-      await svc.onModuleInit();
-
-      // Second call: delete the existing token
-      expect(fetchSpy).toHaveBeenCalledWith(
-        'http://mock-gogs.test/api/v1/users/mock-user/tokens/42',
-        expect.objectContaining({ method: 'DELETE' }),
       );
     });
   });

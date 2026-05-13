@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as crypto from 'node:crypto';
 import * as yaml from 'js-yaml';
 
 @Injectable()
@@ -33,28 +34,14 @@ export class GogsService implements OnModuleInit {
     const tokensUrl = `${this.gogsUrl}/api/v1/users/${this.gogsUsername}/tokens`;
 
     try {
-      // List and remove any existing marketplace-ui tokens
-      const listRes = await fetch(tokensUrl, {
-        headers: { Authorization: this.basicAuth },
-      });
-      if (listRes.ok) {
-        const tokens = (await listRes.json()) as Array<{ id: number; name: string }>;
-        for (const token of tokens.filter((t) => t.name === 'marketplace-ui')) {
-          await fetch(`${tokensUrl}/${token.id}`, {
-            method: 'DELETE',
-            headers: { Authorization: this.basicAuth },
-          });
-        }
-      }
-
-      // Create a fresh API token
+      const tokenName = `marketplace-ui-${crypto.randomUUID().slice(0, 8)}`;
       const res = await fetch(tokensUrl, {
         method: 'POST',
         headers: {
           Authorization: this.basicAuth,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ name: 'marketplace-ui' }),
+        body: JSON.stringify({ name: tokenName }),
       });
 
       if (res.ok) {
