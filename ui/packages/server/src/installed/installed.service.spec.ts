@@ -16,7 +16,7 @@ const mockCatalogApps = [
     sourceType: 'oci-kustomize',
     sourceUrl: 'oci://ghcr.io/librepod/marketplace/apps/vaultwarden',
     templates: {
-      source: 'apiVersion: source.toolkit.fluxcd.io/v1beta2\nkind: OCIRepository',
+      source: 'apiVersion: source.toolkit.fluxcd.io/v1\nkind: OCIRepository',
       release: 'apiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization',
       secret: 'apiVersion: v1\nkind: Secret\nstringData:\n  ADMIN_TOKEN: "${ADMIN_TOKEN}"',
       kustomization: 'apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n  - source.yaml\n  - release.yaml\n  - secret.yaml',
@@ -38,7 +38,7 @@ const mockCatalogApps = [
     sourceType: 'oci-kustomize',
     sourceUrl: 'oci://ghcr.io/librepod/marketplace/apps/gogs',
     templates: {
-      source: 'apiVersion: source.toolkit.fluxcd.io/v1beta2\nkind: OCIRepository',
+      source: 'apiVersion: source.toolkit.fluxcd.io/v1\nkind: OCIRepository',
       release: 'apiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization',
       kustomization: 'apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n  - source.yaml\n  - release.yaml',
     },

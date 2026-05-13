@@ -95,7 +95,7 @@ describe('GogsService', () => {
 
   describe('getFileContents()', () => {
     it('returns decoded content and sha when file exists (INST-01)', async () => {
-      const originalContent = 'apiVersion: source.toolkit.fluxcd.io/v1beta2';
+      const originalContent = 'apiVersion: source.toolkit.fluxcd.io/v1';
       vi.spyOn(global, 'fetch').mockResolvedValueOnce({
         ok: true,
         status: 200,
