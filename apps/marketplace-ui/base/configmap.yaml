@@ -6,4 +6,4 @@ data:
   PORT: "3000"
   CATALOG_PATH: "/data/catalog.yaml"
   GOGS_URL: "http://gogs.gogs.svc.cluster.local:80"
-  ALLOWED_ORIGIN: "https://marketplace.${BASE_DOMAIN:=libre.pod}"
+  ALLOWED_ORIGINS: "https://marketplace.${BASE_DOMAIN:=libre.pod}"
