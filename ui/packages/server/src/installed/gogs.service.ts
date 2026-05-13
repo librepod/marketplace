@@ -1,10 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as yaml from 'js-yaml';
 
 @Injectable()
-export class GogsService {
+export class GogsService implements OnModuleInit {
   private readonly logger = new Logger(GogsService.name);
+  private apiToken = '';
 
   constructor(private readonly config: ConfigService) {}
 
@@ -23,16 +24,57 @@ export class GogsService {
     return this.config.get<string>('GOGS_TOKEN', '');
   }
 
-  private get authHeader(): string {
+  private get basicAuth(): string {
     const credentials = Buffer.from(`${this.gogsUsername}:${this.gogsPassword}`).toString('base64');
     return `Basic ${credentials}`;
+  }
+
+  async onModuleInit(): Promise<void> {
+    const tokensUrl = `${this.gogsUrl}/api/v1/users/${this.gogsUsername}/tokens`;
+
+    try {
+      // List and remove any existing marketplace-ui tokens
+      const listRes = await fetch(tokensUrl, {
+        headers: { Authorization: this.basicAuth },
+      });
+      if (listRes.ok) {
+        const tokens = (await listRes.json()) as Array<{ id: number; name: string }>;
+        for (const token of tokens.filter((t) => t.name === 'marketplace-ui')) {
+          await fetch(`${tokensUrl}/${token.id}`, {
+            method: 'DELETE',
+            headers: { Authorization: this.basicAuth },
+          });
+        }
+      }
+
+      // Create a fresh API token
+      const res = await fetch(tokensUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: this.basicAuth,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: 'marketplace-ui' }),
+      });
+
+      if (res.ok) {
+        const data = (await res.json()) as { sha1: string };
+        this.apiToken = data.sha1;
+        this.logger.log('Created Gogs API token for write operations');
+      } else {
+        this.logger.error(`Failed to create Gogs API token: ${res.status}`);
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Gogs API token init failed: ${message}`);
+    }
   }
 
   async getInstalledAppNames(): Promise<string[]> {
     const url = `${this.gogsUrl}/api/v1/repos/flux/user-apps/raw/master/kustomization.yaml`;
     try {
       const res = await fetch(url, {
-        headers: { Authorization: this.authHeader },
+        headers: { Authorization: `token ${this.apiToken}` },
       });
       if (!res.ok) return [];
       const text = await res.text();
@@ -52,7 +94,7 @@ export class GogsService {
     const res = await fetch(url, {
       method: 'PUT',
       headers: {
-        Authorization: this.authHeader,
+        Authorization: `token ${this.apiToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -68,7 +110,7 @@ export class GogsService {
   async getFileContents(path: string): Promise<{ content: string; sha: string } | null> {
     const url = `${this.gogsUrl}/api/v1/repos/flux/user-apps/contents/${path}`;
     const res = await fetch(url, {
-      headers: { Authorization: this.authHeader },
+      headers: { Authorization: `token ${this.apiToken}` },
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { content: string; sha: string };

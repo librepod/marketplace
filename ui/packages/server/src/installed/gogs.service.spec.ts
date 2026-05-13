@@ -6,16 +6,28 @@ const mockConfigService = {
   get: (key: string, defaultValue?: string) => {
     if (key === 'GOGS_URL') return 'http://mock-gogs.test';
     if (key === 'GOGS_USERNAME') return 'mock-user';
-    if (key === 'GOGS_TOKEN') return 'mock-token';
+    if (key === 'GOGS_TOKEN') return 'mock-password';
     return defaultValue;
   },
 } as unknown as ConfigService;
 
+const MOCK_API_TOKEN = 'abc123def456';
+
+async function initServiceWithMockToken(): Promise<GogsService> {
+  const service = new GogsService(mockConfigService);
+  vi.spyOn(global, 'fetch')
+    .mockResolvedValueOnce({ ok: true, json: async () => [] } as Response)
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ sha1: MOCK_API_TOKEN }) } as Response);
+  await service.onModuleInit();
+  vi.restoreAllMocks();
+  return service;
+}
+
 describe('GogsService', () => {
   let service: GogsService;
 
-  beforeEach(() => {
-    service = new GogsService(mockConfigService);
+  beforeEach(async () => {
+    service = await initServiceWithMockToken();
   });
 
   afterEach(() => {
@@ -26,8 +38,55 @@ describe('GogsService', () => {
     expect(service).toBeDefined();
   });
 
+  describe('onModuleInit()', () => {
+    it('creates an API token using Basic Auth with username/password', async () => {
+      const svc = new GogsService(mockConfigService);
+      const fetchSpy = vi.spyOn(global, 'fetch')
+        .mockResolvedValueOnce({ ok: true, json: async () => [] } as Response)
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ sha1: 'new-token' }) } as Response);
+
+      await svc.onModuleInit();
+
+      // First call: list existing tokens with Basic Auth
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'http://mock-gogs.test/api/v1/users/mock-user/tokens',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: `Basic ${Buffer.from('mock-user:mock-password').toString('base64')}`,
+          }),
+        }),
+      );
+      // Second call: create token with Basic Auth
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'http://mock-gogs.test/api/v1/users/mock-user/tokens',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            Authorization: `Basic ${Buffer.from('mock-user:mock-password').toString('base64')}`,
+          }),
+        }),
+      );
+    });
+
+    it('deletes existing marketplace-ui tokens before creating a new one', async () => {
+      const svc = new GogsService(mockConfigService);
+      const fetchSpy = vi.spyOn(global, 'fetch')
+        .mockResolvedValueOnce({ ok: true, json: async () => [{ id: 42, name: 'marketplace-ui' }] } as Response)
+        .mockResolvedValueOnce({ ok: true } as Response)
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ sha1: 'fresh-token' }) } as Response);
+
+      await svc.onModuleInit();
+
+      // Second call: delete the existing token
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'http://mock-gogs.test/api/v1/users/mock-user/tokens/42',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+  });
+
   describe('createFile()', () => {
-    it('calls PUT /api/v1/repos/flux/user-apps/contents/{path} with base64 content (INST-01)', async () => {
+    it('calls PUT with token auth and base64 content (INST-01)', async () => {
       vi.spyOn(global, 'fetch').mockResolvedValueOnce({
         ok: true,
         status: 201,
@@ -40,7 +99,7 @@ describe('GogsService', () => {
         'http://mock-gogs.test/api/v1/repos/flux/user-apps/contents/apps/vaultwarden/source.yaml',
         expect.objectContaining({
           method: 'PUT',
-          headers: expect.objectContaining({ Authorization: `Basic ${Buffer.from('mock-user:mock-token').toString('base64')}` }),
+          headers: expect.objectContaining({ Authorization: `token ${MOCK_API_TOKEN}` }),
         }),
       );
       const callArgs = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1] as RequestInit;
@@ -204,7 +263,7 @@ describe('GogsService', () => {
       expect(names).toEqual([]);
     });
 
-    it('calls Gogs API with basic auth header (BACK-02)', async () => {
+    it('calls Gogs API with token auth header (BACK-02)', async () => {
       const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce({
         ok: true,
         text: async () => 'resources: []',
@@ -215,7 +274,7 @@ describe('GogsService', () => {
       expect(fetchSpy).toHaveBeenCalledWith(
         'http://mock-gogs.test/api/v1/repos/flux/user-apps/raw/master/kustomization.yaml',
         expect.objectContaining({
-          headers: expect.objectContaining({ Authorization: `Basic ${Buffer.from('mock-user:mock-token').toString('base64')}` }),
+          headers: expect.objectContaining({ Authorization: `token ${MOCK_API_TOKEN}` }),
         }),
       );
     });
