@@ -1,0 +1,15 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: headscale
+spec:
+  entryPoints:
+  - web
+  - websecure
+  routes:
+  - kind: Rule
+    match: Host(`headscale.${BASE_DOMAIN}`)
+    priority: 1
+    services:
+    - name: headscale-http
+      port: 80

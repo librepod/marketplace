@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: headscale
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    spec:
+      containers:
+        - name: headscale
+          image: headscale/headscale
+          imagePullPolicy: IfNotPresent
+          args:
+            - serve
+          volumeMounts:
+            - name: config
+              mountPath: /etc/headscale/config.yaml
+              subPath: config.yaml
+            - name: data
+              mountPath: /var/lib/headscale
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            failureThreshold: 3
+            timeoutSeconds: 1
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            failureThreshold: 3
+            timeoutSeconds: 1
+            periodSeconds: 10
+          startupProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 0
+            failureThreshold: 30
+            timeoutSeconds: 1
+            periodSeconds: 5
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: derp-stun
+              containerPort: 3478
+              protocol: UDP
+            - name: grpc
+              containerPort: 50443
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+      volumes:
+        - name: config
+          configMap:
+            name: headscale-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: headscale-data

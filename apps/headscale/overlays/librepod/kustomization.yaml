@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../../base
+- ingressroute.yaml
+- ingressroute-udp.yaml
+
+namespace: headscale
+
+images:
+- name: headscale/headscale
+  newTag: v0.28.0
+
+patches:
+- path: patch-storage-class.yaml

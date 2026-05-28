@@ -1,0 +1,12 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRouteUDP
+metadata:
+  name: headscale-derp
+spec:
+  entryPoints:
+  - headscale-derp
+  routes:
+  - services:
+    - name: headscale-derp
+      port: 3478
+      weight: 10

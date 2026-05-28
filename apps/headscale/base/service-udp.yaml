@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: headscale-derp
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3478
+      targetPort: derp-stun
+      protocol: UDP
+      name: derp-stun
