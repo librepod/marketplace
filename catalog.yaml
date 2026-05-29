@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-05-13T21:22:52Z"
+  generatedAt: "2026-05-29T15:44:25Z"
 apps:
   - name: baikal
     version: "0.11.1-nginx"
