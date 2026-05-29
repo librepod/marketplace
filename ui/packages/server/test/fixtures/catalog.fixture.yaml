@@ -1,0 +1,53 @@
+apiVersion: marketplace/v1
+kind: Catalog
+metadata:
+  generatedAt: "2026-01-01T00:00:00Z"
+apps:
+  - name: vaultwarden
+    version: "1.35.2"
+    displayName: "Vaultwarden"
+    description: "Lightweight Bitwarden-compatible password manager server"
+    category: "Security"
+    icon: "https://example.com/vaultwarden.png"
+    sourceType: oci-kustomize
+    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/vaultwarden"
+  - name: traefik
+    version: "1.0.0"
+    displayName: "Traefik"
+    description: "Cloud-native edge router and load balancer"
+    category: "Infrastructure"
+    icon: "https://example.com/traefik.png"
+    sourceType: oci-kustomize
+    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/traefik"
+  - name: gogs
+    version: "1.1.0"
+    displayName: "Gogs"
+    description: "Lightweight self-hosted Git service"
+    category: "Development"
+    icon: "https://example.com/gogs.png"
+    sourceType: oci-kustomize
+    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/gogs"
+  - name: cert-manager
+    version: "1.0.0"
+    displayName: "Cert-Manager"
+    description: "Cloud-native certificate management"
+    category: "Infrastructure"
+    icon: "https://example.com/cert-manager.png"
+    sourceType: oci-kustomize
+    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/cert-manager"
+  - name: litellm
+    version: "1.81.9"
+    displayName: "LiteLLM"
+    description: "Open-source API gateway for 100+ LLM providers"
+    category: "AI"
+    icon: "https://example.com/litellm.png"
+    sourceType: oci-kustomize
+    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/litellm"
+  - name: nfs-provisioner
+    version: "1.0.0"
+    displayName: "NFS Provisioner"
+    description: "Kubernetes dynamic provisioner for NFS storage"
+    category: "Infrastructure"
+    icon: "https://example.com/nfs.png"
+    sourceType: oci-kustomize
+    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/nfs-provisioner"

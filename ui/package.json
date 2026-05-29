@@ -1,0 +1,25 @@
+{
+  "name": "librepod-ui",
+  "private": true,
+  "workspaces": [
+    "packages/server",
+    "packages/client",
+    "packages/shared"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace=packages/server",
+    "dev:client": "npm run dev --workspace=packages/client",
+    "build": "npm run build --workspace=packages/server",
+    "build:client": "npm run build --workspace=packages/client",
+    "test": "npm run test --workspace=packages/server",
+    "test:client": "npm run test --workspace=packages/client -- --run",
+    "test:client:watch": "npm run test --workspace=packages/client",
+    "test:e2e": "npm run test:e2e --workspace=packages/server"
+  },
+  "dependencies": {
+    "@nestjs/serve-static": "^5.0.5"
+  }
+}
