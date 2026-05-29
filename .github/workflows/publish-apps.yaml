@@ -7,6 +7,14 @@ on:
         description: 'Apps to publish (JSON array, e.g. ["traefik","wg-easy"]). Use ["all"] to publish all apps.'
         required: false
         default: ''
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [master]
+    paths:
+      - 'apps/*/metadata.yaml'
+      - 'apps/*/base/**'
+      - 'apps/*/overlays/**'
+      - 'apps/*/components/**'
   push:
     branches: [master]
     paths:
@@ -23,8 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          # Only need history for git diff on push events
-          fetch-depth: ${{ github.event_name == 'push' && 2 || 1 }}
+          fetch-depth: ${{ github.event_name == 'pull_request' && 0 || (github.event_name == 'push' && 2 || 1) }}
 
       - id: changes
         env:
@@ -49,8 +56,15 @@ jobs:
               APPS="$MANUAL_APPS"
             fi
           else
+            # Determine diff base depending on event type
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              BASE="${{ github.event.pull_request.base.sha }}"
+            else
+              BASE="HEAD~1"
+            fi
+
             # Get changed app directories from git diff
-            CHANGED=$(git diff --name-only HEAD~1 HEAD -- 'apps/' \
+            CHANGED=$(git diff --name-only "${BASE}" HEAD -- 'apps/' \
               | cut -d'/' -f2 | sort -u)
 
             # Filter to apps with metadata.yaml (all publishable apps)
@@ -75,6 +89,7 @@ jobs:
     permissions:
       packages: write
       contents: read
+      id-token: write
     strategy:
       matrix:
         app: ${{ fromJSON(needs.detect-changes.outputs.apps) }}
@@ -83,9 +98,11 @@ jobs:
 
       - uses: fluxcd/flux2/action@main
 
-      - name: Login to GHCR
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@v4.1.1
@@ -104,29 +121,82 @@ jobs:
           COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
         run: |
-          # Note: flux push artifact ignores *.zip by default, but we need zip files
-          # for configMapGenerator to embed binary data (e.g., gogs-init.zip)
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            TAG="pr-${{ github.event.pull_request.number }}"
+            echo "Pushing PR artifact: ${TAG}"
+            DIGEST=$(flux push artifact \
+              oci://ghcr.io/${{ github.repository_owner }}/marketplace/apps/${{ matrix.app }}:${TAG} \
+              --path=./apps/${{ matrix.app }} \
+              --source="$(git config --get remote.origin.url)" \
+              --revision="$(git rev-parse HEAD)" \
+              --ignore-paths=.git/,.gitignore,.gitmodules,.gitattributes,*.jpg,*.jpeg,*.gif,*.png,*.wmv,*.flv,*.tar.gz \
+              --output json | jq -r '.repository + "@" + .digest')
 
-          echo "Pushing versioned artifact and capture its digest..."
-          DIGEST_V=$(flux push artifact \
-            oci://ghcr.io/${{ github.repository_owner }}/marketplace/apps/${{ matrix.app }}:${{ steps.version.outputs.version }} \
-            --path=./apps/${{ matrix.app }} \
-            --source="$(git config --get remote.origin.url)" \
-            --revision="$(git rev-parse HEAD)" \
-            --ignore-paths=.git/,.gitignore,.gitmodules,.gitattributes,*.jpg,*.jpeg,*.gif,*.png,*.wmv,*.flv,*.tar.gz \
-            --output json | jq -r '.repository + "@" + .digest')
+            echo "Signing PR artifact (keyless): $DIGEST"
+            cosign sign --yes "$DIGEST"
+          else
+            # Note: flux push artifact ignores *.zip by default, but we need zip files
+            # for configMapGenerator to embed binary data (e.g., gogs-init.zip)
 
-          echo "Signing versioned artifact by digest: $DIGEST_V"
-          cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST_V"
+            echo "Pushing versioned artifact and capture its digest..."
+            DIGEST_V=$(flux push artifact \
+              oci://ghcr.io/${{ github.repository_owner }}/marketplace/apps/${{ matrix.app }}:${{ steps.version.outputs.version }} \
+              --path=./apps/${{ matrix.app }} \
+              --source="$(git config --get remote.origin.url)" \
+              --revision="$(git rev-parse HEAD)" \
+              --ignore-paths=.git/,.gitignore,.gitmodules,.gitattributes,*.jpg,*.jpeg,*.gif,*.png,*.wmv,*.flv,*.tar.gz \
+              --output json | jq -r '.repository + "@" + .digest')
 
-          echo "Pushing latest artifact and capture its digest..."
-          DIGEST_L=$(flux push artifact \
-            oci://ghcr.io/${{ github.repository_owner }}/marketplace/apps/${{ matrix.app }}:latest \
-            --path=./apps/${{ matrix.app }} \
-            --source="$(git config --get remote.origin.url)" \
-            --revision="$(git rev-parse HEAD)" \
-            --ignore-paths=.git/,.gitignore,.gitmodules,.gitattributes,*.jpg,*.jpeg,*.gif,*.png,*.wmv,*.flv,*.tar.gz \
-            --output json | jq -r '.repository + "@" + .digest')
+            echo "Signing versioned artifact by digest: $DIGEST_V"
+            cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST_V"
 
-          echo "Signing latest artifact by digest: $DIGEST_L"
-          cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST_L"
+            echo "Pushing latest artifact and capture its digest..."
+            DIGEST_L=$(flux push artifact \
+              oci://ghcr.io/${{ github.repository_owner }}/marketplace/apps/${{ matrix.app }}:latest \
+              --path=./apps/${{ matrix.app }} \
+              --source="$(git config --get remote.origin.url)" \
+              --revision="$(git rev-parse HEAD)" \
+              --ignore-paths=.git/,.gitignore,.gitmodules,.gitattributes,*.jpg,*.jpeg,*.gif,*.png,*.wmv,*.flv,*.tar.gz \
+              --output json | jq -r '.repository + "@" + .digest')
+
+            echo "Signing latest artifact by digest: $DIGEST_L"
+            cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST_L"
+          fi
+
+  comment:
+    needs: [detect-changes, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    if: github.event_name == 'pull_request' && needs.detect-changes.outputs.apps != '[]'
+    steps:
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            const pr_number = context.payload.pull_request.number;
+            const tag = `pr-${pr_number}`;
+            const owner = context.repo.owner;
+            const apps = JSON.parse(process.env.APPS);
+
+            let appRows = apps.map(app =>
+              `| \`${app}\` | \`ghcr.io/${owner}/marketplace/apps/${app}:${tag}\` |`
+            ).join('\n');
+
+            const body = `### PR App Artifacts Ready
+
+            | App | Tag |
+            |-----|-----|
+            ${appRows}
+
+            \`\`\`bash
+            # Test in dev cluster:
+            flux reconcile source oci <name> --tag ${tag}
+            \`\`\``;
+
+            github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: pr_number,
+              body
+            });
+        env:
+          APPS: ${{ needs.detect-changes.outputs.apps }}
