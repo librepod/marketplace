@@ -3,171 +3,1396 @@ kind: Catalog
 metadata:
   generatedAt: "2026-05-29T15:52:08Z"
 apps:
-  - name: baikal
-    version: "0.11.1-nginx"
-    displayName: "Baïkal"
-    description: "Lightweight CalDAV/CardDAV server for calendar and contacts"
-    category: "Productivity"
-    icon: "https://raw.githubusercontent.com/sabre-io/Baikal/master/core/html/baikal-logo.png"
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/baikal"
-  - name: casdoor
-    version: "2.353.0"
-    displayName: "Casdoor"
-    description: "Open-source identity and access management (IAM) / Single-Sign-On (SSO) platform"
-    category: "Security"
-    icon: "https://raw.githubusercontent.com/casdoor/casdoor/master/web/src/assets/logo.png"
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/casdoor"
-  - name: cert-manager
-    version: "1.20.0"
-    displayName: "Cert-Manager"
-    description: "Cloud-native certificate management for Kubernetes with ACME protocol support"
-    category: "Infrastructure"
-    icon: "https://raw.githubusercontent.com/cert-manager/cert-manager/master/logo/logo-small.png"
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/cert-manager"
-  - name: external-secrets
-    version: "2.2.0"
-    displayName: "External Secrets"
-    description: "Kubernetes operator that reads secrets from external secret management systems and injects them into Kubernetes"
-    category: "Infrastructure"
-    icon: "https://external-secrets.io/img/logo.png"
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/external-secrets"
-  - name: flux-operator-mcp
-    version: "0.44.0"
-    displayName: "Flux Operator MCP"
-    description: "FluxCD operator for MCP (Model Context Protocol) integration"
-    category: "Infrastructure"
-    icon: "https://raw.githubusercontent.com/fluxcd/flux/main/docs/_static/img/flux-logo.png"
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/flux-operator-mcp"
-  - name: frpc
-    version: "v0.65.0"
-    displayName: "FRP Client"
-    description: "Fast Reverse Proxy client for remote access to cluster services and host SSH"
-    category: "Networking"
-    icon: "https://raw.githubusercontent.com/fatedier/frp/main/doc/pic/frp.png"
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/frpc"
-  - name: gogs
-    version: "next-0.14"
-    displayName: "Gogs"
-    description: "Lightweight self-hosted Git service with built-in issue tracking and wiki"
-    category: "Development"
-    icon: "https://raw.githubusercontent.com/gogs/gogs/master/public/img/gogs-lg.png"
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/gogs"
-  - name: happy-server
-    version: "latest"
-    displayName: "Happy Server"
-    description: "Self-hosted Obsidian web interface"
-    category: "Productivity"
-    icon: "https://raw.githubusercontent.com/denysvitali/happy-server/main/web/public/logo192.png"
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/happy-server"
-  - name: litellm
-    version: "v1.81.9-stable.patch.1"
-    displayName: "LiteLLM"
-    description: "Open-source API gateway for 100+ LLM providers"
-    category: "AI"
-    icon: "https://raw.githubusercontent.com/BerriAI/litellm/main/images/litellm_logo.png"
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/litellm"
-  - name: nfs-provisioner
-    version: "4.0.18"
-    displayName: "NFS Provisioner"
-    description: "Kubernetes dynamic provisioner for NFS storage using subdirectory support"
-    category: "Infrastructure"
-    icon: "https://raw.githubusercontent.com/kubernetes/community/master/icons/logo/kubernetes.png"
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/nfs-provisioner"
-  - name: oauth2-proxy
-    version: "7.8.0"
-    displayName: "OAuth2 Proxy"
-    description: "Reverse proxy and static file server that provides authentication using Google, GitHub or other providers"
-    category: "Security"
-    icon: "https://raw.githubusercontent.com/oauth2-proxy/oauth2-proxy/master/docs/static/img/logos/oauth2-proxy-icon.png"
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/oauth2-proxy"
-  - name: obsidian-livesync
-    version: "3.5.1"
-    displayName: "Obsidian LiveSync"
-    description: "Self-hosted synchronization server for Obsidian notes"
-    category: "Productivity"
-    icon: "https://obsidian.md/images/obsidian-logo-gradient.svg"
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/obsidian-livesync"
-  - name: open-webui
-    version: "12.10.0"
-    displayName: "Open WebUI"
-    description: "Self-hosted AI chat interface with Ollama integration"
-    category: "AI"
-    icon: "https://raw.githubusercontent.com/open-webui/open-webui/main/svelte/src/assets/logo.png"
-    sourceType: oci-helm
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/open-webui"
-  - name: reflector
-    version: "10.0.0"
-    displayName: "Reflector"
-    description: "Kubernetes operator that reflects Kubernetes resources across namespaces and configmaps/secrets for auto-reload"
-    category: "Infrastructure"
-    icon: "https://raw.githubusercontent.com/emberstack/kubernetes-reflector/main/docs/assets/logo.png"
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/reflector"
-  - name: seafile
-    version: "13.0-latest"
-    displayName: "Seafile"
-    description: "Self-hosted file synchronization and collaboration platform"
-    category: "Productivity"
-    icon: "https://raw.githubusercontent.com/haiwen/seafile/master/media/seafile-icon.png"
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/seafile"
-  - name: step-certificates
-    version: "0.29.0"
-    displayName: "Step Certificates"
-    description: "Certificate Authority (CA) and step-ca certificate management for Kubernetes"
-    category: "Infrastructure"
-    icon: "https://smallstep.com/assets/images/step-icon.png"
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/step-certificates"
-  - name: step-issuer
-    version: "0.2.1"
-    displayName: "Step Issuer"
-    description: "Cert-Manager issuer for Step CA certificate authority"
-    category: "Infrastructure"
-    icon: "https://smallstep.com/assets/images/step-icon.png"
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/step-issuer"
-  - name: traefik
-    version: "39.0.0"
-    displayName: "Traefik"
-    description: "Cloud-native edge router and load balancer with automatic SSL/TLS certificate management"
-    category: "Infrastructure"
-    icon: "https://doc.traefik.io/traefik/assets/img/traefik-logo.png"
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/traefik"
-  - name: vaultwarden
-    version: "1.35.2-alpine"
-    displayName: "Vaultwarden"
-    description: "Lightweight Bitwarden-compatible password manager server"
-    category: "Security"
-    icon: "https://raw.githubusercontent.com/dani-garcia/vaultwarden/main/resources/vaultwarden-icon.svg"
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/vaultwarden"
-  - name: wg-easy
-    version: "15.2"
-    displayName: "WG Easy"
-    description: "WireGuard VPN with a web-based configuration UI for easy setup and management"
-    category: "Network"
-    icon: "https://raw.githubusercontent.com/wg-easy/wg-easy/master/src/assets/img/logo.png"
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/wg-easy"
-  - name: whoami
-    version: "1.10.1"
-    displayName: "Whoami"
-    description: "Simple echo server for testing ingress and network connectivity"
-    category: "Testing"
-    icon: "https://traefik.io/static/img/logo-traefik.svg"
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/whoami"
+    - name: baikal
+      version: "0.11.1-nginx"
+      displayName: "Baïkal"
+      description: "Lightweight CalDAV/CardDAV server for calendar and contacts"
+      category: "Productivity"
+      icon: "https://raw.githubusercontent.com/sabre-io/Baikal/master/core/html/baikal-logo.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/baikal"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-baikal
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "baikal"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/baikal
+              ref:
+                tag: "0.11.1-nginx"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-baikal
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "baikal"
+            spec:
+              interval: 10m
+              targetNamespace: baikal
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-baikal
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+              postBuild:
+                substitute:
+                  BASE_DOMAIN: "${BASE_DOMAIN}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+      params:
+            required:
+              - name: BASE_DOMAIN
+                description: "Base domain (app will be at baikal.BASE_DOMAIN)"
+                type: string
+                example: "example.com"
+      secrets: []
+    - name: casdoor
+      version: "2.353.0"
+      displayName: "Casdoor"
+      description: "Open-source identity and access management (IAM) / Single-Sign-On (SSO) platform"
+      category: "Security"
+      icon: "https://raw.githubusercontent.com/casdoor/casdoor/master/web/src/assets/logo.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/casdoor"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-casdoor
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "casdoor"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/casdoor
+              ref:
+                tag: "2.353.0"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-casdoor
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "casdoor"
+            spec:
+              dependsOn:
+                - name: nfs-provisioner
+                - name: traefik
+              interval: 1h
+              retryInterval: 2m
+              timeout: 5m
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-casdoor
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+              postBuild:
+                substitute:
+                  BASE_DOMAIN: "${BASE_DOMAIN}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+      params:
+            required:
+              - name: BASE_DOMAIN
+                description: "Base domain for cluster (Casdoor will be at casdoor.BASE_DOMAIN)"
+                type: string
+                example: "example.com"
+    - name: cert-manager
+      version: "1.20.0"
+      displayName: "Cert-Manager"
+      description: "Cloud-native certificate management for Kubernetes with ACME protocol support"
+      category: "Infrastructure"
+      icon: "https://raw.githubusercontent.com/cert-manager/cert-manager/master/logo/logo-small.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/cert-manager"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-cert-manager
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "cert-manager"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/cert-manager
+              ref:
+                tag: "1.20.0"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-cert-manager
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "cert-manager"
+            spec:
+              interval: 1h
+              retryInterval: 2m
+              timeout: 5m
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-cert-manager
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+              postBuild:
+                substitute:
+                  BASE_DOMAIN: "${BASE_DOMAIN}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+      params:
+            required:
+              - name: BASE_DOMAIN
+                description: "Base domain for cluster (used by certificate issuance)"
+                type: string
+                example: "example.com"
+    - name: external-secrets
+      version: "2.2.0"
+      displayName: "External Secrets"
+      description: "Kubernetes operator that reads secrets from external secret management systems and injects them into Kubernetes"
+      category: "Infrastructure"
+      icon: "https://external-secrets.io/img/logo.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/external-secrets"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-external-secrets
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "external-secrets"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/external-secrets
+              ref:
+                tag: "2.2.0"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-external-secrets
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "external-secrets"
+            spec:
+              interval: 1h
+              retryInterval: 2m
+              timeout: 5m
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-external-secrets
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+      params:
+            required: []
+    - name: flux-operator-mcp
+      version: "0.44.0"
+      displayName: "Flux Operator MCP"
+      description: "FluxCD operator for MCP (Model Context Protocol) integration"
+      category: "Infrastructure"
+      icon: "https://raw.githubusercontent.com/fluxcd/flux/main/docs/_static/img/flux-logo.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/flux-operator-mcp"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-flux-operator-mcp
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "flux-operator-mcp"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/flux-operator-mcp
+              ref:
+                tag: "0.44.0"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-flux-operator-mcp
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "flux-operator-mcp"
+            spec:
+              interval: 1h
+              retryInterval: 2m
+              timeout: 5m
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-flux-operator-mcp
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+      params:
+            required: []
+    - name: frpc
+      version: "v0.65.0"
+      displayName: "FRP Client"
+      description: "Fast Reverse Proxy client for remote access to cluster services and host SSH"
+      category: "Networking"
+      icon: "https://raw.githubusercontent.com/fatedier/frp/main/doc/pic/frp.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/frpc"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: frpc
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "frpc"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/frpc
+              ref:
+                tag: "v0.65.0"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: frpc
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "frpc"
+            spec:
+              dependsOn:
+                - name: traefik
+                - name: oauth2-proxy
+              interval: 1h
+              retryInterval: 2m
+              timeout: 5m
+              sourceRef:
+                kind: OCIRepository
+                name: frpc
+              path: ./overlays/librepod
+              prune: true
+              wait: false
+              postBuild:
+                substitute:
+                  FRP_SERVER_ADDR: "${FRP_SERVER_ADDR}"
+                  FRP_SERVER_PORT: "${FRP_SERVER_PORT}"
+                  FRP_SSH_REMOTE_PORT: "${FRP_SSH_REMOTE_PORT}"
+                substituteFrom:
+                  - kind: Secret
+                    name: frpc-config
+        secret: |
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: frpc-config
+              namespace: flux-system
+            type: Opaque
+            stringData:
+              FRP_AUTH_TOKEN: "${FRP_AUTH_TOKEN}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+              - secret.yaml
+      params:
+            required:
+              - name: FRP_SERVER_ADDR
+                description: "FRP server address (IP or hostname)"
+                type: string
+                example: "203.0.113.10"
+            optional:
+              - name: FRP_SERVER_PORT
+                description: "FRP server port"
+                type: integer
+                default: "7000"
+              - name: FRP_SSH_REMOTE_PORT
+                description: "Remote port for SSH tunnel proxy"
+                type: integer
+                default: "6000"
+      secrets:
+            - name: FRP_AUTH_TOKEN
+              description: "Authentication token matching the FRP server configuration"
+              required: true
+    - name: gogs
+      version: "next-0.14"
+      displayName: "Gogs"
+      description: "Lightweight self-hosted Git service with built-in issue tracking and wiki"
+      category: "Development"
+      icon: "https://raw.githubusercontent.com/gogs/gogs/master/public/img/gogs-lg.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/gogs"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-gogs
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "gogs"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/gogs
+              ignore: |
+                # FluxCD source-controller excludes *.zip files by default when extracting OCI artifacts.
+                # We need gogs-init.zip for configMapGenerator to embed binary backup data.
+                # This override explicitly includes zip files along with the required directories.
+                /*
+                !/*.zip
+                !/base
+                !/components
+                !/overlays
+                !/metadata.yaml
+              ref:
+                tag: "next-0.14"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-gogs
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "gogs"
+            spec:
+              dependsOn:
+                - name: nfs-provisioner
+                - name: traefik
+              interval: 1h
+              retryInterval: 2m
+              timeout: 5m
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-gogs
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+              postBuild:
+                substitute:
+                  BASE_DOMAIN: "${BASE_DOMAIN}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+      params:
+            required:
+              - name: BASE_DOMAIN
+                description: "Base domain for cluster (Gogs will be at gogs.BASE_DOMAIN)"
+                type: string
+                example: "example.com"
+    - name: happy-server
+      version: "latest"
+      displayName: "Happy Server"
+      description: "Self-hosted Obsidian web interface"
+      category: "Productivity"
+      icon: "https://raw.githubusercontent.com/denysvitali/happy-server/main/web/public/logo192.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/happy-server"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-happy-server
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "happy-server"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/happy-server
+              ref:
+                tag: "latest"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-happy-server
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "happy-server"
+            spec:
+              interval: 10m
+              targetNamespace: happy-server
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-happy-server
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+              postBuild:
+                substitute:
+                  BASE_DOMAIN: "${BASE_DOMAIN}"
+                substituteFrom:
+                  - kind: Secret
+                    name: happy-server-config
+        secret: |
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: happy-server-config
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "happy-server"
+            type: Opaque
+            stringData:
+              HAPPY_SERVER_SECRET: "${HAPPY_SERVER_SECRET}"
+              HAPPY_SERVER_PASSWORD: "${HAPPY_SERVER_PASSWORD}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+              - secret.yaml
+      params:
+            required:
+              - name: BASE_DOMAIN
+                description: "Base domain (app will be at happy-server.BASE_DOMAIN)"
+                type: string
+                example: "example.com"
+      secrets:
+            - name: HAPPY_SERVER_SECRET
+              description: "Happy server secret key"
+              required: false
+              generate:
+                type: random
+                length: 64
+            - name: HAPPY_SERVER_PASSWORD
+              description: "Admin password for happy server"
+              required: false
+              generate:
+                type: random
+                length: 32
+    - name: litellm
+      version: "v1.81.9-stable.patch.1"
+      displayName: "LiteLLM"
+      description: "Open-source API gateway for 100+ LLM providers"
+      category: "AI"
+      icon: "https://raw.githubusercontent.com/BerriAI/litellm/main/images/litellm_logo.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/litellm"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-litellm
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "litellm"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/litellm
+              ref:
+                tag: "v1.81.9-stable.patch.1"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-litellm
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "litellm"
+            spec:
+              interval: 10m
+              targetNamespace: litellm
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-litellm
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+              postBuild:
+                substitute:
+                  BASE_DOMAIN: "${BASE_DOMAIN}"
+                  LITELLM_SALT_KEY: "${LITELLM_SALT_KEY}"
+                substituteFrom:
+                  - kind: Secret
+                    name: litellm-config
+        secret: |
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: litellm-config
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "litellm"
+            type: Opaque
+            stringData:
+              LITELLM_SALT_KEY: "${LITELLM_SALT_KEY}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+              - secret.yaml
+      params:
+            required:
+              - name: BASE_DOMAIN
+                description: "Base domain (app will be at litellm.BASE_DOMAIN)"
+                type: string
+                example: "example.com"
+            optional:
+              - name: LITELLM_SALT_KEY
+                description: "Encryption salt key for LiteLLM"
+                type: string
+                default: ""
+    - name: marketplace-ui
+      version: "0.1.0"
+      displayName: "Marketplace UI"
+      description: "Web-based app marketplace for discovering, installing, and managing self-hosted apps on LibrePod clusters"
+      category: "System"
+      icon: "https://raw.githubusercontent.com/nicehash/rest-clients-demo/master/img/app-store.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/marketplace-ui"
+    - name: nfs-provisioner
+      version: "4.0.18"
+      displayName: "NFS Provisioner"
+      description: "Kubernetes dynamic provisioner for NFS storage using subdirectory support"
+      category: "Infrastructure"
+      icon: "https://raw.githubusercontent.com/kubernetes/community/master/icons/logo/kubernetes.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/nfs-provisioner"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-nfs-provisioner
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "nfs-provisioner"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/nfs-provisioner
+              ref:
+                tag: "4.0.18"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-nfs-provisioner
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "nfs-provisioner"
+            spec:
+              interval: 1h
+              retryInterval: 2m
+              timeout: 5m
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-nfs-provisioner
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+      params:
+            required: []
+    - name: oauth2-proxy
+      version: "7.8.0"
+      displayName: "OAuth2 Proxy"
+      description: "Reverse proxy and static file server that provides authentication using Google, GitHub or other providers"
+      category: "Security"
+      icon: "https://raw.githubusercontent.com/oauth2-proxy/oauth2-proxy/master/docs/static/img/logos/oauth2-proxy-icon.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/oauth2-proxy"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-oauth2-proxy
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "oauth2-proxy"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/oauth2-proxy
+              ref:
+                tag: "7.8.0"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-oauth2-proxy
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "oauth2-proxy"
+            spec:
+              interval: 1h
+              retryInterval: 2m
+              timeout: 5m
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-oauth2-proxy
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+              postBuild:
+                substitute:
+                  BASE_DOMAIN: "${BASE_DOMAIN}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+      params:
+            required:
+              - name: BASE_DOMAIN
+                description: "Base domain for cluster (OAuth2 Proxy uses this for callbacks)"
+                type: string
+                example: "example.com"
+    - name: obsidian-livesync
+      version: "3.5.1"
+      displayName: "Obsidian LiveSync"
+      description: "Self-hosted synchronization server for Obsidian notes"
+      category: "Productivity"
+      icon: "https://obsidian.md/images/obsidian-logo-gradient.svg"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/obsidian-livesync"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-obsidian-livesync
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "obsidian-livesync"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/obsidian-livesync
+              ref:
+                tag: "3.5.1"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-obsidian-livesync
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "obsidian-livesync"
+            spec:
+              interval: 10m
+              targetNamespace: obsidian-livesync
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-obsidian-livesync
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+              postBuild:
+                substitute:
+                  BASE_DOMAIN: "${BASE_DOMAIN}"
+                substituteFrom:
+                  - kind: Secret
+                    name: obsidian-livesync-config
+        secret: |
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: obsidian-livesync-config
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "obsidian-livesync"
+            type: Opaque
+            stringData:
+              COUCHDB_PASSWORD: "${COUCHDB_PASSWORD}"
+              COUCHDB_SECRET: "${COUCHDB_SECRET}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+              - secret.yaml
+      params:
+            required:
+              - name: BASE_DOMAIN
+                description: "Base domain (app will be at obsidian-livesync.BASE_DOMAIN)"
+                type: string
+                example: "example.com"
+      secrets:
+            - name: COUCHDB_PASSWORD
+              description: "CouchDB password"
+              required: false
+              generate:
+                type: random
+                length: 32
+            - name: COUCHDB_SECRET
+              description: "CouchDB cookie secret"
+              required: false
+              generate:
+                type: random
+                length: 32
+    - name: open-webui
+      version: "12.10.0"
+      displayName: "Open WebUI"
+      description: "Self-hosted AI chat interface with Ollama integration"
+      category: "AI"
+      icon: "https://raw.githubusercontent.com/open-webui/open-webui/main/svelte/src/assets/logo.png"
+      sourceType: oci-helm
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/open-webui"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: HelmRepository
+            metadata:
+              name: marketplace-open-webui
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "open-webui"
+            spec:
+              interval: 12h
+              url: oci://ghcr.io/librepod/marketplace/apps/open-webui
+        release: |
+            apiVersion: helm.toolkit.fluxcd.io/v2
+            kind: HelmRelease
+            metadata:
+              name: marketplace-open-webui
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "open-webui"
+            spec:
+              interval: 1h
+              releaseName: open-webui
+              targetNamespace: open-webui
+              chart:
+                spec:
+                  chart: open-webui
+                  version: "12.10.0"
+                  sourceRef:
+                    kind: HelmRepository
+                    name: marketplace-open-webui
+                  interval: 12h
+              values:
+                persistence:
+                  enabled: true
+                  existingClaim: "open-webui-pvc"
+              postBuild:
+                substitute:
+                  BASE_DOMAIN: "${BASE_DOMAIN}"
+                substituteFrom:
+                  - kind: Secret
+                    name: open-webui-config
+        secret: |
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: open-webui-config
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "open-webui"
+            type: Opaque
+            stringData:
+              OAUTH_CLIENT_SECRET: "${OAUTH_CLIENT_SECRET}"
+      params:
+            required:
+              - name: BASE_DOMAIN
+                description: "Base domain (app will be at open-webui.BASE_DOMAIN)"
+                type: string
+                example: "example.com"
+            optional:
+              - name: OLLAMA_ENABLED
+                description: "Enable Ollama integration for local LLMs"
+                type: boolean
+                default: false
+      secrets:
+            - name: OAUTH_CLIENT_SECRET
+              description: "OAuth2 client secret for LibrePod SSO integration"
+              required: false
+    - name: reflector
+      version: "10.0.0"
+      displayName: "Reflector"
+      description: "Kubernetes operator that reflects Kubernetes resources across namespaces and configmaps/secrets for auto-reload"
+      category: "Infrastructure"
+      icon: "https://raw.githubusercontent.com/emberstack/kubernetes-reflector/main/docs/assets/logo.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/reflector"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-reflector
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "reflector"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/reflector
+              ref:
+                tag: "10.0.0"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-reflector
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "reflector"
+            spec:
+              interval: 1h
+              retryInterval: 2m
+              timeout: 5m
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-reflector
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+      params:
+            required: []
+    - name: seafile
+      version: "13.0-latest"
+      displayName: "Seafile"
+      description: "Self-hosted file synchronization and collaboration platform"
+      category: "Productivity"
+      icon: "https://raw.githubusercontent.com/haiwen/seafile/master/media/seafile-icon.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/seafile"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-seafile
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "seafile"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/seafile
+              ref:
+                tag: "13.0-latest"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-seafile
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "seafile"
+            spec:
+              interval: 10m
+              targetNamespace: seafile
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-seafile
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+              postBuild:
+                substitute:
+                  BASE_DOMAIN: "${BASE_DOMAIN}"
+                substituteFrom:
+                  - kind: Secret
+                    name: seafile-config
+        secret: |
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: seafile-config
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "seafile"
+            type: Opaque
+            stringData:
+              MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD}"
+              INIT_SEAFILE_MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD}"
+              SEAFILE_MYSQL_DB_PASSWORD: "${SEAFILE_MYSQL_DB_PASSWORD}"
+              REDIS_PASSWORD: "${REDIS_PASSWORD}"
+              INIT_SEAFILE_ADMIN_PASSWORD: "${INIT_SEAFILE_ADMIN_PASSWORD}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+              - secret.yaml
+      params:
+            required:
+              - name: BASE_DOMAIN
+                description: "Base domain (app will be at seafile.BASE_DOMAIN)"
+                type: string
+                example: "example.com"
+      secrets:
+            - name: MYSQL_ROOT_PASSWORD
+              description: "MySQL root password"
+              required: false
+              generate:
+                type: random
+                length: 32
+            - name: SEAFILE_MYSQL_DB_PASSWORD
+              description: "Seafile database password"
+              required: false
+              generate:
+                type: random
+                length: 32
+            - name: REDIS_PASSWORD
+              description: "Redis password"
+              required: false
+              generate:
+                type: random
+                length: 32
+            - name: INIT_SEAFILE_ADMIN_PASSWORD
+              description: "Seafile admin password"
+              required: true
+              generate:
+                type: random
+                length: 32
+    - name: step-certificates
+      version: "0.29.0"
+      displayName: "Step Certificates"
+      description: "Certificate Authority (CA) and step-ca certificate management for Kubernetes"
+      category: "Infrastructure"
+      icon: "https://smallstep.com/assets/images/step-icon.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/step-certificates"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-step-certificates
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "step-certificates"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/step-certificates
+              ref:
+                tag: "0.29.0"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-step-certificates
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "step-certificates"
+            spec:
+              interval: 1h
+              retryInterval: 2m
+              timeout: 5m
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-step-certificates
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+              postBuild:
+                substitute:
+                  BASE_DOMAIN: "${BASE_DOMAIN}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+      params:
+            required:
+              - name: BASE_DOMAIN
+                description: "Base domain for cluster (CA uses this for DNS SANs)"
+                type: string
+                example: "example.com"
+    - name: step-issuer
+      version: "0.2.1"
+      displayName: "Step Issuer"
+      description: "Cert-Manager issuer for Step CA certificate authority"
+      category: "Infrastructure"
+      icon: "https://smallstep.com/assets/images/step-icon.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/step-issuer"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-step-issuer
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "step-issuer"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/step-issuer
+              ref:
+                tag: "0.2.1"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-step-issuer
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "step-issuer"
+            spec:
+              interval: 1h
+              retryInterval: 2m
+              timeout: 5m
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-step-issuer
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+              postBuild:
+                substitute:
+                  BASE_DOMAIN: "${BASE_DOMAIN}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+      params:
+            required:
+              - name: BASE_DOMAIN
+                description: "Base domain for cluster (used by certificate issuance)"
+                type: string
+                example: "example.com"
+    - name: traefik
+      version: "39.0.0"
+      displayName: "Traefik"
+      description: "Cloud-native edge router and load balancer with automatic SSL/TLS certificate management"
+      category: "Infrastructure"
+      icon: "https://doc.traefik.io/traefik/assets/img/traefik-logo.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/traefik"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-traefik
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "traefik"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/traefik
+              ref:
+                tag: "39.0.0"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-traefik
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "traefik"
+            spec:
+              dependsOn:
+                - name: step-issuer
+              interval: 1h
+              retryInterval: 2m
+              timeout: 5m
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-traefik
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+              postBuild:
+                substitute:
+                  BASE_DOMAIN: "${BASE_DOMAIN}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+      params:
+            required:
+              - name: BASE_DOMAIN
+                description: "Base domain for the cluster (Traefik ingress uses this)"
+                type: string
+                example: "example.com"
+    - name: vaultwarden
+      version: "1.35.2-alpine"
+      displayName: "Vaultwarden"
+      description: "Lightweight Bitwarden-compatible password manager server"
+      category: "Security"
+      icon: "https://raw.githubusercontent.com/dani-garcia/vaultwarden/main/resources/vaultwarden-icon.svg"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/vaultwarden"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-vaultwarden
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "vaultwarden"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/vaultwarden
+              ref:
+                tag: "1.35.2-alpine"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-vaultwarden
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "vaultwarden"
+            spec:
+              interval: 10m
+              targetNamespace: vaultwarden
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-vaultwarden
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+              postBuild:
+                substitute:
+                  BASE_DOMAIN: "${BASE_DOMAIN}"
+                substituteFrom:
+                  - kind: Secret
+                    name: vaultwarden-config
+        secret: |
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: vaultwarden-config
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "vaultwarden"
+            type: Opaque
+            stringData:
+              ADMIN_TOKEN: "${ADMIN_TOKEN}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+              - secret.yaml
+      params:
+            required:
+              - name: BASE_DOMAIN
+                description: "Base domain (app will be at vaultwarden.BASE_DOMAIN)"
+                type: string
+                example: "example.com"
+      secrets:
+            - name: ADMIN_TOKEN
+              description: "Admin panel access token (leave empty to disable admin panel)"
+              required: false
+              generate:
+                type: random
+                length: 64
+    - name: wg-easy
+      version: "15.2"
+      displayName: "WG Easy"
+      description: "WireGuard VPN with a web-based configuration UI for easy setup and management"
+      category: "Network"
+      icon: "https://raw.githubusercontent.com/wg-easy/wg-easy/master/src/assets/img/logo.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/wg-easy"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-wg-easy
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "wg-easy"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/wg-easy
+              ref:
+                tag: "15.2"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-wg-easy
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "wg-easy"
+            spec:
+              interval: 1h
+              retryInterval: 2m
+              timeout: 5m
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-wg-easy
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+              postBuild:
+                substitute:
+                  BASE_DOMAIN: "${BASE_DOMAIN}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+      params:
+            required:
+              - name: BASE_DOMAIN
+                description: "Base domain for cluster (WG Easy will be at wireguard.BASE_DOMAIN)"
+                type: string
+                example: "example.com"
+    - name: whoami
+      version: "1.10.1"
+      displayName: "Whoami"
+      description: "Simple echo server for testing ingress and network connectivity"
+      category: "Testing"
+      icon: "https://traefik.io/static/img/logo-traefik.svg"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/whoami"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-whoami
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "whoami"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/whoami
+              ref:
+                tag: "1.10.1"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-whoami
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "whoami"
+            spec:
+              interval: 1h
+              retryInterval: 2m
+              timeout: 5m
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-whoami
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+              postBuild:
+                substitute:
+                  BASE_DOMAIN: "${BASE_DOMAIN}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+      params:
+            required:
+              - name: BASE_DOMAIN
+                description: "Base domain for cluster (Whoami will be at whoami.BASE_DOMAIN)"
+                type: string
+                example: "example.com"

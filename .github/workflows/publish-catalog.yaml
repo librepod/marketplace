@@ -28,10 +28,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet catalog.yaml; then
+          if git diff --quiet catalog.yaml apps/marketplace-ui/base/catalog.yaml; then
             echo "No catalog changes"
           else
-            git add catalog.yaml
+            git add catalog.yaml apps/marketplace-ui/base/catalog.yaml
             git commit -m "chore: regenerate catalog.yaml"
             git push
           fi
