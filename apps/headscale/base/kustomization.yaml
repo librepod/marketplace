@@ -18,5 +18,4 @@ resources:
 - namespace.yaml
 - pvc.yaml
 - service-http.yaml
-- service-udp.yaml
 - deployment.yaml

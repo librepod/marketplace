@@ -48,6 +48,13 @@ kustomize build ./apps/<app-name>/overlays/librepod | kubectl --kubeconfig ./lib
 **Key conventions:**
 - Each app creates its own namespace (named after the app)
 
+### 1. TLS / IngressRoute Convention
+
+All apps expose HTTP via Traefik `IngressRoute` resources. TLS certificates are handled by
+Traefik's default certificate store — apps do **not** configure `tls:` blocks on their
+IngressRoutes unless they need a specific cert resolver or custom TLS options. The default
+certificate is provisioned by cert-manager and applied cluster-wide via Traefik's TLS store.
+
 ### 2. FluxCD Integration
 
 FluxCD is the central GitOps operator. Its configs are located under `clusters/` and

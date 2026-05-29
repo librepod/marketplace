@@ -3,11 +3,14 @@ kind: Deployment
 metadata:
   name: headscale
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   strategy:
     type: Recreate
   template:
     spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: headscale
           image: headscale/headscale

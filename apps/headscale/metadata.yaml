@@ -22,15 +22,17 @@ spec:
         description: "Base domain (app will be at headscale.BASE_DOMAIN)"
         type: string
         example: "example.com"
-      - name: OIDC_CLIENT_ID
-        description: "OIDC client ID registered in Casdoor for headscale"
-        type: string
-        example: "headscale"
+      # TODO: Uncomment when Casdoor provisioning logic auto-creates OIDC clients per app
+      # - name: OIDC_CLIENT_ID
+      #   description: "OIDC client ID registered in Casdoor for headscale"
+      #   type: string
+      #   example: "headscale"
 
-  secrets:
-    - name: OIDC_CLIENT_SECRET
-      description: "OIDC client secret from Casdoor for headscale authentication"
-      required: true
+  # TODO: Uncomment when Casdoor provisioning logic auto-creates OIDC clients per app
+  # secrets:
+  #   - name: OIDC_CLIENT_SECRET
+  #     description: "OIDC client secret from Casdoor for headscale authentication"
+  #     required: true
 
   dependencies:
     required:
@@ -38,9 +40,10 @@ spec:
         description: "Traefik (provided by bootstrap)"
       - kind: StorageClass
         description: "nfs-client (provided by bootstrap)"
-      - kind: App
-        name: casdoor
-        description: "SSO provider for OIDC authentication"
+      # TODO: Uncomment when Casdoor provisioning logic auto-creates OIDC clients per app
+      # - kind: App
+      #   name: casdoor
+      #   description: "SSO provider for OIDC authentication"
 
   templates:
     source: |
@@ -68,6 +71,8 @@ spec:
           marketplace.io/app: "headscale"
       spec:
         interval: 10m
+        retryInterval: 2m
+        timeout: 5m
         targetNamespace: headscale
         sourceRef:
           kind: OCIRepository
@@ -78,26 +83,29 @@ spec:
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
-            OIDC_CLIENT_ID: "${OIDC_CLIENT_ID}"
-          substituteFrom:
-            - kind: Secret
-              name: headscale-config
-    secret: |
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: headscale-config
-        namespace: flux-system
-        labels:
-          marketplace.io/managed: "true"
-          marketplace.io/app: "headscale"
-      type: Opaque
-      stringData:
-        OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET}"
+          # TODO: Uncomment when Casdoor provisioning logic auto-creates OIDC clients per app
+          #   OIDC_CLIENT_ID: "${OIDC_CLIENT_ID}"
+          # substituteFrom:
+          #   - kind: Secret
+          #     name: headscale-config
+    # TODO: Uncomment when Casdoor provisioning logic auto-creates OIDC clients per app
+    # secret: |
+    #   apiVersion: v1
+    #   kind: Secret
+    #   metadata:
+    #     name: headscale-config
+    #     namespace: flux-system
+    #     labels:
+    #       marketplace.io/managed: "true"
+    #       marketplace.io/app: "headscale"
+    #   type: Opaque
+    #   stringData:
+    #     OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization
       resources:
         - source.yaml
         - release.yaml
-        - secret.yaml
+      # TODO: Uncomment when Casdoor provisioning logic auto-creates OIDC clients per app
+      # - secret.yaml

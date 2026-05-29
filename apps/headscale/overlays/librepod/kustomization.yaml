@@ -4,7 +4,6 @@ kind: Kustomization
 resources:
 - ../../base
 - ingressroute.yaml
-- ingressroute-udp.yaml
 
 namespace: headscale
 
