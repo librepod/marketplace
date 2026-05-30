@@ -1,0 +1,13 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: frp-operator
+spec:
+  chart:
+    spec:
+      chart: frp-operator
+      version: "~1.5.0"
+      sourceRef:
+        kind: HelmRepository
+        name: frp-operator-charts
+      interval: 12h

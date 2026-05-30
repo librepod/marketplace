@@ -74,7 +74,7 @@ This skill covers creating LibrePod Marketplace applications using Kustomize. Ev
 | Type | Base contains | Use when |
 |------|--------------|----------|
 | **Kustomize** | `deployment.yaml`, `service.yaml`, `pvc.yaml`, `.env` | Direct container deployment |
-| **Helm** | `ocirepository.yaml`, `helmrelease.yaml`, `pvc.yaml` | App has an official Helm chart |
+| **Helm** | `ocirepository.yaml` (or `helmrepository.yaml`), `helmrelease.yaml`, `pvc.yaml` | App has an official Helm chart |
 
 ---
 
@@ -88,7 +88,7 @@ apps/<app-name>/
 │   ├── namespace.yaml
 │   ├── deployment.yaml                    # Kustomize type only (no image tag)
 │   ├── service.yaml                       # Kustomize type only
-│   ├── ocirepository.yaml                 # Helm type only
+│   ├── ocirepository.yaml                 # Helm type only (or helmrepository.yaml for HTTP Helm repos)
 │   ├── helmrelease.yaml                   # Helm type only
 │   ├── pvc.yaml                           # If persistent storage needed
 │   └── <app-name>.env                     # Environment variables
@@ -219,7 +219,11 @@ spec:
   # No storageClassName here — patched in by overlay
 ```
 
-### `base/ocirepository.yaml` (Helm type)
+### `base/ocirepository.yaml` or `base/helmrepository.yaml` (Helm type)
+
+Helm charts can be sourced via **OCI** (preferred) or **HTTP Helm repo**. Use whichever the upstream publisher provides.
+
+**Option A — OCI registry** (preferred when available):
 
 ```yaml
 apiVersion: source.toolkit.fluxcd.io/v1
@@ -236,7 +240,22 @@ spec:
     semver: "~<major>.<minor>.0"
 ```
 
+**Option B — HTTP Helm repo** (when the chart is not published as OCI):
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: <app-name>-helm-charts
+spec:
+  interval: 24h
+  url: https://<helm-repo-url>/
+```
+
+When using Option B, the chart version is not pinned in the base `HelmRepository` (HTTP repos don't support semver ranges). Instead, pin it in the overlay via `patch-helmrelease.yaml` (see that section below).
+
 ### `base/helmrelease.yaml` (Helm type)
+
 
 ```yaml
 apiVersion: helm.toolkit.fluxcd.io/v2
@@ -253,9 +272,13 @@ spec:
     strategy:
       name: RetryOnFailure      # On failure: retry the upgrade after retryInterval
       retryInterval: 3m
-  chartRef:
-    kind: OCIRepository
-    name: <app-name>-helm-charts
+  chart:
+    spec:
+      chart: <chart-name>                              # The chart name in the Helm repository
+      sourceRef:
+        kind: HelmRepository                           # or OCIRepository (must match the source type above)
+        name: <app-name>-helm-charts
+      interval: 12h
   values:
     # Base/default Helm values go here
 ```
@@ -366,7 +389,7 @@ The `name` field must match the actual PVC name. Even though the `target:` selec
 
 ### `overlays/librepod/patch-helmrelease.yaml` (Helm type)
 
-Strategic merge patch to add LibrePod-specific Helm values:
+Strategic merge patch to add LibrePod-specific Helm values and optionally pin the chart version:
 
 ```yaml
 apiVersion: helm.toolkit.fluxcd.io/v2
@@ -374,6 +397,14 @@ kind: HelmRelease
 metadata:
   name: <app-name>
 spec:
+  chart:
+    spec:
+      chart: <chart-name>
+      version: "~<major>.<minor>.0"                     # Pin chart version (recommended for HTTP Helm repos)
+      sourceRef:
+        kind: HelmRepository                            # or OCIRepository — must match base source type
+        name: <app-name>-helm-charts
+      interval: 12h
   values:
     # LibrePod-specific overrides (PVC mounts, ingress config, etc.)
     extraVolumeMounts:
@@ -384,6 +415,8 @@ spec:
       persistentVolumeClaim:
         claimName: <app-name>-data
 ```
+
+**Chart version pinning:** For OCI-based charts, the base `OCIRepository` already pins the semver range. For HTTP Helm repos, add `chart.spec.version` in this patch to pin the chart minor version (e.g. `~1.5.0`). This lets patch updates flow in automatically while keeping control of minor/major upgrades.
 
 ---
 
@@ -403,7 +436,7 @@ spec:
   category: "<Category>"         # e.g. Security, Productivity, Development
   website: "<upstream URL>"
 
-  version: "<upstream app version>"   # e.g. "2.353.0" — must match the container image tag
+  version: "<upstream app version>"   # e.g. "2.353.0" — ALWAYS the application version (the container image tag), never the Helm chart version. The chart version is an internal detail that lives only in the overlay's patch-helmrelease.yaml.
 
   source:
     type: oci-kustomize
