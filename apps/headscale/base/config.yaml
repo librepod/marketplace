@@ -1,5 +1,20 @@
 # Headscale configuration
-# Variables like ${BASE_DOMAIN} are substituted by FluxCD postBuild.substitute
+#
+# Default config (for reference): https://github.com/juanfont/headscale/blob/v0.28.0/config-example.yaml
+#
+# Settings changed from defaults:
+#   server_url         → public URL (internal domain won't work for external clients)
+#   listen_addr        → 0.0.0.0:8080 (default is 127.0.0.1, we need all interfaces for k8s)
+#   metrics_listen_addr→ 0.0.0.0:9090 (same reason)
+#   grpc_listen_addr   → 0.0.0.0:50443 (same reason)
+#   derp.server.enabled→ true (default false; embedded DERP relay for regions where Tailscale
+#                        DERP servers are unreachable; relay traffic goes through FRP tunnel)
+#   derp.urls         → kept Tailscale defaults as fallback; can be removed if fully unreachable
+#   dns.base_domain    → ts.${BASE_DOMAIN} for MagicDNS hostnames
+#   dns.nameservers    → 1.1.1.1 only (defaults include v6 Cloudflare too)
+#   disable_check_updates → true (not useful in containers)
+#
+# Variables like ${BASE_DOMAIN} are substituted by FluxCD postBuild.substitute.
 # For local testing: export BASE_DOMAIN=libre.pod && kustomize build ... | envsubst
 
 server_url: https://headscale.${BASE_DOMAIN}

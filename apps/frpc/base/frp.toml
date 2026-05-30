@@ -28,3 +28,20 @@ type = "udp"
 localIP = "127.0.0.1"
 localPort = 51820
 remotePort = ${FRP_WG_REMOTE_PORT}
+
+# Headscale Tailscale control server — exposed publicly so devices can join
+# the tailnet without being connected to the WireGuard VPN first.
+[[proxies]]
+name = "headscale"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 8080
+remotePort = ${FRP_HEADSCALE_REMOTE_PORT}
+
+# Headscale embedded DERP STUN — NAT traversal discovery for direct peer connections.
+[[proxies]]
+name = "headscale-derp-stun"
+type = "udp"
+localIP = "127.0.0.1"
+localPort = 3478
+remotePort = ${FRP_HEADSCALE_STUN_REMOTE_PORT}
