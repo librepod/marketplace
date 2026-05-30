@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: frp-operator
+
+labels:
+- includeSelectors: true
+  includeTemplates: true
+  pairs:
+    app.kubernetes.io/name: frp-operator
+
+resources:
+- crd-client.yaml
+- crd-upstream.yaml
+- crd-visitor.yaml
+- namespace.yaml
+- serviceaccount.yaml
+- clusterrole.yaml
+- clusterrolebinding.yaml
+- deployment.yaml

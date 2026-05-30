@@ -1,0 +1,59 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: frp-operator
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - pods
+  - secrets
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - frp.zufardhiyaulhaq.com
+  resources:
+  - visitors
+  - clients
+  - upstreams
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - frp.zufardhiyaulhaq.com
+  resources:
+  - visitors/finalizers
+  - clients/finalizers
+  - upstreams/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - frp.zufardhiyaulhaq.com
+  resources:
+  - visitors/status
+  - clients/status
+  - upstreams/status
+  verbs:
+  - get
+  - patch
+  - update

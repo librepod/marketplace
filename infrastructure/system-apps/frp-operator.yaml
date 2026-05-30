@@ -1,0 +1,30 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: frp-operator
+  namespace: flux-system
+spec:
+  interval: 10m
+  url: oci://ghcr.io/librepod/marketplace/apps/frp-operator
+  ref:
+    tag: "1.0.0"
+  verify:
+    provider: cosign
+    secretRef:
+      name: cosign-pub
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: frp-operator
+  namespace: flux-system
+spec:
+  interval: 1h
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: OCIRepository
+    name: frp-operator
+  path: ./overlays/librepod
+  prune: true
+  wait: true
