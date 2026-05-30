@@ -256,6 +256,7 @@ When using Option B, the chart version is not pinned in the base `HelmRepository
 
 ### `base/helmrelease.yaml` (Helm type)
 
+
 ```yaml
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
@@ -271,9 +272,13 @@ spec:
     strategy:
       name: RetryOnFailure      # On failure: retry the upgrade after retryInterval
       retryInterval: 3m
-  chartRef:
-    kind: OCIRepository         # or HelmRepository (must match the source type above)
-    name: <app-name>-helm-charts
+  chart:
+    spec:
+      chart: <chart-name>                              # The chart name in the Helm repository
+      sourceRef:
+        kind: HelmRepository                           # or OCIRepository (must match the source type above)
+        name: <app-name>-helm-charts
+      interval: 12h
   values:
     # Base/default Helm values go here
 ```
@@ -392,10 +397,14 @@ kind: HelmRelease
 metadata:
   name: <app-name>
 spec:
-  chartRef:
-    kind: HelmRepository              # or OCIRepository — must match base source type
-    name: <app-name>-helm-charts
-    version: "~<major>.<minor>.0"     # Pin chart version (recommended for HTTP Helm repos)
+  chart:
+    spec:
+      chart: <chart-name>
+      version: "~<major>.<minor>.0"                     # Pin chart version (recommended for HTTP Helm repos)
+      sourceRef:
+        kind: HelmRepository                            # or OCIRepository — must match base source type
+        name: <app-name>-helm-charts
+      interval: 12h
   values:
     # LibrePod-specific overrides (PVC mounts, ingress config, etc.)
     extraVolumeMounts:
@@ -407,7 +416,7 @@ spec:
         claimName: <app-name>-data
 ```
 
-**Chart version pinning:** For OCI-based charts, the base `OCIRepository` already pins the semver range. For HTTP Helm repos, add `chartRef.version` in this patch to pin the chart minor version (e.g. `~1.5.0`). This lets patch updates flow in automatically while keeping control of minor/major upgrades.
+**Chart version pinning:** For OCI-based charts, the base `OCIRepository` already pins the semver range. For HTTP Helm repos, add `chart.spec.version` in this patch to pin the chart minor version (e.g. `~1.5.0`). This lets patch updates flow in automatically while keeping control of minor/major upgrades.
 
 ---
 
