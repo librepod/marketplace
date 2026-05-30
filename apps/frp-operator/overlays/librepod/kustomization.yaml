@@ -6,6 +6,7 @@ namespace: frp-operator
 resources:
 - ../../base
 
-images:
-- name: zufardhiyaulhaq/frp-operator
-  newTag: v0.7.0
+patches:
+- path: ./patch-helmrelease.yaml
+  target:
+    kind: HelmRelease

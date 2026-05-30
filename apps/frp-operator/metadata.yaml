@@ -34,7 +34,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/frp-operator
         ref:
-          tag: "1.0.0"
+          tag: "v0.7.0"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization
@@ -51,6 +51,7 @@ spec:
         sourceRef:
           kind: OCIRepository
           name: frp-operator
+        force: true
         path: ./overlays/librepod
         prune: true
         wait: true
