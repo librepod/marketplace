@@ -12,9 +12,13 @@ spec:
     strategy:
       name: RetryOnFailure
       retryInterval: 3m
-  chartRef:
-    kind: HelmRepository
-    name: frp-operator-charts
+  chart:
+    spec:
+      chart: frp-operator
+      sourceRef:
+        kind: HelmRepository
+        name: frp-operator-charts
+      interval: 12h
   values:
     operator:
       replica: 1

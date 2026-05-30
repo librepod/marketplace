@@ -3,7 +3,11 @@ kind: HelmRelease
 metadata:
   name: frp-operator
 spec:
-  chartRef:
-    kind: HelmRepository
-    name: frp-operator-charts
-    version: "~1.5.0"
+  chart:
+    spec:
+      chart: frp-operator
+      version: "~1.5.0"
+      sourceRef:
+        kind: HelmRepository
+        name: frp-operator-charts
+      interval: 12h
