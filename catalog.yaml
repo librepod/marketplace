@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-05-30T22:29:10Z"
+  generatedAt: "2026-05-30T22:29:31Z"
 apps:
   - name: baikal
     version: "0.11.1-nginx"
@@ -43,6 +43,14 @@ apps:
     icon: "https://raw.githubusercontent.com/fluxcd/flux/main/docs/_static/img/flux-logo.png"
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/flux-operator-mcp"
+  - name: frp-operator
+    version: "v0.7.0"
+    displayName: "FRP Operator"
+    description: "Kubernetes operator for managing FRP clients via CRDs"
+    category: "Networking"
+    icon: ""
+    sourceType: oci-kustomize
+    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/frp-operator"
   - name: frpc
     version: "v0.65.0"
     displayName: "FRP Client"
