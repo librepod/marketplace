@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tailscale
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tailscale
+    spec:
+      serviceAccountName: tailscale
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: tailscale
+          image: tailscale/tailscale
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: tailscale-env
+            - secretRef:
+                name: tailscale-secret
+          # NOTE: TS_ACCEPT_DNS and TS_USERSPACE are intentionally omitted.
+          # Tailscale defaults to false for both when unset, which is the
+          # desired default. FluxCD's postBuild.substitute does text-level
+          # replacement — bare "true"/"false" values become YAML booleans,
+          # which the API rejects for both ConfigMap.data and EnvVar.value.
+          # Users needing these can pass flags via TS_EXTRA_ARGS.
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/tailscale
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: tailscale-state

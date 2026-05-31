@@ -1,0 +1,112 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: tailscale
+spec:
+  displayName: "Tailscale"
+  description: "Tailscale client for connecting your LibrePod device to a tailnet — subnet router, exit node, or plain client. Works with any Tailscale-compatible control server."
+  icon: "https://raw.githubusercontent.com/tailscale/tailscale/main/logo.svg"
+  category: "Network"
+  website: "https://tailscale.com"
+
+  version: "1.98.4"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/tailscale"
+    path: ./overlays/librepod
+
+  params:
+    required:
+      - name: TS_HOSTNAME
+        description: "Hostname for this node on the tailnet (e.g. librepod, my-server)"
+        type: string
+        example: "librepod"
+
+      - name: TS_EXTRA_ARGS
+        description: >
+          Raw CLI flags passed to `tailscale up`. You provide everything:
+          --login-server, --advertise-routes, --accept-routes, --advertise-tags, etc.
+          Example: "--login-server=https://headscale.example.com --advertise-routes=10.43.0.0/16,192.168.1.0/24 --accept-routes"
+        type: string
+
+  secrets:
+    - name: TS_AUTHKEY
+      description: "Tailscale auth key for automatic node authentication. Generate from your control server."
+      required: true
+
+  dependencies:
+    required:
+      - kind: StorageClass
+        description: "nfs-client (provided by nfs-provisioner app)"
+
+  notes: |
+    Generate an auth key from your control server:
+    - Tailscale SaaS: https://login.tailscale.com/admin/settings/keys
+    - Headscale: headscale preauthkeys create --user <ID> --reusable
+
+    Use a reusable key so the node can re-authenticate if the pod is recreated.
+
+    TS_ACCEPT_DNS and TS_USERSPACE default to false (Tailscale's built-in defaults).
+    To change them, add flags to TS_EXTRA_ARGS (e.g. --accept-dns).
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-tailscale
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "tailscale"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/tailscale
+        ref:
+          tag: "1.98.4"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-tailscale
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "tailscale"
+      spec:
+        dependsOn:
+          - name: nfs-provisioner
+        force: true
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-tailscale
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+        postBuild:
+          substitute:
+            TS_HOSTNAME: "${TS_HOSTNAME}"
+            TS_EXTRA_ARGS: "${TS_EXTRA_ARGS}"
+          substituteFrom:
+            - kind: Secret
+              name: tailscale-config
+    secret: |
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: tailscale-config
+        namespace: flux-system
+      type: Opaque
+      stringData:
+        TS_AUTHKEY: "${TS_AUTHKEY}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml
+        - secret.yaml
