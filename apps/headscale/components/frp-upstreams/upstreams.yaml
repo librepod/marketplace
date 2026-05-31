@@ -9,8 +9,7 @@
 # DNS: The FRP server has subDomainHost = "vla1.libreport.ru" with wildcard
 # DNS.  frp-operator auto-injects subdomain = "headscale" from the Upstream
 # name, so the proxy is reachable at headscale.vla1.libreport.ru.
-# Internally (on the VPN) headscale.librepod.dev resolves via Traefik
-# IngressRoute.  headscale's server_url must point to the public FRP domain.
+# headscale's server_url must point to the public FRP domain.
 #
 # TLS: A reverse proxy (Caddy/Nginx) on the FRP server terminates HTTPS on
 # port 443 and forwards to frps vhostHTTPPort (80).  The domain cert must
@@ -20,9 +19,9 @@
 apiVersion: frp.zufardhiyaulhaq.com/v1alpha1
 kind: Upstream
 metadata:
-  name: headscale
+  name: headscale-http
 spec:
-  client: librepod-dev
+  client: librepod
   http:
     host: headscale.headscale.svc.cluster.local
     port: 80
@@ -37,6 +36,29 @@ spec:
       timeoutSeconds: 3
       intervalSeconds: 10
       maxFailed: 3
+    transport:
+      useEncryption: true
+      useCompression: true
+
+---
+apiVersion: frp.zufardhiyaulhaq.com/v1alpha1
+kind: Upstream
+metadata:
+  name: headscale-https
+spec:
+  client: librepod
+  https:
+    host: headscale.headscale.svc.cluster.local
+    port: 443
+    # With frps subDomainHost = "vla1.libreport.ru" and subdomain = "headscale",
+    # the proxy resolves at headscale.vla1.libreport.ru (wildcard DNS).
+    # customDomains is NOT used because frps rejects domains that overlap
+    # with subDomainHost — subdomain is the correct mechanism.
+    subdomain: headscale
+    proxyProtocol: v2
+    transport:
+      useEncryption: true
+      useCompression: true
 
 ---
 apiVersion: frp.zufardhiyaulhaq.com/v1alpha1
@@ -44,7 +66,7 @@ kind: Upstream
 metadata:
   name: headscale-derp-stun
 spec:
-  client: librepod-dev
+  client: librepod
   udp:
     # DERP STUN has no Kubernetes Service — reach it on the node's host network
     # where headscale binds 0.0.0.0:3478 via hostNetwork: true.
