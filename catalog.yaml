@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-05-31T17:31:49Z"
+  generatedAt: "2026-05-31T17:38:51Z"
 apps:
   - name: baikal
     version: "0.11.1-nginx"
@@ -155,6 +155,14 @@ apps:
     icon: "https://smallstep.com/assets/images/step-icon.png"
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/step-issuer"
+  - name: tailscale
+    version: "1.98.4"
+    displayName: "Tailscale"
+    description: "Tailscale client for connecting your LibrePod device to a tailnet — subnet router, exit node, or plain client. Works with any Tailscale-compatible control server."
+    category: "Network"
+    icon: "https://raw.githubusercontent.com/tailscale/tailscale/main/logo.svg"
+    sourceType: oci-kustomize
+    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/tailscale"
   - name: traefik
     version: "39.0.0"
     displayName: "Traefik"
