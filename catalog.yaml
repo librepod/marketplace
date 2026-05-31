@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-05-31T16:26:28Z"
+  generatedAt: "2026-05-31T16:29:47Z"
 apps:
   - name: baikal
     version: "0.11.1-nginx"
@@ -75,6 +75,14 @@ apps:
     icon: "https://raw.githubusercontent.com/denysvitali/happy-server/main/web/public/logo192.png"
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/happy-server"
+  - name: headscale
+    version: "v0.28.0"
+    displayName: "Headscale"
+    description: "Self-hosted Tailscale control server — one tailnet for all your devices"
+    category: "Network"
+    icon: "https://raw.githubusercontent.com/juanfont/headscale/main/docs/logo.png"
+    sourceType: oci-kustomize
+    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/headscale"
   - name: litellm
     version: "v1.81.9-stable.patch.1"
     displayName: "LiteLLM"
