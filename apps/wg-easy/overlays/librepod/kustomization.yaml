@@ -5,6 +5,9 @@ resources:
 - ../../base
 - ingressroute-http.yaml
 
+components:
+- ../../components/sing-box-router
+
 images:
 - name: ghcr.io/wg-easy/wg-easy
   newTag: "15.2"
