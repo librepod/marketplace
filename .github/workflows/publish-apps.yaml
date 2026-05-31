@@ -177,12 +177,13 @@ jobs:
             const tag = `pr-${pr_number}`;
             const owner = context.repo.owner;
             const apps = JSON.parse(process.env.APPS);
+            const MARKER = '<!-- pr-app-artifacts-comment -->';
 
             let appRows = apps.map(app =>
               `| \`${app}\` | \`ghcr.io/${owner}/marketplace/apps/${app}:${tag}\` |`
             ).join('\n');
 
-            const body = `### PR App Artifacts Ready
+            const body = `${MARKER}\n### PR App Artifacts Ready
 
             | App | Tag |
             |-----|-----|
@@ -193,10 +194,25 @@ jobs:
             flux reconcile source oci <name> --tag ${tag}
             \`\`\``;
 
-            github.rest.issues.createComment({
+            // Find existing comment with our marker
+            const comments = await github.rest.issues.listComments({
               ...context.repo,
               issue_number: pr_number,
-              body
             });
+            const existing = comments.data.find(c => c.body.includes(MARKER));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...context.repo,
+                comment_id: existing.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: pr_number,
+                body
+              });
+            }
         env:
           APPS: ${{ needs.detect-changes.outputs.apps }}

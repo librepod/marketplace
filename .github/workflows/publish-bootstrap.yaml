@@ -112,8 +112,9 @@ jobs:
             const pr_number = context.payload.pull_request.number;
             const tag = `pr-${pr_number}`;
             const owner = context.repo.owner;
+            const MARKER = '<!-- pr-bootstrap-artifact-comment -->';
 
-            const body = `### PR Bootstrap Artifact Ready
+            const body = `${MARKER}\n### PR Bootstrap Artifact Ready
 
             | Type | Tag |
             |------|-----|
@@ -124,8 +125,23 @@ jobs:
             flux reconcile source oci librepod-bootstrap --tag ${tag}
             \`\`\``;
 
-            github.rest.issues.createComment({
+            // Find existing comment with our marker
+            const comments = await github.rest.issues.listComments({
               ...context.repo,
               issue_number: pr_number,
-              body
             });
+            const existing = comments.data.find(c => c.body.includes(MARKER));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...context.repo,
+                comment_id: existing.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: pr_number,
+                body
+              });
+            }
