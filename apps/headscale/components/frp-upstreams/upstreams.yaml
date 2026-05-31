@@ -24,7 +24,7 @@ metadata:
 spec:
   client: librepod-dev
   http:
-    host: headscale-http.headscale.svc.cluster.local
+    host: headscale.headscale.svc.cluster.local
     port: 80
     # With frps subDomainHost = "vla1.libreport.ru" and subdomain = "headscale",
     # the proxy resolves at headscale.vla1.libreport.ru (wildcard DNS).

@@ -17,3 +17,5 @@ images:
 
 patches:
 - path: patch-storage-class.yaml
+  target:
+    kind: PersistentVolumeClaim

@@ -10,7 +10,7 @@
 #   derp.server.enabled→ true (default false; embedded DERP relay for regions where Tailscale
 #                        DERP servers are unreachable; relay traffic goes through FRP tunnel)
 #   derp.urls         → kept Tailscale defaults as fallback; can be removed if fully unreachable
-#   dns.base_domain    → ts.${BASE_DOMAIN} for MagicDNS hostnames
+#   dns.base_domain    → tailnet.${BASE_DOMAIN} for MagicDNS hostnames
 #   dns.nameservers    → 1.1.1.1 only (defaults include v6 Cloudflare too)
 #   disable_check_updates → true (not useful in containers)
 #
@@ -57,8 +57,8 @@ database:
 dns:
   magic_dns: true
   # Must be DIFFERENT from server_url domain — headscale enforces this so DERP/DNS routing works.
-  # MagicDNS hostnames will be: <hostname>.ts.${BASE_DOMAIN}
-  base_domain: ts.${BASE_DOMAIN}
+  # MagicDNS hostnames will be: <hostname>.tailnet.${BASE_DOMAIN}
+  base_domain: tailnet.${BASE_DOMAIN:=libre.pod}
   override_local_dns: true
   nameservers:
     global:
@@ -67,10 +67,10 @@ dns:
       - 2606:4700:4700::1111
       - 2606:4700:4700::1001
     # Route internal domain queries to Kubernetes CoreDNS — same pattern as wg-easy's
-    # INIT_DNS=10.43.0.10. CoreDNS resolves *.librepod.dev via Traefik IngressRoutes.
+    # INIT_DNS=10.43.0.10. CoreDNS resolves *.libre.pod via Traefik IngressRoutes.
     # Requires subnet routing (10.43.0.0/16) so Tailscale clients can reach CoreDNS.
     split:
-      ${BASE_DOMAIN}:
+      ${BASE_DOMAIN:=libre.pod}:
         - 10.43.0.10
 
 unix_socket: /var/run/headscale/headscale.sock

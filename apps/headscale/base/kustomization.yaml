@@ -17,5 +17,5 @@ configMapGenerator:
 resources:
 - namespace.yaml
 - pvc.yaml
-- service-http.yaml
+- service.yaml
 - deployment.yaml

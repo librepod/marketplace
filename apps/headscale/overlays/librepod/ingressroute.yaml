@@ -8,8 +8,8 @@ spec:
   - websecure
   routes:
   - kind: Rule
-    match: Host(`headscale.${BASE_DOMAIN}`)
+    match: Host(`headscale.${BASE_DOMAIN:=libre.pod}`)
     priority: 1
     services:
-    - name: headscale-http
+    - name: headscale
       port: 80

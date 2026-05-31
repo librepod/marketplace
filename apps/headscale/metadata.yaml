@@ -22,6 +22,10 @@ spec:
         description: "Base domain (app will be at headscale.BASE_DOMAIN)"
         type: string
         example: "example.com"
+      - name: FRP_DOMAIN
+        description: "FRP tunnel domain (public domain for Tailscale client connections)"
+        type: string
+        example: "vla1.libreport.ru"
       # TODO: Uncomment when Casdoor provisioning logic auto-creates OIDC clients per app
       # - name: OIDC_CLIENT_ID
       #   description: "OIDC client ID registered in Casdoor for headscale"
@@ -70,6 +74,10 @@ spec:
           marketplace.io/managed: "true"
           marketplace.io/app: "headscale"
       spec:
+        dependsOn:
+          - name: traefik
+          - name: nfs-provisioner
+        force: true
         interval: 10m
         retryInterval: 2m
         timeout: 5m
@@ -83,6 +91,7 @@ spec:
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
+            FRP_DOMAIN: "${FRP_DOMAIN}"
           # TODO: Uncomment when Casdoor provisioning logic auto-creates OIDC clients per app
           #   OIDC_CLIENT_ID: "${OIDC_CLIENT_ID}"
           # substituteFrom:
