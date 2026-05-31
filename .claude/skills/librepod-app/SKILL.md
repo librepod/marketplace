@@ -138,11 +138,18 @@ kind: Kustomization
 
 namespace: <app-name>
 
+labels:
+- includeSelectors: true
+  includeTemplates: true
+  pairs:
+    app.kubernetes.io/name: <app-name>
+
 resources:
 - namespace.yaml
 - ocirepository.yaml
+- helmrepository.yaml   # Only if OCI repository not provided by the vendor 
 - helmrelease.yaml
-- pvc.yaml          # Only if needed
+- pvc.yaml              # Only if needed
 ```
 
 ### `base/namespace.yaml`
@@ -165,13 +172,7 @@ spec:
   replicas: 1
   strategy:
     type: Recreate
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: <app-name>
   template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: <app-name>
     spec:
       containers:
         - name: <app-name>
