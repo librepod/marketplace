@@ -13,7 +13,7 @@ images:
   # in the Docker container, you can use the -debug variant:
   # docker.io/headscale/headscale:v0.28.0-debug
 - name: headscale/headscale
-  newTag: v0.28.0
+  newTag: v0.28.0-debug
 
 # components:
 #   - ../../components/frp-upstreams
