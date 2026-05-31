@@ -15,6 +15,9 @@ images:
 - name: headscale/headscale
   newTag: v0.28.0
 
+components:
+  - ../../components/frp-upstreams
+
 patches:
 - path: patch-storage-class.yaml
   target:
