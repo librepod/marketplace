@@ -1,0 +1,6 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tailscale-state
+spec:
+  storageClassName: nfs-client

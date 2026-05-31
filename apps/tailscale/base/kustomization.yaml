@@ -9,9 +9,20 @@ labels:
     pairs:
       app.kubernetes.io/name: tailscale
 
+configMapGenerator:
+  - name: tailscale-env
+    envs:
+      - tailscale.env
+
+secretGenerator:
+  - name: tailscale-secret
+    envs:
+      - tailscale.secret.env
+
 resources:
   - namespace.yaml
   - serviceaccount.yaml
   - role.yaml
   - rolebinding.yaml
+  - pvc.yaml
   - deployment.yaml

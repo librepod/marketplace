@@ -7,3 +7,8 @@ resources:
 images:
   - name: tailscale/tailscale
     newTag: "v1.98.4"
+
+patches:
+  - path: ./patch-storage-class.yaml
+    target:
+      kind: PersistentVolumeClaim

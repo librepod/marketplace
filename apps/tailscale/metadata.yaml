@@ -30,26 +30,25 @@ spec:
           Example: "--login-server=https://headscale.example.com --advertise-routes=10.43.0.0/16,192.168.1.0/24 --accept-routes"
         type: string
 
-    optional:
-      - name: TS_ACCEPT_DNS
-        description: "Whether to accept DNS configuration from the tailnet (default: false)"
-        type: string
-        default: "false"
+  secrets:
+    - name: TS_AUTHKEY
+      description: "Tailscale auth key for automatic node authentication. Generate from your control server."
+      required: true
 
-      - name: TS_USERSPACE
-        description: "Run in userspace mode (no NET_ADMIN). Set to true for simple proxy use-cases. (default: false)"
-        type: string
-        default: "false"
+  dependencies:
+    required:
+      - kind: StorageClass
+        description: "nfs-client (provided by nfs-provisioner app)"
 
   notes: |
-    Before installing, create a Kubernetes Secret with your Tailscale auth key:
-
-        kubectl create secret generic tailscale-auth \
-          --from-literal=authkey=tskey-auth-...
-
-    Generate the key on your control server:
+    Generate an auth key from your control server:
     - Tailscale SaaS: https://login.tailscale.com/admin/settings/keys
     - Headscale: headscale preauthkeys create --user <ID> --reusable
+
+    Use a reusable key so the node can re-authenticate if the pod is recreated.
+
+    TS_ACCEPT_DNS and TS_USERSPACE default to false (Tailscale's built-in defaults).
+    To change them, add flags to TS_EXTRA_ARGS (e.g. --accept-dns).
 
   templates:
     source: |
@@ -76,6 +75,9 @@ spec:
           marketplace.io/managed: "true"
           marketplace.io/app: "tailscale"
       spec:
+        dependsOn:
+          - name: nfs-provisioner
+        force: true
         interval: 1h
         retryInterval: 2m
         timeout: 5m
@@ -89,11 +91,22 @@ spec:
           substitute:
             TS_HOSTNAME: "${TS_HOSTNAME}"
             TS_EXTRA_ARGS: "${TS_EXTRA_ARGS}"
-            TS_ACCEPT_DNS: "${TS_ACCEPT_DNS}"
-            TS_USERSPACE: "${TS_USERSPACE}"
+          substituteFrom:
+            - kind: Secret
+              name: tailscale-config
+    secret: |
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: tailscale-config
+        namespace: flux-system
+      type: Opaque
+      stringData:
+        TS_AUTHKEY: "${TS_AUTHKEY}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization
       resources:
         - source.yaml
         - release.yaml
+        - secret.yaml

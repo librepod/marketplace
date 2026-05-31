@@ -21,20 +21,18 @@ spec:
       containers:
         - name: tailscale
           image: tailscale/tailscale
-          env:
-            - name: TS_AUTHKEY
-              valueFrom:
-                secretKeyRef:
-                  name: tailscale-auth
-                  key: authkey
-            - name: TS_HOSTNAME
-              value: "${TS_HOSTNAME}"
-            - name: TS_EXTRA_ARGS
-              value: "${TS_EXTRA_ARGS}"
-            - name: TS_ACCEPT_DNS
-              value: "${TS_ACCEPT_DNS:=false}"
-            - name: TS_USERSPACE
-              value: "${TS_USERSPACE:=false}"
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: tailscale-env
+            - secretRef:
+                name: tailscale-secret
+          # NOTE: TS_ACCEPT_DNS and TS_USERSPACE are intentionally omitted.
+          # Tailscale defaults to false for both when unset, which is the
+          # desired default. FluxCD's postBuild.substitute does text-level
+          # replacement — bare "true"/"false" values become YAML booleans,
+          # which the API rejects for both ConfigMap.data and EnvVar.value.
+          # Users needing these can pass flags via TS_EXTRA_ARGS.
           securityContext:
             capabilities:
               add:
@@ -44,4 +42,5 @@ spec:
               mountPath: /var/lib/tailscale
       volumes:
         - name: state
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: tailscale-state
