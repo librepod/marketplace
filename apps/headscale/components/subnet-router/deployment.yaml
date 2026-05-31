@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tailscale-subnet-router
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: tailscale-subnet-router
+  template:
+    metadata:
+      labels:
+        app: tailscale-subnet-router
+    spec:
+      serviceAccountName: tailscale-subnet-router
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: tailscale
+          image: tailscale/tailscale:v1.98.4
+          env:
+            - name: TS_AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: tailscale-subnet-router-auth
+                  key: authkey
+            - name: TS_HOSTNAME
+              value: "librepod-subnet-router"
+            # Connect directly to headscale's HTTP port — both pods share the
+            # host network (hostNetwork: true), so 127.0.0.1:8080 bypasses
+            # Traefik and avoids TLS cert trust issues with the internal CA.
+            - name: TS_EXTRA_ARGS
+              value: >-
+                --advertise-routes=${SERVICE_CIDR},${LAN_SUBNETS}
+                --login-server=http://127.0.0.1:8080
+                --accept-routes
+            - name: TS_ACCEPT_DNS
+              value: "false"
+            - name: TS_USERSPACE
+              value: "false"
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/tailscale
+      volumes:
+        - name: state
+          emptyDir: {}

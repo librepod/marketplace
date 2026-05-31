@@ -17,7 +17,9 @@
 # Variables like ${BASE_DOMAIN} are substituted by FluxCD postBuild.substitute.
 # For local testing: export BASE_DOMAIN=libre.pod && kustomize build ... | envsubst
 
-server_url: https://headscale.${BASE_DOMAIN}
+# Public URL — must be reachable by Tailscale clients outside the VPN.
+# Uses the FRP tunnel domain (not BASE_DOMAIN, which only resolves internally).
+server_url: https://headscale.${FRP_DOMAIN}
 listen_addr: 0.0.0.0:8080
 metrics_listen_addr: 0.0.0.0:9090
 grpc_listen_addr: 0.0.0.0:50443
@@ -57,9 +59,19 @@ dns:
   # Must be DIFFERENT from server_url domain — headscale enforces this so DERP/DNS routing works.
   # MagicDNS hostnames will be: <hostname>.ts.${BASE_DOMAIN}
   base_domain: ts.${BASE_DOMAIN}
+  override_local_dns: true
   nameservers:
     global:
       - 1.1.1.1
+      - 1.0.0.1
+      - 2606:4700:4700::1111
+      - 2606:4700:4700::1001
+    # Route internal domain queries to Kubernetes CoreDNS — same pattern as wg-easy's
+    # INIT_DNS=10.43.0.10. CoreDNS resolves *.librepod.dev via Traefik IngressRoutes.
+    # Requires subnet routing (10.43.0.0/16) so Tailscale clients can reach CoreDNS.
+    split:
+      ${BASE_DOMAIN}:
+        - 10.43.0.10
 
 unix_socket: /var/run/headscale/headscale.sock
 
