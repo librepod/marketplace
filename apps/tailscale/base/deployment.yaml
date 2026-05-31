@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tailscale
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tailscale
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tailscale
+    spec:
+      serviceAccountName: tailscale
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: tailscale
+          image: tailscale/tailscale
+          env:
+            - name: TS_AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: tailscale-auth
+                  key: authkey
+            - name: TS_HOSTNAME
+              value: "${TS_HOSTNAME}"
+            - name: TS_EXTRA_ARGS
+              value: "${TS_EXTRA_ARGS}"
+            - name: TS_ACCEPT_DNS
+              value: "${TS_ACCEPT_DNS:=false}"
+            - name: TS_USERSPACE
+              value: "${TS_USERSPACE:=false}"
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/tailscale
+      volumes:
+        - name: state
+          emptyDir: {}
