@@ -1,0 +1,89 @@
+# Headscale configuration
+#
+# Default config (for reference): https://github.com/juanfont/headscale/blob/v0.28.0/config-example.yaml
+#
+# Settings changed from defaults:
+#   server_url         → public URL (internal domain won't work for external clients)
+#   listen_addr        → 0.0.0.0:8080 (default is 127.0.0.1, we need all interfaces for k8s)
+#   metrics_listen_addr→ 0.0.0.0:9090 (same reason)
+#   grpc_listen_addr   → 0.0.0.0:50443 (same reason)
+#   derp.server.enabled→ true (default false; embedded DERP relay for regions where Tailscale
+#                        DERP servers are unreachable; relay traffic goes through FRP tunnel)
+#   derp.urls         → kept Tailscale defaults as fallback; can be removed if fully unreachable
+#   dns.base_domain    → tailnet.${BASE_DOMAIN} for MagicDNS hostnames
+#   dns.nameservers    → 1.1.1.1 only (defaults include v6 Cloudflare too)
+#   disable_check_updates → true (not useful in containers)
+#
+# Variables like ${BASE_DOMAIN} are substituted by FluxCD postBuild.substitute.
+# For local testing: export BASE_DOMAIN=libre.pod && kustomize build ... | envsubst
+
+# Public URL — must be reachable by Tailscale clients outside the VPN.
+# Uses the FRP tunnel domain (not BASE_DOMAIN, which only resolves internally).
+server_url: https://headscale.${FRP_DOMAIN}
+listen_addr: 0.0.0.0:8080
+metrics_listen_addr: 0.0.0.0:9090
+grpc_listen_addr: 0.0.0.0:50443
+grpc_allow_insecure: false
+
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key
+
+prefixes:
+  v4: 100.64.0.0/10
+  v6: fd7a:115c:a1e0::/48
+  allocation: sequential
+
+derp:
+  server:
+    enabled: true
+    region_id: 999
+    region_code: "headscale"
+    region_name: "Headscale Embedded DERP"
+    stun_listen_addr: "0.0.0.0:3478"
+    private_key_path: /var/lib/headscale/derp_server_private.key
+  urls:
+    - https://controlplane.tailscale.com/derpmap/default
+  auto_update_enabled: true
+  update_frequency: 24h
+
+disable_check_updates: true
+
+database:
+  type: sqlite
+  sqlite:
+    path: /var/lib/headscale/db.sqlite
+    write_ahead_log: true
+
+dns:
+  magic_dns: true
+  # Must be DIFFERENT from server_url domain — headscale enforces this so DERP/DNS routing works.
+  # MagicDNS hostnames will be: <hostname>.tailnet.${BASE_DOMAIN}
+  base_domain: tailnet.${BASE_DOMAIN:=libre.pod}
+  override_local_dns: true
+  nameservers:
+    global:
+      - 1.1.1.1
+      - 1.0.0.1
+      - 2606:4700:4700::1111
+      - 2606:4700:4700::1001
+    # Route internal domain queries to Kubernetes CoreDNS — same pattern as wg-easy's
+    # INIT_DNS=10.43.0.10. CoreDNS resolves *.libre.pod via Traefik IngressRoutes.
+    # Requires subnet routing (10.43.0.0/16) so Tailscale clients can reach CoreDNS.
+    split:
+      ${BASE_DOMAIN:=libre.pod}:
+        - 10.43.0.10
+
+unix_socket: /var/run/headscale/headscale.sock
+
+log:
+  level: info
+  format: text
+
+# OIDC single sign-on (native headscale support — no oauth2-proxy needed).
+# Disabled for initial verification — re-enable after registering Casdoor client
+# and mounting step-ca root CA for TLS trust.
+# oidc:
+#   issuer: https://sso.${BASE_DOMAIN}
+#   client_id: ${OIDC_CLIENT_ID}
+#   client_secret: ${OIDC_CLIENT_SECRET}
+#   scope: ["openid", "profile", "email"]

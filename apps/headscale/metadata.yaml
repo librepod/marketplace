@@ -1,0 +1,120 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: headscale
+spec:
+  displayName: "Headscale"
+  description: "Self-hosted Tailscale control server — one tailnet for all your devices"
+  icon: "https://raw.githubusercontent.com/juanfont/headscale/main/docs/logo.png"
+  category: "Network"
+  website: "https://github.com/juanfont/headscale"
+
+  version: "v0.28.0"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/headscale"
+    path: ./overlays/librepod
+
+  params:
+    required:
+      - name: BASE_DOMAIN
+        description: "Base domain (app will be at headscale.BASE_DOMAIN)"
+        type: string
+        example: "example.com"
+      - name: FRP_DOMAIN
+        description: "FRP tunnel domain (public domain for Tailscale client connections)"
+        type: string
+        example: "vla1.libreport.ru"
+      # TODO: Uncomment when Casdoor provisioning logic auto-creates OIDC clients per app
+      # - name: OIDC_CLIENT_ID
+      #   description: "OIDC client ID registered in Casdoor for headscale"
+      #   type: string
+      #   example: "headscale"
+
+  # TODO: Uncomment when Casdoor provisioning logic auto-creates OIDC clients per app
+  # secrets:
+  #   - name: OIDC_CLIENT_SECRET
+  #     description: "OIDC client secret from Casdoor for headscale authentication"
+  #     required: true
+
+  dependencies:
+    required:
+      - kind: IngressController
+        description: "Traefik (provided by bootstrap)"
+      - kind: StorageClass
+        description: "nfs-client (provided by bootstrap)"
+      # TODO: Uncomment when Casdoor provisioning logic auto-creates OIDC clients per app
+      # - kind: App
+      #   name: casdoor
+      #   description: "SSO provider for OIDC authentication"
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-headscale
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "headscale"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/headscale
+        ref:
+          tag: "v0.28.0"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-headscale
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "headscale"
+      spec:
+        dependsOn:
+          - name: traefik
+          - name: nfs-provisioner
+        force: true
+        interval: 10m
+        retryInterval: 2m
+        timeout: 5m
+        targetNamespace: headscale
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-headscale
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+        postBuild:
+          substitute:
+            BASE_DOMAIN: "${BASE_DOMAIN}"
+            FRP_DOMAIN: "${FRP_DOMAIN}"
+          # TODO: Uncomment when Casdoor provisioning logic auto-creates OIDC clients per app
+          #   OIDC_CLIENT_ID: "${OIDC_CLIENT_ID}"
+          # substituteFrom:
+          #   - kind: Secret
+          #     name: headscale-config
+    # TODO: Uncomment when Casdoor provisioning logic auto-creates OIDC clients per app
+    # secret: |
+    #   apiVersion: v1
+    #   kind: Secret
+    #   metadata:
+    #     name: headscale-config
+    #     namespace: flux-system
+    #     labels:
+    #       marketplace.io/managed: "true"
+    #       marketplace.io/app: "headscale"
+    #   type: Opaque
+    #   stringData:
+    #     OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml
+      # TODO: Uncomment when Casdoor provisioning logic auto-creates OIDC clients per app
+      # - secret.yaml

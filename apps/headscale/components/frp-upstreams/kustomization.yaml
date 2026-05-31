@@ -1,0 +1,35 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# FRP tunnel upstreams — optional component for the headscale app.
+# Exposes the control server and embedded DERP STUN endpoint publicly
+# so Tailscale clients can join the tailnet without first being on the
+# WireGuard VPN.
+#
+# These Upstream resources are reconciled by frp-operator into the running
+# FRP client configuration. The FRP client connects to the relay server and
+# tunnels traffic back to local endpoints.
+#
+# frp-operator watches Upstream CRs cluster-wide (ClusterRole), so resources
+# can live in the headscale namespace alongside the app — no need to deploy
+# into the frp-operator namespace.
+#
+# DNS: The FRP server has subDomainHost = "vla1.libreport.ru" with wildcard DNS.
+# frp-operator auto-injects subdomain from the Upstream name, so the proxy is
+# reachable at headscale.vla1.libreport.ru.
+#
+# Prerequisites on the FRP server (frps):
+#   vhostHTTPPort = 80              — Layer 7 HTTP routing by Host header
+#   vhostHTTPSPort = 443            — TLS termination or passthrough
+#   subDomainHost = "vla1.libreport.ru"
+#
+# Prerequisites in the cluster:
+#   - frp-operator running with frp client registered
+#   - ${FRP_DOMAIN} set in the cluster's postBuild.substitute
+#
+# Usage in an overlay kustomization.yaml:
+#   components:
+#     - ../../components/frp-upstreams
+
+resources:
+  - upstreams.yaml

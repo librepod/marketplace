@@ -1,0 +1,7 @@
+# LibrePod-specific PVC configuration
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: headscale-data
+spec:
+  storageClassName: nfs-client

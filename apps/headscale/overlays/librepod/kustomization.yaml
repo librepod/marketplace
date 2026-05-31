@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../../base
+- ingressroute.yaml
+
+namespace: headscale
+
+images:
+  # The Headscale container image is based on a "distroless" image that does not
+  # contain a shell or any other debug tools. If you need to debug headscale running
+  # in the Docker container, you can use the -debug variant:
+  # docker.io/headscale/headscale:v0.28.0-debug
+- name: headscale/headscale
+  newTag: v0.28.0
+
+components:
+  - ../../components/frp-upstreams
+
+patches:
+- path: patch-storage-class.yaml
+  target:
+    kind: PersistentVolumeClaim
