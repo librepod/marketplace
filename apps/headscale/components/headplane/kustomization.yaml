@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Headplane — optional web UI component for the headscale app.
+# Provides a feature-complete dashboard for managing nodes, networks, and ACLs.
+# Served under /admin on the headscale domain (same pattern as Tailscale's console).
+#
+# Prerequisites:
+#   - headscale base must be deployed (same namespace, shared ConfigMap)
+#   - ${BASE_DOMAIN} set in the cluster's postBuild.substitute
+#   - Traefik ingress controller for IngressRoute
+#
+# Usage in an overlay kustomization.yaml:
+#   components:
+#     - ../../components/headplane
+
+configMapGenerator:
+  - name: headplane-config
+    files:
+      - config.yaml
+
+resources:
+  - pvc.yaml
+  - service.yaml
+  - deployment.yaml
+  - ingressroute.yaml

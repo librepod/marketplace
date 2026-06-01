@@ -14,9 +14,12 @@ images:
   # docker.io/headscale/headscale:v0.28.0-debug
 - name: headscale/headscale
   newTag: v0.28.0-debug
+- name: ghcr.io/tale/headplane
+  newTag: 0.6.3
 
-# components:
-#   - ../../components/frp-upstreams
+components:
+  - ../../components/headplane
+  # - ../../components/frp-upstreams
 
 patches:
 - path: patch-storage-class.yaml
