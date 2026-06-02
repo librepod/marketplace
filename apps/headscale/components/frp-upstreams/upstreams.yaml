@@ -27,10 +27,6 @@ spec:
     host: headscale.headscale.svc.cluster.local
     port: 80
     subdomain: headscale
-    requestHeaders:
-      set:
-        X-Forwarded-For: "${remote_addr}"
-        X-Real-IP: "${remote_addr}"
     healthCheck:
       type: http
       path: /health
