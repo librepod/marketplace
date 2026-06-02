@@ -20,7 +20,7 @@
 apiVersion: frp.zufardhiyaulhaq.com/v1alpha1
 kind: Upstream
 metadata:
-  name: headscale-http
+  name: headscale-beelink
 spec:
   client: libreport
   http:
