@@ -3,11 +3,15 @@ kind: HelmRelease
 metadata:
   name: frp-operator
 spec:
-  chart:
-    spec:
-      # Fork chart with fix for https://github.com/zufardhiyaulhaq/frp-operator/pull/17
-      # TODO: Revert to upstream chart and version "~1.5.0" once the PR is merged.
-      chartRef:
-        kind: OCIRepository
-        name: frp-operator-charts
-      interval: 12h
+  # chartRef takes precedence over spec.chart — the base HelmRepository is ignored.
+  # Fork chart with fix for https://github.com/zufardhiyaulhaq/frp-operator/pull/17
+  # TODO: Revert to spec.chart.spec.sourceRef once the PR is merged.
+  chartRef:
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: OCIRepository
+    name: frp-operator-charts
+  # Override image since the published chart still references the upstream image.
+  values:
+    operator:
+      image: ghcr.io/librepod/frp-operator
+      tag: v0.7.0-librepod1

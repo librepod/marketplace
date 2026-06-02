@@ -7,6 +7,6 @@ metadata:
   name: frp-operator-charts
 spec:
   interval: 24h
-  url: oci://ghcr.io/librepod/frp-operator/charts/frp-operator
+  url: oci://ghcr.io/librepod/charts/frp-operator
   ref:
-    version: "0.0.0-pr.1"
+    tag: "0.0.0-pr.1"
