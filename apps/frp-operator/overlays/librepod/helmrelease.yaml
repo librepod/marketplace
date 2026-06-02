@@ -3,12 +3,22 @@ kind: HelmRelease
 metadata:
   name: frp-operator
 spec:
-  # Fork chart with fix for https://github.com/zufardhiyaulhaq/frp-operator/pull/17
-  # Revert to version "~1.5.0" once the PR is merged.
+  interval: 12h
+  install:
+    crds: CreateReplace
+    strategy:
+      name: RetryOnFailure
+      retryInterval: 2m
+  upgrade:
+    crds: CreateReplace
+    strategy:
+      name: RetryOnFailure
+      retryInterval: 3m
   chartRef:
     kind: OCIRepository
     name: frp-operator-charts
   # Override image since the published chart still references the upstream image.
+  # TODO: remove that once we switch back to the upstream chart and docker image
   values:
     operator:
       image: ghcr.io/librepod/frp-operator
