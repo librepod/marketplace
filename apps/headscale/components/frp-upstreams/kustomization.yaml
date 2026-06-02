@@ -14,14 +14,14 @@ kind: Component
 # can live in the headscale namespace alongside the app — no need to deploy
 # into the frp-operator namespace.
 #
-# DNS: The FRP server has subDomainHost = "vla1.libreport.ru" with wildcard DNS.
+# DNS: The FRP server has subDomainHost with wildcard DNS.
 # frp-operator auto-injects subdomain from the Upstream name, so the proxy is
-# reachable at headscale.vla1.libreport.ru.
+# reachable at headscale.<subDomainHost>.
 #
 # Prerequisites on the FRP server (frps):
 #   vhostHTTPPort = 80              — Layer 7 HTTP routing by Host header
 #   vhostHTTPSPort = 443            — TLS termination or passthrough
-#   subDomainHost = "vla1.libreport.ru"
+#   subDomainHost = "<your-frp-server-domain>"
 #
 # Prerequisites in the cluster:
 #   - frp-operator running with frp client registered

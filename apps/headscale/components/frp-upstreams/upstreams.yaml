@@ -6,23 +6,24 @@
 # FRP client configuration.  The FRP client (librepod-dev) connects to the
 # relay server and tunnels traffic back to these local endpoints.
 #
-# DNS: The FRP server has subDomainHost = "vla1.libreport.ru" with wildcard
-# DNS.  frp-operator auto-injects subdomain = "headscale" from the Upstream
-# name, so the proxy is reachable at headscale.vla1.libreport.ru.
+# DNS: The FRP server has subDomainHost with wildcard DNS.
+# frp-operator auto-injects subdomain = "headscale" from the Upstream
+# name, so the proxy is reachable at headscale.<subDomainHost>.
 # headscale's server_url must point to the public FRP domain.
 #
 # TLS: A reverse proxy (Caddy/Nginx) on the FRP server terminates HTTPS on
-# port 443 and forwards to frps vhostHTTPPort (80).  The domain cert must
-# match headscale's server_url.
+# port 443 and forwards to frps vhostHTTPPort (80). Since TLS is terminated
+# before reaching frps, we use type: http (not https) — frps routes by Host
+# header, not SNI. The domain cert must match headscale's server_url.
 
 ---
 apiVersion: frp.zufardhiyaulhaq.com/v1alpha1
 kind: Upstream
 metadata:
-  name: headscale-https
+  name: headscale-http
 spec:
   client: libreport
-  https:
+  http:
     host: headscale.headscale.svc.cluster.local
     port: 80
     subdomain: headscale
