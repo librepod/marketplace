@@ -1,3 +1,12 @@
+# Full HelmRelease override using the fork OCI chart.
+# Uses chartRef (OCIRepository) instead of spec.chart + HelmRepository because
+# the fork chart is published as an OCI artifact, not a classic Helm repo.
+#
+# The image override is needed because the published chart's values.yaml still
+# references the upstream image (ghcr.io/zufardhiyaulhaq/frp-operator:v0.7.0).
+#
+# TODO: Delete this file once upstream PR #17 is merged. The base/ HelmRelease
+# (with patch-helmrelease.yaml) will take over using the upstream chart.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -17,8 +26,6 @@ spec:
   chartRef:
     kind: OCIRepository
     name: frp-operator-charts
-  # Override image since the published chart still references the upstream image.
-  # TODO: remove that once we switch back to the upstream chart and docker image
   values:
     operator:
       image: ghcr.io/librepod/frp-operator

@@ -1,5 +1,6 @@
-# Fork chart with fix for https://github.com/zufardhiyaulhaq/frp-operator/pull/17
-# TODO: Remove once the PR is merged.
+# Fork chart from https://github.com/librepod/frp-operator
+# Provides HTTPS Upstream `subdomain` field support (upstream PR #17).
+# TODO: Delete this file once upstream PR #17 is merged and released.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
 metadata:

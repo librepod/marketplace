@@ -1,3 +1,38 @@
+# =============================================================================
+# FORK OVERLAY — Uses a forked Helm chart and Docker image
+# =============================================================================
+#
+# WHY:
+#   The upstream frp-operator does not support the `subdomain` field on HTTPS
+#   Upstream CRs. Only `customDomains` is available, which requires managing
+#   full domain names. With `subdomain`, frps can auto-construct the full
+#   domain using its `subDomainHost` config — much simpler for our use case.
+#
+#   Upstream PR: https://github.com/zufardhiyaulhaq/frp-operator/pull/17
+#   Fork repo:   https://github.com/librepod/frp-operator
+#
+# WHAT THE FORK CHANGES:
+#   1. Adds `subdomain` field to UpstreamSpec_HTTPS (and UpstreamSpec_HTTP)
+#   2. Makes `customDomains` optional (removed from CRD `required` list)
+#   3. Published as OCI chart: ghcr.io/librepod/charts/frp-operator:0.0.0-pr.3
+#   4. Docker image: ghcr.io/librepod/frp-operator:v0.7.0-librepod1
+#
+# HOW IT WORKS:
+#   - base/ provides namespace + upstream HelmRepository (but NO HelmRelease —
+#     it's commented out since the overlay provides its own)
+#   - ocirepository.yaml provides the fork's OCI Helm chart
+#   - helmrelease.yaml is the full HelmRelease using chartRef (OCIRepository)
+#     instead of the usual spec.chart + HelmRepository pattern
+#
+# TODO — Once upstream PR #17 is merged and released:
+#   1. Uncomment `helmrelease.yaml` in base/kustomization.yaml
+#   2. Delete overlays/librepod/helmrelease.yaml (the full override)
+#   3. Delete overlays/librepod/ocirepository.yaml
+#   4. Uncomment the `patches` section below and switch to patch-helmrelease.yaml
+#   5. Remove the image/tag overrides from the patch (upstream image is fine)
+#   6. Bump the chart version in patch-helmrelease.yaml to the release that
+#      includes PR #17
+# =============================================================================
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -5,12 +40,10 @@ namespace: frp-operator
 
 resources:
 - ../../base
-# Fork chart with fix for https://github.com/zufardhiyaulhaq/frp-operator/pull/17
-# TODO: Remove OCIRepository once the PR is merged.
 - ocirepository.yaml
 - helmrelease.yaml
 
-# TODO: Switch to ./patch-helmrelease.yaml once the PR is merged.
+# Once upstream PR #17 is merged, switch to this patch pattern:
 # patches:
 # - path: ./patch-helmrelease.yaml
 #   target:
