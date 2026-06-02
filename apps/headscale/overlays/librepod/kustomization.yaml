@@ -19,9 +19,6 @@ images:
 
 components:
   - ../../components/headplane
-  # - ../../components/frp-upstreams
 
 patches:
 - path: patch-storage-class.yaml
-  target:
-    kind: PersistentVolumeClaim

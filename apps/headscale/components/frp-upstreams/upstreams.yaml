@@ -19,58 +19,29 @@
 apiVersion: frp.zufardhiyaulhaq.com/v1alpha1
 kind: Upstream
 metadata:
-  name: headscale-http
-spec:
-  client: librepod
-  http:
-    host: headscale.headscale.svc.cluster.local
-    port: 80
-    # With frps subDomainHost = "vla1.libreport.ru" and subdomain = "headscale",
-    # the proxy resolves at headscale.vla1.libreport.ru (wildcard DNS).
-    # customDomains is NOT used because frps rejects domains that overlap
-    # with subDomainHost — subdomain is the correct mechanism.
-    subdomain: headscale
-    healthCheck:
-      type: http
-      path: /health
-      timeoutSeconds: 3
-      intervalSeconds: 10
-      maxFailed: 3
-    transport:
-      useEncryption: true
-      useCompression: true
-
----
-apiVersion: frp.zufardhiyaulhaq.com/v1alpha1
-kind: Upstream
-metadata:
   name: headscale-https
 spec:
-  client: librepod
+  client: libreport
   https:
     host: headscale.headscale.svc.cluster.local
-    port: 443
-    # With frps subDomainHost = "vla1.libreport.ru" and subdomain = "headscale",
-    # the proxy resolves at headscale.vla1.libreport.ru (wildcard DNS).
-    # customDomains is NOT used because frps rejects domains that overlap
-    # with subDomainHost — subdomain is the correct mechanism.
+    port: 80
     subdomain: headscale
     proxyProtocol: v2
     transport:
       useEncryption: true
       useCompression: true
 
----
-apiVersion: frp.zufardhiyaulhaq.com/v1alpha1
-kind: Upstream
-metadata:
-  name: headscale-derp-stun
-spec:
-  client: librepod
-  udp:
-    # DERP STUN has no Kubernetes Service — reach it on the node's host network
-    # where headscale binds 0.0.0.0:3478 via hostNetwork: true.
-    host: 192.168.2.180
-    port: 3478
-    server:
-      port: 8031
+# ---
+# apiVersion: frp.zufardhiyaulhaq.com/v1alpha1
+# kind: Upstream
+# metadata:
+#   name: headscale-derp-stun
+# spec:
+#   client: librepod
+#   udp:
+#     # DERP STUN has no Kubernetes Service — reach it on the node's host network
+#     # where headscale binds 0.0.0.0:3478 via hostNetwork: true.
+#     host: 192.168.2.180
+#     port: 3478
+#     server:
+#       port: 8031

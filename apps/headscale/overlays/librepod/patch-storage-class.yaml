@@ -5,3 +5,10 @@ metadata:
   name: headscale-data
 spec:
   storageClassName: nfs-client
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: headplane-data
+spec:
+  storageClassName: nfs-client
