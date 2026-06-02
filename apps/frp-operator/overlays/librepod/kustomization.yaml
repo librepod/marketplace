@@ -25,6 +25,12 @@ patches:
         kind: OCIRepository
         name: frp-operator-charts
     - op: add
+      path: /spec/install/crds
+      value: CreateReplace
+    - op: add
+      path: /spec/upgrade/crds
+      value: CreateReplace
+    - op: add
       path: /spec/values/operator/image
       value: ghcr.io/librepod/frp-operator
     - op: add
