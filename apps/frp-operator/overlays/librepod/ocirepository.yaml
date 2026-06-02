@@ -1,6 +1,5 @@
-# Switch to forked OCI chart with fix for https://github.com/zufardhiyaulhaq/frp-operator/pull/17
-# TODO: Revert to upstream HTTP repo once the PR is merged.
----
+# Fork chart with fix for https://github.com/zufardhiyaulhaq/frp-operator/pull/17
+# TODO: Remove once the PR is merged.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
 metadata:

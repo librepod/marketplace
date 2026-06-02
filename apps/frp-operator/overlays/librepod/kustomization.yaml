@@ -5,12 +5,28 @@ namespace: frp-operator
 
 resources:
 - ../../base
+# Fork chart with fix for https://github.com/zufardhiyaulhaq/frp-operator/pull/17
+# TODO: Remove OCIRepository once the PR is merged.
+- ocirepository.yaml
 
 patches:
 # TODO: Switch to ./patch-helmrelease.yaml once the PR is merged.
-- path: ./patch-helmrelease-fork.yaml
-  target:
+# JSON patch: remove spec.chart and add spec.chartRef (mutually exclusive fields).
+- target:
     kind: HelmRelease
-- path: ./patch-helmrepository-fork.yaml
-  target:
-    kind: HelmRepository
+    name: frp-operator
+  patch: |
+    - op: remove
+      path: /spec/chart
+    - op: add
+      path: /spec/chartRef
+      value:
+        apiVersion: source.toolkit.fluxcd.io/v1
+        kind: OCIRepository
+        name: frp-operator-charts
+    - op: add
+      path: /spec/values/operator/image
+      value: ghcr.io/librepod/frp-operator
+    - op: add
+      path: /spec/values/operator/tag
+      value: v0.7.0-librepod1
