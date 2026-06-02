@@ -1,0 +1,9 @@
+# Switch to forked OCI chart with fix for https://github.com/zufardhiyaulhaq/frp-operator/pull/17
+# TODO: Revert to upstream HTTP repo once the PR is merged.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: frp-operator-charts
+spec:
+  type: oci
+  url: oci://ghcr.io/librepod/frp-operator/charts/frp-operator

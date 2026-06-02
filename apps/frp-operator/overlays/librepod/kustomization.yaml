@@ -10,3 +10,6 @@ patches:
 - path: ./patch-helmrelease.yaml
   target:
     kind: HelmRelease
+- path: ./patch-helmrepository.yaml
+  target:
+    kind: HelmRepository
