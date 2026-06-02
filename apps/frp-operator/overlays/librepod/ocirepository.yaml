@@ -8,4 +8,4 @@ spec:
   interval: 24h
   url: oci://ghcr.io/librepod/charts/frp-operator
   ref:
-    tag: "0.0.0-pr.1"
+    tag: "0.0.0-pr.3"

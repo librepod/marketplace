@@ -14,25 +14,4 @@ patches:
 # JSON patch: remove spec.chart and add spec.chartRef (mutually exclusive fields).
 - target:
     kind: HelmRelease
-    name: frp-operator
-  patch: |
-    - op: remove
-      path: /spec/chart
-    - op: add
-      path: /spec/chartRef
-      value:
-        apiVersion: source.toolkit.fluxcd.io/v1
-        kind: OCIRepository
-        name: frp-operator-charts
-    - op: add
-      path: /spec/install/crds
-      value: CreateReplace
-    - op: add
-      path: /spec/upgrade/crds
-      value: CreateReplace
-    - op: add
-      path: /spec/values/operator/image
-      value: ghcr.io/librepod/frp-operator
-    - op: add
-      path: /spec/values/operator/tag
-      value: v0.7.0-librepod1
+  path: ./patch-helmrelease-fork.yaml
