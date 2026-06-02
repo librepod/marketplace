@@ -11,3 +11,9 @@ spec:
         kind: HelmRepository
         name: frp-operator-charts
       interval: 12h
+  # Fork image with fix for https://github.com/zufardhiyaulhaq/frp-operator/pull/17
+  # TODO: Revert to upstream once the PR is merged.
+  values:
+    operator:
+      image: ghcr.io/librepod/frp-operator
+      tag: v0.7.0-librepod1
