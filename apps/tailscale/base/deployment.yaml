@@ -25,8 +25,6 @@ spec:
           envFrom:
             - configMapRef:
                 name: tailscale-env
-            - secretRef:
-                name: tailscale-secret
           # NOTE: TS_ACCEPT_DNS and TS_USERSPACE are intentionally omitted.
           # Tailscale defaults to false for both when unset, which is the
           # desired default. FluxCD's postBuild.substitute does text-level

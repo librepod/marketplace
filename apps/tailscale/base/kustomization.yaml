@@ -14,11 +14,6 @@ configMapGenerator:
     envs:
       - tailscale.env
 
-secretGenerator:
-  - name: tailscale-secret
-    envs:
-      - tailscale-secret.env
-
 resources:
   - namespace.yaml
   - serviceaccount.yaml
