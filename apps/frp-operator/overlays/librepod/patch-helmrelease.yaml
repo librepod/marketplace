@@ -1,5 +1,3 @@
-# Fork chart with fix for https://github.com/zufardhiyaulhaq/frp-operator/pull/17
-# TODO: Revert to upstream chart and version "~1.5.0" once the PR is merged.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -8,7 +6,7 @@ spec:
   chart:
     spec:
       chart: frp-operator
-      version: "0.0.0-pr.1"
+      version: "1.5.0"
       sourceRef:
         kind: HelmRepository
         name: frp-operator-charts
