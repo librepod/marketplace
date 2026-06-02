@@ -5,12 +5,12 @@ namespace: frp-operator
 
 resources:
 - ../../base
-# Fork chart with fix for https://github.com/zufardhiyaulhaq/frp-operator/pull/17
-# TODO: Remove OCIRepository once the PR is merged.
-- ocirepository.yaml
 
 patches:
 # TODO: Switch to ./patch-helmrelease.yaml once the PR is merged.
 - path: ./patch-helmrelease-fork.yaml
   target:
     kind: HelmRelease
+- path: ./patch-helmrepository-fork.yaml
+  target:
+    kind: HelmRepository
