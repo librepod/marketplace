@@ -27,7 +27,16 @@ spec:
     host: headscale.headscale.svc.cluster.local
     port: 80
     subdomain: headscale
-    proxyProtocol: v2
+    requestHeaders:
+      set:
+        X-Forwarded-For: "${remote_addr}"
+        X-Real-IP: "${remote_addr}"
+    healthCheck:
+      type: http
+      path: /health
+      timeoutSeconds: 3
+      intervalSeconds: 10
+      maxFailed: 3
     transport:
       useEncryption: true
       useCompression: true
