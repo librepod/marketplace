@@ -26,12 +26,16 @@ spec:
       - name: TS_EXTRA_ARGS
         description: >
           Raw CLI flags passed to `tailscale up`. You provide everything:
-          --login-server, --advertise-routes, --accept-routes, --advertise-tags, etc.
-          Example: "--login-server=https://headscale.example.com --advertise-routes=10.43.0.0/16,192.168.1.0/24 --accept-routes"
+          --login-server, --accept-routes, --advertise-tags, etc.
+          Example: "--login-server=https://headscale.example.com --accept-routes"
         type: string
 
       - name: TS_AUTHKEY
         description: "Tailscale auth key for automatic node authentication. Generate from your control server."
+        type: string
+
+      - name: TS_ROUTES
+        description: "Routes to advertise (comma-separated CIDRs, e.g. 10.42.0.0/16,10.43.0.0/16)"
         type: string
 
   dependencies:
@@ -46,6 +50,7 @@ spec:
 
     Use a reusable key so the node can re-authenticate if the pod is recreated.
 
+    TS_ROUTES sets --advertise-routes automatically (e.g. "10.42.0.0/16,10.43.0.0/16").
     TS_ACCEPT_DNS and TS_USERSPACE default to false (Tailscale's built-in defaults).
     To change them, add flags to TS_EXTRA_ARGS (e.g. --accept-dns).
 
