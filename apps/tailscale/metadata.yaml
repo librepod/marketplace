@@ -92,7 +92,6 @@ spec:
             TS_EXTRA_ARGS: "${TS_EXTRA_ARGS}"
             TS_AUTHKEY: "${TS_AUTHKEY}"
             TS_ROUTES: "${TS_ROUTES}"
-            TS_ACCEPT_DNS: "${TS_ACCEPT_DNS}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization
