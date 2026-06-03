@@ -19,9 +19,13 @@ spec:
   params:
     required:
       - name: BASE_DOMAIN
-        description: "Base domain for cluster (WG Easy will be at wireguard.BASE_DOMAIN)"
+        description: "Base domain for cluster (WG Easy web UI will be at wg-easy.BASE_DOMAIN)"
         type: string
         example: "example.com"
+      - name: FRP_SERVER_ADDR
+        description: "FRP server public address (WireGuard clients connect to this host)"
+        type: string
+        example: "vla1.libreport.ru"
 
   dependencies:
     required:
@@ -65,6 +69,7 @@ spec:
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
+            FRP_SERVER_ADDR: "${FRP_SERVER_ADDR}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization

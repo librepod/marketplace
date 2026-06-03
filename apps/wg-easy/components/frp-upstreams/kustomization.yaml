@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# FRP tunnel upstream — optional component for the wg-easy app.
+# Exposes the WireGuard UDP endpoint (port 51820) publicly via FRP
+# so WireGuard clients can connect without being on the local network.
+#
+# This Upstream resource is reconciled by frp-operator into the running
+# FRP client configuration.  The FRP client connects to the relay server and
+# tunnels UDP traffic back to the local WireGuard endpoint.
+#
+# frp-operator watches Upstream CRs cluster-wide (ClusterRole), so resources
+# can live in the wg-easy namespace alongside the app — no need to deploy
+# into the frp-operator namespace.
+#
+# Prerequisites on the FRP server (frps):
+#   The server must allow binding the configured server port (51820) for
+#   UDP traffic.  Ensure the port is not blocked by firewall rules and is
+#   within the allowed port range configured on frps.
+#
+# Prerequisites in the cluster:
+#   - frp-operator running with an FRP client registered (client: libreport)
+#   - ${FRP_SERVER_ADDR} set in the cluster's postBuild.substitute
+#
+# Usage in an overlay kustomization.yaml:
+#   components:
+#     - ../../components/frp-upstreams
+
+resources:
+  - upstreams.yaml

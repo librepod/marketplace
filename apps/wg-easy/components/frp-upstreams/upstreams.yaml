@@ -1,0 +1,29 @@
+# FRP tunnel upstream for WG-Easy — expose the WireGuard UDP endpoint
+# publicly so VPN clients can connect from anywhere without being on the
+# local network.
+#
+# This Upstream resource is reconciled by frp-operator into the running
+# FRP client configuration.  The FRP client (libreport) connects to the
+# relay server and tunnels UDP traffic back to the local WireGuard endpoint.
+#
+# Protocol: UDP — FRP allocates a server-side UDP port and forwards all
+# datagrams to the local WireGuard service.  This is a raw UDP tunnel,
+# no subdomain routing (unlike HTTP upstreams which use Host headers).
+
+---
+apiVersion: frp.zufardhiyaulhaq.com/v1alpha1
+kind: Upstream
+metadata:
+  name: wg-easy-wireguard
+spec:
+  client: libreport
+  udp:
+    # Local endpoint — the Kubernetes Service that fronts the wg-easy
+    # WireGuard port.  The FRP client forwards incoming UDP datagrams
+    # here.
+    host: wg-easy-wireguard.wg-easy.svc.cluster.local
+    port: 51820
+    # Public port — the port allocated on the FRP server.  WireGuard
+    # clients connect to FRP_SERVER_ADDR:51820.
+    server:
+      port: 51820

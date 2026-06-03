@@ -15,5 +15,8 @@ configMapGenerator:
   - wg-easy.env
   behavior: merge
 
+components:
+  - ../../components/frp-upstreams
+
 patches:
 - path: patch-pvc.yaml
