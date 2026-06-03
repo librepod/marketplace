@@ -48,6 +48,11 @@ derp:
 
 disable_check_updates: true
 
+# ACL policy storage — database mode lets Headplane manage ACLs via the API.
+# File mode would require a separate policy.json volume and can't be edited from the UI.
+policy:
+  mode: database
+
 database:
   type: sqlite
   sqlite:
