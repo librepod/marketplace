@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-06-03T21:09:28Z"
+  generatedAt: "2026-06-03T21:36:26Z"
 apps:
   - name: baikal
     version: "0.11.1-nginx"
@@ -100,7 +100,7 @@ apps:
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/nfs-provisioner"
   - name: oauth2-proxy
-    version: "7.8.0"
+    version: "7.14.2"
     displayName: "OAuth2 Proxy"
     description: "Reverse proxy and static file server that provides authentication using Google, GitHub or other providers"
     category: "Security"
@@ -148,7 +148,7 @@ apps:
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/step-certificates"
   - name: step-issuer
-    version: "0.2.1"
+    version: "0.9.11"
     displayName: "Step Issuer"
     description: "Cert-Manager issuer for Step CA certificate authority"
     category: "Infrastructure"
@@ -164,7 +164,7 @@ apps:
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/tailscale"
   - name: traefik
-    version: "39.0.0"
+    version: "v3.6.15"
     displayName: "Traefik"
     description: "Cloud-native edge router and load balancer with automatic SSL/TLS certificate management"
     category: "Infrastructure"
