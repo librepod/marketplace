@@ -17,7 +17,7 @@ spec:
     !/overlays
     !/metadata.yaml
   ref:
-    tag: "1.0.0"
+    tag: "next-0.14"
   verify:
     provider: cosign
     secretRef:

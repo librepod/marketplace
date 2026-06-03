@@ -7,7 +7,7 @@ spec:
   interval: 10m
   url: oci://ghcr.io/librepod/marketplace/apps/traefik
   ref:
-    tag: "1.0.0"
+    tag: "v3.6.15"
   verify:
     provider: cosign
     secretRef:

@@ -9,7 +9,7 @@ spec:
   category: "Security"
   website: "https://oauth2-proxy.github.io/oauth2-proxy/"
 
-  version: "7.8.0"
+  version: "7.14.2"
 
   source:
     type: oci-kustomize
@@ -42,7 +42,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/oauth2-proxy
         ref:
-          tag: "7.8.0"
+          tag: "7.14.2"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization
