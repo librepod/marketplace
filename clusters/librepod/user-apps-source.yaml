@@ -18,4 +18,4 @@ spec:
   patches: []
   postBuild:
     substitute:
-      BASE_DOMAIN: "librepod.dev"
+      BASE_DOMAIN: "libre.pod"
