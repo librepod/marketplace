@@ -9,7 +9,7 @@ spec:
   category: "Network"
   website: "https://github.com/wg-easy/wg-easy"
 
-  version: "15.2"
+  version: "15.3"
 
   source:
     type: oci-kustomize
@@ -46,7 +46,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/wg-easy
         ref:
-          tag: "15.2"
+          tag: "15.3"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization
