@@ -1,9 +1,5 @@
-# Headplane IngressRoute — serves the web UI under /admin on the headscale domain.
-# This mirrors Tailscale's own admin console pattern (https://login.tailscale.com/admin).
-#
-# CORS middleware is required for the Headplane frontend to communicate with the
-# Headscale API on the same domain (different path). Without it, browser Same-Origin
-# Policy blocks the XHR/fetch requests from /admin to the API endpoints.
+# Headplane IngressRoute — serves the web UI from its own subdomain.
+# Previously served under /admin on the headscale domain, now at headplane.${BASE_DOMAIN}.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -14,31 +10,7 @@ spec:
     - websecure
   routes:
     - kind: Rule
-      match: Host(`headscale.${BASE_DOMAIN:=libre.pod}`) && PathPrefix(`/admin`)
-      priority: 10
-      middlewares:
-        - name: headplane-cors
-          namespace: headscale
+      match: Host(`headplane.${BASE_DOMAIN:=libre.pod}`)
       services:
         - name: headplane
           port: 80
----
-# CORS middleware — allows the Headplane frontend at /admin to call the Headscale API.
-# This is required per Headplane's reverse proxy documentation.
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: headplane-cors
-spec:
-  headers:
-    accessControlAllowHeaders:
-      - "*"
-    accessControlAllowMethods:
-      - GET
-      - POST
-      - PUT
-      - DELETE
-    accessControlAllowOriginList:
-      - https://headscale.${BASE_DOMAIN:=libre.pod}
-    accessControlMaxAge: 100
-    addVaryHeader: true

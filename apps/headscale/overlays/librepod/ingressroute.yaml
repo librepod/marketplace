@@ -10,6 +10,10 @@ spec:
   - kind: Rule
     match: Host(`headscale.${BASE_DOMAIN:=libre.pod}`)
     priority: 1
+    middlewares:
+    # CORS — allows the Headplane frontend (separate origin) to call the Headscale API.
+    - name: headscale-cors
+      namespace: headscale
     services:
     - name: headscale
       port: 80
