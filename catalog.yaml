@@ -188,7 +188,7 @@ apps:
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/wg-easy"
   - name: whoami
-    version: "1.10.1"
+    version: "v1.11.0"
     displayName: "Whoami"
     description: "Simple echo server for testing ingress and network connectivity"
     category: "Testing"
