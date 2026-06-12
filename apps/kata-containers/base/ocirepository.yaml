@@ -1,0 +1,13 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: kata-deploy
+  namespace: kata-containers
+spec:
+  interval: 24h
+  url: oci://ghcr.io/kata-containers/kata-deploy-charts/kata-deploy
+  layerSelector:
+    mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+    operation: copy
+  ref:
+    semver: "3.31.x"
