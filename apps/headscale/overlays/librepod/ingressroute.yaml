@@ -11,9 +11,15 @@ spec:
     match: Host(`headscale.${BASE_DOMAIN:=libre.pod}`)
     priority: 1
     middlewares:
+    # Enforce HTTPS — redirects plain-HTTP requests to the same URL with https://.
+    # HTTPS requests pass through. Applied before CORS so browser preflight
+    # requests from the Headplane UI also get redirected if sent over HTTP.
+    - name: headscale-redirect-https
+      namespace: headscale
     # CORS — allows the Headplane frontend (separate origin) to call the Headscale API.
     - name: headscale-cors
       namespace: headscale
     services:
     - name: headscale
       port: 80
+  tls: {}

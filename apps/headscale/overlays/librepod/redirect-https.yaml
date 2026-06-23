@@ -1,0 +1,12 @@
+# HTTP → HTTPS redirect middleware.
+# Applied to the headscale IngressRoute to enforce TLS on all traffic.
+# Only redirects plain-HTTP requests; HTTPS requests pass through unchanged.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: headscale-redirect-https
+  namespace: headscale
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true

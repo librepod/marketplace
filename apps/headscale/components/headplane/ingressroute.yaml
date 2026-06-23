@@ -14,3 +14,4 @@ spec:
       services:
         - name: headplane
           port: 80
+  tls: {}
