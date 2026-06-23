@@ -7,7 +7,7 @@ spec:
   interval: 24h
   url: oci://ghcr.io/kata-containers/kata-deploy-charts/kata-deploy
   layerSelector:
-    mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
     operation: copy
   ref:
-    semver: "3.31.x"
+    semver: "3.31.*"
