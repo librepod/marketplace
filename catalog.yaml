@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-06-27T18:34:38Z"
+  generatedAt: "2026-06-27T18:50:20Z"
 apps:
   - name: baikal
     version: "0.11.1-nginx"
@@ -180,7 +180,7 @@ apps:
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/vaultwarden"
   - name: wg-easy
-    version: "15.3"
+    version: "15.3.0"
     displayName: "WG Easy"
     description: "WireGuard VPN with a web-based configuration UI for easy setup and management"
     category: "Network"
