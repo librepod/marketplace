@@ -9,12 +9,6 @@ images:
 - name: ghcr.io/wg-easy/wg-easy
   newTag: "15.3"
 
-configMapGenerator:
-- name: wg-easy
-  envs:
-  - wg-easy.env
-  behavior: merge
-
 components:
   - ../../components/frp-upstreams
 
