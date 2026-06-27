@@ -172,7 +172,7 @@ apps:
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/traefik"
   - name: vaultwarden
-    version: "1.36.0-alpine"
+    version: "1.36.0"
     displayName: "Vaultwarden"
     description: "Lightweight Bitwarden-compatible password manager server"
     category: "Security"

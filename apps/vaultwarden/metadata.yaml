@@ -9,7 +9,7 @@ spec:
   category: "Security"
   website: "https://github.com/dani-garcia/vaultwarden"
 
-  version: "1.36.0-alpine"
+  version: "1.36.0"
 
   source:
     type: oci-kustomize
@@ -52,7 +52,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/vaultwarden
         ref:
-          tag: "1.36.0-alpine"
+          tag: "1.36.0"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization
