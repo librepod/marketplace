@@ -8,6 +8,7 @@ resources:
   # - frpc.yaml  # Removed: requires FRP auth token, will be a user app once LibrePort integration is ready
   - frp-operator.yaml
   - gogs.yaml
+  - kata-containers.yaml
   - storage.yaml
   - oauth2-proxy.yaml
   - reflector.yaml

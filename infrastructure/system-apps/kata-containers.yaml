@@ -1,0 +1,31 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: kata-containers
+  namespace: flux-system
+spec:
+  interval: 10m
+  url: oci://ghcr.io/librepod/marketplace/apps/kata-containers
+  ref:
+    tag: "3.31.0"
+  verify:
+    provider: cosign
+    secretRef:
+      name: cosign-pub
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: kata-containers
+  namespace: flux-system
+spec:
+  force: true
+  interval: 1h
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: OCIRepository
+    name: kata-containers
+  path: ./overlays/librepod
+  prune: true
+  wait: true

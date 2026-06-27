@@ -1,0 +1,64 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: kata-containers
+spec:
+  displayName: "Kata Containers"
+  description: "Secure container runtime with hardware-enforced isolation using lightweight VMs"
+  icon: "https://raw.githubusercontent.com/kata-containers/kata-containers/main/docs/markdown/kata-container-logo.png"
+  category: "Infrastructure"
+  website: "https://katacontainers.io/"
+
+  version: "3.31.0"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/kata-containers"
+    path: ./overlays/librepod
+
+  params:
+    required: []
+
+  dependencies: []
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-kata-containers
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "kata-containers"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/kata-containers
+        ref:
+          tag: "3.31.0"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-kata-containers
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "kata-containers"
+      spec:
+        force: true
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-kata-containers
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml
