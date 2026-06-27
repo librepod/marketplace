@@ -50,8 +50,6 @@ hostAliases:
       - gogs.librepod.local
       - casdoor.librepod.local
       - oauth2-proxy.librepod.local
-      - wg-easy.librepod.local
-      - whoami.librepod.local
       - marketplace-ui.librepod.local
 
 files:
