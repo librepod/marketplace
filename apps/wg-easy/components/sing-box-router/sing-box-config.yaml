@@ -1,0 +1,39 @@
+{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "local-dns",
+        "type": "local"
+      }
+    ],
+    "final": "local-dns"
+  },
+  "inbounds": [
+    {
+      "type": "tproxy",
+      "tag": "tproxy-in",
+      "listen": "127.0.0.1",
+      "listen_port": 12345
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct-out"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "inbound": "tproxy-in",
+        "action": "sniff"
+      }
+    ],
+    "final": "direct-out",
+    "auto_detect_interface": true
+  }
+}

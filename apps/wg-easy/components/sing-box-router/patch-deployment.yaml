@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wg-easy
+spec:
+  template:
+    spec:
+      containers:
+      - name: sing-box
+        image: ghcr.io/sagernet/sing-box:latest
+        command:
+        - sing-box
+        - run
+        - -c
+        - /etc/sing-box/config.json
+        securityContext:
+          capabilities:
+            add:
+            - NET_ADMIN
+            - NET_RAW
+        volumeMounts:
+        - name: sing-box-config
+          mountPath: /etc/sing-box
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+      - name: iptables-init
+        image: alpine:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          apk add --no-cache iptables iproute2
+          echo 'Waiting for wg0 interface...'
+          while ! ip link show wg0 > /dev/null 2>&1; do sleep 1; done
+          echo 'wg0 found, applying iptables rules...'
+          iptables -t mangle -A PREROUTING -i wg0 -p tcp -j TPROXY \
+            --on-port 12345 --tproxy-mark 0x1/0x1
+          iptables -t mangle -A PREROUTING -i wg0 -p udp ! --dport 53 -j TPROXY \
+            --on-port 12345 --tproxy-mark 0x1/0x1
+          iptables -t nat -A PREROUTING -i wg0 -p udp --dport 53 -j REDIRECT \
+            --to-port 5353
+          echo 'iptables rules applied'
+          sleep infinity
+        securityContext:
+          capabilities:
+            add:
+            - NET_ADMIN
+            - NET_RAW
+      volumes:
+      - name: sing-box-config
+        configMap:
+          name: sing-box-config

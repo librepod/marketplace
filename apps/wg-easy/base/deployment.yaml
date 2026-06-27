@@ -75,4 +75,4 @@ spec:
       - name: lib-modules
         hostPath:
           path: /lib/modules
-          type: Directory
+          type: DirectoryOrCreate

@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+namespace: wg-easy
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+- name: sing-box-config
+  files:
+  - config.json=sing-box-config.yaml
+- name: wg-easy
+  envs:
+  - wg-easy-dns.env
+  behavior: merge
+
+secretGenerator:
+- name: vpn-exit-credentials
+  envs:
+  - vpn-exit-secret.env
+
+patches:
+- path: patch-deployment.yaml
