@@ -80,7 +80,7 @@ spec:
           marketplace.io/app: "tailscale"
       spec:
         dependsOn:
-          - name: nfs-provisioner
+          - name: storage
         force: true
         interval: 1h
         retryInterval: 2m

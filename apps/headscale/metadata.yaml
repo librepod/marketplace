@@ -76,7 +76,7 @@ spec:
       spec:
         dependsOn:
           - name: traefik
-          - name: nfs-provisioner
+          - name: storage
         force: true
         interval: 10m
         retryInterval: 2m

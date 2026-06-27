@@ -56,7 +56,7 @@ spec:
           marketplace.io/app: "casdoor"
       spec:
         dependsOn:
-          - name: nfs-provisioner
+          - name: storage
           - name: traefik
         interval: 1h
         retryInterval: 2m
