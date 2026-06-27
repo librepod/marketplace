@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-06-23T06:31:06Z"
+  generatedAt: "2026-06-27T16:07:05Z"
 apps:
   - name: baikal
     version: "0.11.1-nginx"
@@ -172,7 +172,7 @@ apps:
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/traefik"
   - name: vaultwarden
-    version: "1.35.2-alpine"
+    version: "1.36.0-alpine"
     displayName: "Vaultwarden"
     description: "Lightweight Bitwarden-compatible password manager server"
     category: "Security"
