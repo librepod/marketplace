@@ -7,12 +7,12 @@ resources:
 - ../../base
 - ingressroute.yaml
 
-configMapGenerator:
-- name: init-data
-  files:
-    - ./init_data.json
-  options:
-    disableNameSuffixHash: true
+# configMapGenerator:
+# - name: init-data
+#   files:
+#     - ./init_data.json
+#   options:
+#     disableNameSuffixHash: true
 
 patches:
 - path: ./patch-helmrelease.yaml

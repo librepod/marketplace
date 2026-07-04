@@ -7,14 +7,14 @@ spec:
     extraVolumeMounts:
     - name: data
       mountPath: /data
-    - name: init-data
-      mountPath: /init_data.json
-      subPath: init_data.json
+    # - name: init-data
+    #   mountPath: /init_data.json
+    #   subPath: init_data.json
 
     extraVolumes:
     - name: data
       persistentVolumeClaim:
         claimName: casdoor-data
-    - name: init-data
-      configMap:
-        name: init-data
+    # - name: init-data
+    #   configMap:
+    #     name: init-data

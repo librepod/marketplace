@@ -39,4 +39,4 @@ spec:
       logPostOnly = true
       origin =
       enableGzip = true
-      initDataFile = /init_data.json
+      # initDataFile = /init_data.json
