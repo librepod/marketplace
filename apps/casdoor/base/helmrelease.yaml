@@ -15,28 +15,8 @@ spec:
   chartRef:
     kind: OCIRepository
     name: casdoor-helm-charts
-  values:
-    # There is a bug with user permissions to write to the default sqlite database
-    # location: https://github.com/casdoor/casdoor-helm/issues/42
-    # Hence we have to ovewrite config with our custom path to store the database,
-    # i.e. dataSourceName:
-    config: |
-      appname = casdoor
-      httpport = 8000
-      runmode = release
-      SessionOn = true
-      copyrequestbody = true
-      driverName = sqlite
-      dataSourceName = file:/data/casdoor.db?cache=shared
-      dbName = casdoor
-      redisEndpoint =
-      defaultStorageProvider =
-      isCloudIntranet = false
-      authState = "casdoor"
-      socks5Proxy = ""
-      verificationCodeTimeout = 10
-      initScore = 0
-      logPostOnly = true
-      origin =
-      enableGzip = true
-      # initDataFile = /init_data.json
+  # No inline values here: app.conf uses the chart's maintained defaults. The only
+  # overrides — the SQLite DSN (upstream https://github.com/casdoor/casdoor-helm/issues/42,
+  # written to the /data PVC) and runmode — are injected as env vars from the
+  # casdoor-env ConfigMap in overlays/librepod. Casdoor overrides any app.conf
+  # key with an env var of the same name.

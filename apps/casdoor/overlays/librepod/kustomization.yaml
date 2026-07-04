@@ -7,12 +7,13 @@ resources:
 - ../../base
 - ingressroute.yaml
 
-# configMapGenerator:
-# - name: init-data
-#   files:
-#     - ./init_data.json
-#   options:
-#     disableNameSuffixHash: true
+configMapGenerator:
+  - name: casdoor-env
+    literals:
+      - dataSourceName=file:/data/casdoor.db?cache=shared
+      - runmode=prod
+    options:
+      disableNameSuffixHash: true
 
 patches:
 - path: ./patch-helmrelease.yaml

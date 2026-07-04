@@ -4,6 +4,19 @@ metadata:
   name: casdoor
 spec:
   values:
+    # Override app.conf keys via env vars (Casdoor supports per-key env override
+    # of app.conf). Sourced from the casdoor-env ConfigMap in this overlay.
+    #   - dataSourceName: chart default is a relative SQLite path (upstream
+    #     https://github.com/casdoor/casdoor-helm/issues/42); write to the /data PVC.
+    #   - runmode: chart default is "dev"; pin "prod" for this deployment.
+    envFromConfigmap:
+      - name: dataSourceName
+        configmapName: casdoor-env
+        key: dataSourceName
+      - name: runmode
+        configmapName: casdoor-env
+        key: runmode
+
     extraVolumeMounts:
     - name: data
       mountPath: /data
