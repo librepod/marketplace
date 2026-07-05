@@ -9,9 +9,8 @@ resources:
 
 configMapGenerator:
   - name: casdoor-env
-    literals:
-      - dataSourceName=file:/data/casdoor.db?cache=shared
-      - runmode=prod
+    envs:
+      - casdoor.env
     options:
       disableNameSuffixHash: true
 
