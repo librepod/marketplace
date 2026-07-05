@@ -9,7 +9,7 @@ spec:
   category: "Security"
   website: "https://casdoor.org/"
 
-  version: "2.353.0"
+  version: "3.106.0"
 
   source:
     type: oci-kustomize
@@ -44,7 +44,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/casdoor
         ref:
-          tag: "2.353.0"
+          tag: "3.106.0"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization
