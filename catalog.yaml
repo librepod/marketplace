@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-07-05T10:40:51Z"
+  generatedAt: "2026-07-05T13:18:09Z"
 apps:
   - name: baikal
     version: "0.11.1-nginx"
@@ -12,7 +12,7 @@ apps:
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/baikal"
   - name: casdoor
-    version: "2.353.0"
+    version: "3.106.0"
     displayName: "Casdoor"
     description: "Open-source identity and access management (IAM) / Single-Sign-On (SSO) platform"
     category: "Security"
