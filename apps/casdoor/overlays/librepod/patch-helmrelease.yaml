@@ -4,6 +4,20 @@ metadata:
   name: casdoor
 spec:
   values:
+    # Override app.conf keys via env vars (Casdoor supports per-key env override
+    # of app.conf). All keys from the casdoor-env ConfigMap are loaded with a
+    # single envFrom entry:
+    #   - dataSourceName: chart default is a relative SQLite path (upstream
+    #     https://github.com/casdoor/casdoor-helm/issues/42); write to the /data PVC.
+    #   - runmode: chart default is "dev"; pin "prod" for this deployment.
+    # NB: we use envFrom (whole-ConfigMap) rather than per-key envFromConfigmap
+    # because the chart's envFromConfigmap helper has a {{- end -}} trim bug that
+    # concatenates list entries when there are 2+, producing invalid YAML
+    # (casdoor-helm-charts 3.106.0).
+    envFrom:
+      - type: configmap
+        name: casdoor-env
+
     extraVolumeMounts:
     - name: data
       mountPath: /data
