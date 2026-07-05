@@ -7,7 +7,7 @@ spec:
   interval: 10m
   url: oci://ghcr.io/librepod/marketplace/apps/casdoor
   ref:
-    tag: "2.353.0"
+    tag: "3.106.0"
   verify:
     provider: cosign
     secretRef:
