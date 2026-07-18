@@ -1,0 +1,48 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: immich
+spec:
+  values:
+    # immich app version. The chart deliberately does not bump image.tag with
+    # every Immich release, so it must be set explicitly. Defined at the shared
+    # top-level controllers so it applies to every component (server; ML is off).
+    controllers:
+      main:
+        containers:
+          main:
+            image:
+              tag: v3.0.0
+
+    immich:
+      persistence:
+        library:
+          # Pre-created in base/pvc.yaml — the chart refuses to create the
+          # library volume itself.
+          existingClaim: immich-library
+
+    # Redis: enable the chart's bundled Valkey subchart. REDIS_HOSTNAME is wired
+    # to it automatically by the chart (templates to "immich-valkey").
+    valkey:
+      enabled: true
+
+    # Machine learning: enabled with a persistent model cache so the multi-GB
+    # models survive restarts. The chart wires IMMICH_MACHINE_LEARNING_URL so the
+    # server reaches the ML service automatically.
+    machine-learning:
+      enabled: true
+      persistence:
+        cache:
+          enabled: true
+          type: persistentVolumeClaim
+          existingClaim: immich-ml-cache
+
+    server:
+      controllers:
+        main:
+          containers:
+            main:
+              # DB_* connection vars come from the immich-env ConfigMap.
+              envFrom:
+                - configMapRef:
+                    name: immich-env
