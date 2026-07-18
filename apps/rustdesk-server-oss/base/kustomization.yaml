@@ -3,9 +3,9 @@ kind: Kustomization
 
 namespace: rustdesk-server-oss
 
-# NOTE: includeSelectors adds app.kubernetes.io/name to every selector and
-# template label. The two Deployments/Services additionally carry a distinct
-# app.kubernetes.io/component label so each selects only its own pods.
+# includeSelectors injects app.kubernetes.io/name into the Deployment
+# selector, pod template labels, and Service selector. With a single
+# Deployment that is all the wiring needed (cf. headscale).
 labels:
 - includeSelectors: true
   includeTemplates: true
@@ -20,7 +20,5 @@ configMapGenerator:
 resources:
 - namespace.yaml
 - pvc.yaml
-- service-hbbs.yaml
-- service-hbbr.yaml
-- deployment-hbbs.yaml
-- deployment-hbbr.yaml
+- service.yaml
+- deployment.yaml

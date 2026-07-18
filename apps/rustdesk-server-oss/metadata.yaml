@@ -4,7 +4,7 @@ metadata:
   name: rustdesk-server-oss
 spec:
   displayName: "RustDesk Server (OSS)"
-  description: "Self-hosted RustDesk ID/rendezvous (hbbs) and relay (hbbr) server. Has no web UI (the console is Pro-only) and is not exposed publicly — clients reach it over the cluster's overlay network (WireGuard/Tailscale). The server keypair is auto-generated on first boot."
+  description: "Self-hosted RustDesk ID/rendezvous (hbbs) and relay (hbbr) server, run as two containers in one pod behind a single ClusterIP Service so clients need only one address (ID server <host>:21116, relay auto-discovered on :21117). Has no web UI (the console is Pro-only); it is reached over the tailnet via Tailscale/Headscale subnet routing, not a public ingress. The server keypair is auto-generated on first boot."
   icon: "https://raw.githubusercontent.com/rustdesk/rustdesk/master/res/icon.png"
   category: "Network"
   website: "https://github.com/rustdesk/rustdesk-server"
