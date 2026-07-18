@@ -6,7 +6,7 @@ import (
 )
 
 // Application is a Casdoor Application represented as a generic map so the
-// controller can carry every field of the proven open-webui template without
+// controller can carry every field of the baseline application template without
 // modeling all 80+ fields in Go. Keys the controller sets explicitly are
 // accessed via the typed helpers below.
 type Application = map[string]any

@@ -19,7 +19,7 @@ func init() {
 	}
 }
 
-// Build returns a Casdoor Application map: the embedded sanitized open-webui
+// Build returns a Casdoor Application map: the embedded baseline application
 // template overlaid with the CR's fields. enableSignUp is forced false.
 // clientSecret is set (used on create; ignored on update-preserve).
 func Build(spec v1alpha1.SSOClientSpec, clientSecret string) map[string]any {
@@ -31,11 +31,16 @@ func Build(spec v1alpha1.SSOClientSpec, clientSecret string) map[string]any {
 	app["name"] = spec.ClientID
 	app["organization"] = spec.Organization
 	app["clientId"] = spec.ClientID
+	// displayName/title are not CR-controlled yet; default them to the app's
+	// identity so every provisioned app is self-labeled in Casdoor instead of
+	// sharing a hardcoded brand string.
+	app["displayName"] = spec.ClientID
+	app["title"] = spec.ClientID
 	app["clientSecret"] = clientSecret
 	app["redirectUris"] = toAnySlice(spec.RedirectUris)
 	// scopes is intentionally NOT overlaid from spec.Scopes: Casdoor's
 	// Application.scopes is []object (ScopeItem), and every working app
-	// (open-webui, app-built-in) uses scopes:[]. Overlaying []string makes
+	// (e.g. app-built-in) uses scopes:[]. Overlaying []string makes
 	// add-application fail ("cannot unmarshal string into ScopeItem"). OIDC
 	// scopes are driven by the client's auth request, not this field.
 	// grantTypes/tokenFormat/expireInHours are overlaid ONLY when the CR sets

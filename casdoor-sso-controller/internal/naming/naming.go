@@ -54,8 +54,8 @@ func DefaultKeys() v1alpha1.SSOClientKeys {
 }
 
 // IssuerURL builds the OIDC discovery URL from BASE_DOMAIN. Most OIDC clients
-// (including open-webui's OPENID_PROVIDER_URL) expect the full well-known
-// endpoint, not the bare issuer, so they can fetch /.well-known/openid-configuration.
+// expect the full well-known endpoint, not the bare issuer, so they can fetch
+// /.well-known/openid-configuration.
 func IssuerURL(baseDomain string) string {
 	return "https://sso." + baseDomain + "/.well-known/openid-configuration"
 }

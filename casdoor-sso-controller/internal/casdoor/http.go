@@ -44,6 +44,17 @@ type apiResponse struct {
 // is admin-only on 3.x), so this grants full application CRUD. Empty values
 // yield "Unauthorized operation", which the reconciler backs off and retries
 // until the credentials are populated.
+//
+// Security note — credentials in the query string: query params are Casdoor's
+// ONLY documented transport for accessKey/accessSecret, so the secret appears in
+// Casdoor's own access logs and in any L7 proxy/service mesh between this pod
+// and casdoor.casdoor.svc. Treat those logs as privileged/secret-bearing, and
+// keep the in-cluster path direct (no egress proxy on this traffic). We
+// deliberately do NOT switch to the Authorization: Basic header: Casdoor decodes
+// that as clientId/clientSecret, a different (org-scoped) principal that cannot
+// perform admin-only application writes on Casdoor 3.x. As defense-in-depth, the
+// error path below formats with `path`, never the full URL, so the secret never
+// leaks into returned error strings.
 func (c *httpClient) do(ctx context.Context, method, path string, query url.Values, body any) (apiResponse, error) {
 	// Access-key auth is carried as query params on every request, merged ahead
 	// of any caller-supplied query (e.g. id=admin/<name>).

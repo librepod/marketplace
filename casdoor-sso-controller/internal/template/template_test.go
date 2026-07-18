@@ -25,6 +25,11 @@ func TestBuild_SetsCoreFieldsAndForcesSignUpFalse(t *testing.T) {
 	if app["clientId"] != "headscale" {
 		t.Fatalf("clientId=%v", app["clientId"])
 	}
+	// displayName/title are self-labeled from the CR's clientId so every
+	// provisioned app is identifiable in Casdoor instead of sharing a brand.
+	if app["displayName"] != "headscale" || app["title"] != "headscale" {
+		t.Fatalf("displayName/title=%v/%v, want headscale", app["displayName"], app["title"])
+	}
 	if app["clientSecret"] != "secret-123" {
 		t.Fatalf("secret=%v", app["clientSecret"])
 	}
