@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rustdesk-server-oss-hbbr
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: hbbr
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: hbbr
+    spec:
+      # hostNetwork: see deployment-hbbs.yaml. hbbr binds 21117/21119 on the
+      # node; distinct ports from hbbs so both hostNetwork pods coexist.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: hbbr
+          image: rustdesk/rustdesk-server
+          imagePullPolicy: IfNotPresent
+          args:
+            - hbbr
+          envFrom:
+            - configMapRef:
+                name: rustdesk-server-oss
+          ports:
+            - name: relay
+              containerPort: 21117
+              protocol: TCP
+            - name: webclient-relay
+              containerPort: 21119
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 21117
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 1
+          readinessProbe:
+            tcpSocket:
+              port: 21117
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 1
+          startupProbe:
+            tcpSocket:
+              port: 21117
+            periodSeconds: 5
+            failureThreshold: 30
+            timeoutSeconds: 1
+          volumeMounts:
+            - name: data
+              mountPath: /root
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: rustdesk-server-oss-hbbr

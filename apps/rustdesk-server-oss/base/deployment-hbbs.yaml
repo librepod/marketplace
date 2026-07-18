@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rustdesk-server-oss-hbbs
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: hbbs
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: hbbs
+    spec:
+      # hostNetwork: overlay clients (WireGuard/Tailscale) reach the node IP
+      # directly, not a ClusterIP. This mirrors wg-easy/headscale and lets
+      # hbbs bind 21115/21116/21118 on the node's real interfaces.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: hbbs
+          image: rustdesk/rustdesk-server
+          imagePullPolicy: IfNotPresent
+          args:
+            - hbbs
+          envFrom:
+            - configMapRef:
+                name: rustdesk-server-oss
+          ports:
+            - name: nat-test
+              containerPort: 21115
+              protocol: TCP
+            - name: id-tcp
+              containerPort: 21116
+              protocol: TCP
+            - name: id-udp
+              containerPort: 21116
+              protocol: UDP
+            - name: webclient
+              containerPort: 21118
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 21116
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 1
+          readinessProbe:
+            tcpSocket:
+              port: 21116
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 1
+          startupProbe:
+            tcpSocket:
+              port: 21116
+            periodSeconds: 5
+            failureThreshold: 30
+            timeoutSeconds: 1
+          volumeMounts:
+            - name: data
+              mountPath: /root
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: rustdesk-server-oss-hbbs

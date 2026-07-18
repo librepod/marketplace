@@ -1,0 +1,71 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: rustdesk-server-oss
+spec:
+  displayName: "RustDesk Server (OSS)"
+  description: "Self-hosted RustDesk ID/rendezvous (hbbs) and relay (hbbr) server. Has no web UI (the console is Pro-only) and is not exposed publicly — clients reach it over the cluster's overlay network (WireGuard/Tailscale). The server keypair is auto-generated on first boot."
+  icon: "https://raw.githubusercontent.com/rustdesk/rustdesk/master/res/icon.png"
+  category: "Network"
+  website: "https://github.com/rustdesk/rustdesk-server"
+
+  version: "1.1.15"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/rustdesk-server-oss"
+    path: ./overlays/librepod
+
+  # No params: the server needs no domain (no ingress), no secrets (keypair is
+  # auto-generated), and no user-supplied configuration.
+
+  dependencies:
+    required:
+      - kind: StorageClass
+        description: "nfs-client (provided by nfs-provisioner app)"
+      # No IngressController dependency — this server is non-HTTP and is
+      # reached over the overlay network (wg-easy/Tailscale), not via Traefik.
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-rustdesk-server-oss
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "rustdesk-server-oss"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/rustdesk-server-oss
+        ref:
+          tag: "1.1.15"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-rustdesk-server-oss
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "rustdesk-server-oss"
+      spec:
+        dependsOn:
+          - name: storage
+        force: true
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-rustdesk-server-oss
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml
