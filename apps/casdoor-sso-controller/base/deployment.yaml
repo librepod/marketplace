@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: casdoor-sso-controller
+  namespace: casdoor-sso-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: casdoor-sso-controller
+  template:
+    metadata:
+      labels:
+        app: casdoor-sso-controller
+    spec:
+      serviceAccountName: casdoor-sso-controller
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: manager
+          image: ghcr.io/librepod/casdoor-sso-controller:0.1.0
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: BASE_DOMAIN
+              value: "${BASE_DOMAIN}"
+            - name: CASDOOR_BASE_URL
+              value: "http://casdoor.casdoor.svc.cluster.local:8000"
+            - name: CASDOOR_ORG
+              value: "librepod"
+            - name: CASDOOR_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: casdoor-api-credentials
+                  key: accessKey
+            - name: CASDOOR_ACCESS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: casdoor-api-credentials
+                  key: accessSecret
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits:   { cpu: 250m, memory: 256Mi }
