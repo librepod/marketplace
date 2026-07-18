@@ -1,0 +1,6 @@
+/bin/
+/testbin/
+*.test
+/casdoor-sso-controller
+/manager
+*.exe
