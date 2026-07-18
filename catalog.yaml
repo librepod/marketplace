@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-07-18T19:33:26Z"
+  generatedAt: "2026-07-18T19:36:10Z"
 apps:
   - name: baikal
     version: "0.11.1-nginx"
@@ -139,6 +139,14 @@ apps:
     icon: "https://raw.githubusercontent.com/emberstack/kubernetes-reflector/main/docs/assets/logo.png"
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/reflector"
+  - name: rustdesk-server-oss
+    version: "1.1.15"
+    displayName: "RustDesk Server (OSS)"
+    description: "Self-hosted RustDesk ID/rendezvous (hbbs) and relay (hbbr) server, run as two containers in one pod behind a single ClusterIP Service so clients need only one address (ID server <host>:21116, relay auto-discovered on :21117). Has no web UI (the console is Pro-only); it is reached over the tailnet via Tailscale/Headscale subnet routing, not a public ingress. The server keypair is auto-generated on first boot."
+    category: "Network"
+    icon: "https://raw.githubusercontent.com/rustdesk/rustdesk/master/res/icon.png"
+    sourceType: oci-kustomize
+    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/rustdesk-server-oss"
   - name: seafile
     version: "13.0-latest"
     displayName: "Seafile"
