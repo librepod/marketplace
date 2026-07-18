@@ -1,0 +1,35 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: casdoor-sso-controller
+  namespace: flux-system
+spec:
+  interval: 10m
+  url: oci://ghcr.io/librepod/marketplace/apps/casdoor-sso-controller
+  ref:
+    tag: "0.1.0"
+  verify:
+    provider: cosign
+    secretRef:
+      name: cosign-pub
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: casdoor-sso-controller
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: casdoor
+  interval: 1h
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: OCIRepository
+    name: casdoor-sso-controller
+  path: ./overlays/librepod
+  prune: true
+  wait: true
+  postBuild:
+    substitute:
+      BASE_DOMAIN: "${BASE_DOMAIN}"
