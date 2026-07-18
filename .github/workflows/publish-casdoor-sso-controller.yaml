@@ -1,0 +1,82 @@
+name: Publish casdoor-sso-controller image
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'casdoor-sso-controller/**'
+  pull_request:
+    paths:
+      - 'casdoor-sso-controller/**'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.22' }
+      - name: Run tests (envtest via make)
+        run: cd casdoor-sso-controller && make test
+
+  build-and-sign:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: sigstore/cosign-installer@v4.1.1
+        with: { cosign-release: 'v3.0.6' }
+      - name: Build & push
+        id: img
+        run: |
+          TAG="0.1.0"
+          docker buildx build --push \
+            -t ghcr.io/librepod/casdoor-sso-controller:${TAG} \
+            -t ghcr.io/librepod/casdoor-sso-controller:latest \
+            casdoor-sso-controller
+          DIGEST=$(docker buildx imagetools inspect ghcr.io/librepod/casdoor-sso-controller:${TAG} --format '{{.manifest.digest}}')
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+      - name: Sign (key-based, matches cluster cosign-pub)
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          cosign sign --key env://COSIGN_PRIVATE_KEY --yes \
+            ghcr.io/librepod/casdoor-sso-controller@${{ steps.img.outputs.digest }}
+
+  # Publish a PR-tagged image for branch/PR testing. Unsigned by design: the dev
+  # cluster runs no image-signature admission controller, so signing is unenforced
+  # here and would only slow the PR run. Released tags (0.1.0/latest) are still
+  # produced + key-signed by build-and-sign on master.
+  build-pr:
+    needs: test
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push PR-tagged image
+        run: |
+          TAG="pr-${{ github.event.pull_request.number }}"
+          docker buildx build --push \
+            -t ghcr.io/librepod/casdoor-sso-controller:${TAG} \
+            casdoor-sso-controller
+          echo "Published ghcr.io/librepod/casdoor-sso-controller:${TAG}"
