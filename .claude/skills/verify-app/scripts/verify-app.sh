@@ -214,7 +214,7 @@ fi
 if [[ -z "$LOG_OUTPUT" ]]; then
   record "WARN" "Log Inspection" "No logs found (label selector may not match)"
 else
-  ERROR_COUNT=$(echo "$LOG_OUTPUT" | grep -ciE 'error|fatal|panic|exception' || echo "0")
+  ERROR_COUNT=$(echo "$LOG_OUTPUT" | grep -ciE 'error|fatal|panic|exception' || true)
   if [[ "$ERROR_COUNT" -eq 0 ]]; then
     record "PASS" "Log Inspection" "0 error-level entries in last 100 lines"
   elif [[ "$ERROR_COUNT" -le 2 ]]; then
