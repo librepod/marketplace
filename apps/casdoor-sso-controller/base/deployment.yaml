@@ -5,6 +5,12 @@ metadata:
   namespace: casdoor-sso-controller
 spec:
   replicas: 1
+  # Recreate (not the default RollingUpdate): the bootstrap init container
+  # mounts the RWO casdoor-sso-creds PVC and mints the access key on first
+  # boot. A RollingUpdate surge would run two init containers against the same
+  # PVC/key at once, racing the mint. Recreate guarantees one pod at a time.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: casdoor-sso-controller
@@ -31,8 +37,6 @@ spec:
             capabilities:
               drop: ["ALL"]
           env:
-            - name: BASE_DOMAIN
-              value: "${BASE_DOMAIN}"
             - name: CASDOOR_BASE_URL
               value: "http://casdoor.casdoor.svc.cluster.local:8000"
             - name: CASDOOR_ADMIN_PASSWORD

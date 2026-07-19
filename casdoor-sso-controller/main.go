@@ -129,8 +129,8 @@ func setupLog(err error, msg string) {
 }
 
 // bootstrapDeps assembles the bootstrap's dependencies from env. The init
-// container sets CASDOOR_BASE_URL, CASDOOR_ADMIN_PASSWORD (default "123"),
-// CREDS_FILE, KEY_NAME, SECRET_NAMESPACE; everything else has a sane default.
+// container sets CASDOOR_BASE_URL, CASDOOR_ADMIN_PASSWORD, CREDS_FILE,
+// KEY_NAME, SECRET_NAMESPACE; everything else has a sane default.
 func bootstrapDeps() bootstrap.Deps {
 	ns := os.Getenv("SECRET_NAMESPACE")
 	if ns == "" {
@@ -144,10 +144,11 @@ func bootstrapDeps() bootstrap.Deps {
 	if keyName == "" {
 		keyName = "librepod-sso-controller"
 	}
+	// Admin password is sourced solely from the manifest (CASDOOR_ADMIN_PASSWORD
+	// is set by the deployment). No fallback here: a single source of truth
+	// avoids drift, and an empty value fails login loudly rather than silently
+	// using "123".
 	pw := os.Getenv("CASDOOR_ADMIN_PASSWORD")
-	if pw == "" {
-		pw = "123"
-	}
 	return bootstrap.Deps{
 		Casdoor:       casdoor.NewSessionClient(os.Getenv("CASDOOR_BASE_URL"), 0),
 		K8s:           newK8sClient(),
@@ -156,6 +157,7 @@ func bootstrapDeps() bootstrap.Deps {
 		SecretNS:      ns,
 		KeyName:       keyName,
 		AdminPassword: pw,
+		Logger:        ctrl.Log,
 	}
 }
 

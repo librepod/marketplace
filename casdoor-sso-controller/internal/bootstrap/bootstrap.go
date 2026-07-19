@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,6 +49,7 @@ type Deps struct {
 	SecretNS      string
 	KeyName       string // Casdoor key name, e.g. librepod-sso-controller
 	AdminPassword string
+	Logger        logr.Logger // optional; zero value discards. Production sets ctrl.Log.
 	// KeyGen overrides the credential generator (test seam). Nil => random UUIDs.
 	KeyGen func() (accessKey, accessSecret string, err error)
 }
@@ -58,9 +60,11 @@ type Deps struct {
 // and retries once.
 func Run(ctx context.Context, d Deps) error {
 	if creds, ok := readCreds(d.CredsFile); ok {
+		d.Logger.Info("creds file present; materializing Secret from PVC (no Casdoor contact)", "key", d.KeyName)
 		return ensureSecret(ctx, d, creds)
 	}
 
+	d.Logger.Info("creds file absent; logging in to mint a new access key", "key", d.KeyName)
 	ak, as, err := d.genKey()
 	if err != nil {
 		return fmt.Errorf("generate credential: %w", err)
@@ -69,7 +73,11 @@ func Run(ctx context.Context, d Deps) error {
 		return fmt.Errorf("casdoor login: %w", err)
 	}
 	if err := d.Casdoor.CreateAccessKey(ctx, d.KeyName, ak, as); err != nil {
-		// Stale same-name key (PVC lost but Casdoor survived): delete + retry.
+		// Create failed — typically a stale same-name key after PVC loss, but any
+		// error lands here (delete-by-name is a no-op on a missing key). We
+		// regenerate creds so a duplicate accessKey *value* conflict is also
+		// recovered, then retry the create once.
+		d.Logger.Info("create access key failed; deleting stale key and retrying", "key", d.KeyName, "err", err)
 		if delErr := d.Casdoor.DeleteAccessKey(ctx, d.KeyName); delErr != nil {
 			return fmt.Errorf("create access key: %w (stale-key delete also failed: %v)", err, delErr)
 		}
@@ -83,6 +91,7 @@ func Run(ctx context.Context, d Deps) error {
 	}
 
 	creds := Credentials{AccessKey: ak, AccessSecret: as}
+	d.Logger.Info("access key minted; persisting to PVC and Secret", "key", d.KeyName)
 	if err := writeCreds(d.CredsFile, creds); err != nil {
 		return fmt.Errorf("write creds file: %w", err)
 	}
@@ -122,14 +131,36 @@ func readCreds(path string) (Credentials, bool) {
 }
 
 func writeCreds(path string, c Credentials) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 	b, err := json.Marshal(c)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, b, 0o600) // holds a secret -> 0600
+	// Atomic write: temp file in the same dir, then rename. A crash mid-write
+	// leaves either the previous file or the new one — never a truncated file
+	// that would force a re-mint on the next boot. CreateTemp already uses
+	// 0600; the Chmod makes that explicit for readers (this file holds a secret).
+	tmp, err := os.CreateTemp(dir, ".credentials.*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName) // no-op after a successful rename; cleans up on failure
+	if _, err := tmp.Write(b); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
 }
 
 // ensureSecret creates or updates the k8s Secret to match the creds. No-op if

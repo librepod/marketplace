@@ -163,3 +163,20 @@ func TestRun_CreateConflict_DeleteAlsoFails_ReturnsError(t *testing.T) {
 		t.Fatal("expected error when create and delete both fail")
 	}
 }
+
+// TestRun_CreateConflict_SecondCreateAlsoFails_ReturnsError: the retry-create
+// branch (Run's second CreateAccessKey). Both creates fail, so Run must error,
+// attempt exactly one delete, and leave no creds file behind.
+func TestRun_CreateConflict_SecondCreateAlsoFails_ReturnsError(t *testing.T) {
+	m := &fakeMinter{createErrs: []error{errSentinel(), errSentinel()}} // both creates fail
+	d := newDeps(t, m)
+	if err := Run(context.Background(), d); err == nil {
+		t.Fatal("expected error when both creates fail")
+	}
+	if m.Deletes != 1 {
+		t.Fatalf("delete calls=%d, want 1", m.Deletes)
+	}
+	if _, err := os.Stat(d.CredsFile); !os.IsNotExist(err) {
+		t.Fatal("creds file should not exist when retry create failed")
+	}
+}
