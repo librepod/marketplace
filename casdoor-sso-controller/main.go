@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -10,10 +11,12 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	marketplacev1alpha1 "github.com/librepod/casdoor-sso-controller/api/v1alpha1"
+	"github.com/librepod/casdoor-sso-controller/internal/bootstrap"
 	"github.com/librepod/casdoor-sso-controller/internal/casdoor"
 	"github.com/librepod/casdoor-sso-controller/internal/controller"
 )
@@ -30,6 +33,17 @@ func main() {
 	// Initialize the logger first: controller-runtime defaults to a discard
 	// logger, so without this every setupLog/reconcile log would be a no-op.
 	ctrl.SetLogger(zap.New())
+
+	// Bootstrap subcommand: provision the Casdoor access key before the manager
+	// starts (runs as a Deployment init container). Dispatch BEFORE validateEnv
+	// — the whole point is that no access key exists yet.
+	if len(os.Args) > 1 && os.Args[1] == "bootstrap" {
+		if err := bootstrap.Run(context.Background(), bootstrapDeps()); err != nil {
+			fmt.Fprintln(os.Stderr, "bootstrap failed:", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	// Fail fast on missing Casdoor credentials: a manager that starts without
 	// them can only back off "Unauthorized operation" forever. CrashLoop here so
@@ -112,4 +126,48 @@ func validateEnv(get func(string) string) error {
 
 func setupLog(err error, msg string) {
 	ctrl.Log.Error(err, msg)
+}
+
+// bootstrapDeps assembles the bootstrap's dependencies from env. The init
+// container sets CASDOOR_BASE_URL, CASDOOR_ADMIN_PASSWORD (default "123"),
+// CREDS_FILE, KEY_NAME, SECRET_NAMESPACE; everything else has a sane default.
+func bootstrapDeps() bootstrap.Deps {
+	ns := os.Getenv("SECRET_NAMESPACE")
+	if ns == "" {
+		ns = "casdoor-sso-controller"
+	}
+	credsFile := os.Getenv("CREDS_FILE")
+	if credsFile == "" {
+		credsFile = "/creds/credentials.json"
+	}
+	keyName := os.Getenv("KEY_NAME")
+	if keyName == "" {
+		keyName = "librepod-sso-controller"
+	}
+	pw := os.Getenv("CASDOOR_ADMIN_PASSWORD")
+	if pw == "" {
+		pw = "123"
+	}
+	return bootstrap.Deps{
+		Casdoor:       casdoor.NewSessionClient(os.Getenv("CASDOOR_BASE_URL"), 0),
+		K8s:           newK8sClient(),
+		CredsFile:     credsFile,
+		SecretName:    "casdoor-api-credentials",
+		SecretNS:      ns,
+		KeyName:       keyName,
+		AdminPassword: pw,
+	}
+}
+
+// newK8sClient builds a controller-runtime client from the in-cluster rest
+// config, for writing Secret/casdoor-api-credentials.
+func newK8sClient() client.Client {
+	s := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(s))
+	c, err := client.New(ctrl.GetConfigOrDie(), client.Options{Scheme: s})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "build k8s client:", err)
+		os.Exit(1)
+	}
+	return c
 }
