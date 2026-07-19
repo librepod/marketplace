@@ -133,7 +133,13 @@ func (r *SSOClientReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 					}
 				}
 			}
-			if err := r.patchFinalizer(ctx, &cr, false); err != nil {
+			// Remove the finalizer. A NotFound here means a concurrent reconcile
+			// already removed it and the API server GC'd the object — this happens
+			// because the removal is itself an update event that re-enqueues the
+			// (now stale) object. Swallow it: cleanup is already complete, and
+			// returning the raw NotFound would log a spurious "Reconciler error"
+			// on every delete.
+			if err := r.patchFinalizer(ctx, &cr, false); err != nil && !apierrors.IsNotFound(err) {
 				return ctrl.Result{}, err
 			}
 		}
