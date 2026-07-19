@@ -1,0 +1,30 @@
+# Declares the open-webui OIDC client. The casdoor-sso-controller reconciles
+# this into a Casdoor Application (owner/name = admin/openwebui) and writes
+# clientId / clientSecret / issuer into Secret/open-webui-sso in THIS
+# namespace. The HelmRelease below reads those via secretKeyRef, so no OIDC
+# secret is committed to git.
+#
+# ${BASE_DOMAIN} is expanded by Flux postBuild.substitute at deploy time (and
+# by our dev-render step), so the CR that lands on-cluster carries a concrete
+# redirect URI.
+apiVersion: marketplace.librepod.org/v1alpha1
+kind: SSOClient
+metadata:
+  name: open-webui-sso          # default output Secret name
+  namespace: open-webui
+spec:
+  clientId: openwebui           # Casdoor app name (id=admin/openwebui) AND OIDC client_id
+  organization: librepod        # platform org (created at bootstrap); login users must live here
+  redirectUris:
+    - "https://open-webui.${BASE_DOMAIN}/oauth/oidc/callback"
+  scopes: [openid, profile, email]   # accepted for ergonomics; OIDC scopes come from the auth request
+  grantTypes: [authorization_code, refresh_token]
+  tokenFormat: JWT
+  expireInHours: 168            # 7 days
+  output:
+    secretName: open-webui-sso
+    keys:
+      clientId: OAUTH_CLIENT_ID          # env-var names open-webui expects
+      clientSecret: OAUTH_CLIENT_SECRET
+      issuer: OPENID_PROVIDER_URL        # the discovery URL (.../.well-known/openid-configuration)
+  casdoorPolicy: retain        # keep the Casdoor app if this CR is deleted

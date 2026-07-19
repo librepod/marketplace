@@ -98,6 +98,14 @@ spec:
         value: System Administrator
 
       # LibrePod SSO configuration
+      #
+      # OIDC credentials are NOT committed: the casdoor-sso-controller
+      # provisions them and writes Secret/open-webui-sso (keys
+      # OAUTH_CLIENT_ID / OAUTH_CLIENT_SECRET / OPENID_PROVIDER_URL) in this
+      # namespace from the SSOClient CR in this overlay. The HelmRelease may
+      # install before that Secret exists; the pods then wait
+      # (CreateContainerConfig) until the controller reconciles it — expected
+      # on a fresh bootstrap and self-heals.
       - name: SSL_CERT_FILE
         value: /etc/ssl/certs/ca-certificates.crt
       - name: ENABLE_OAUTH_SIGNUP
@@ -105,12 +113,21 @@ spec:
       - name: DEFAULT_USER_ROLE
         value: user
       - name: OAUTH_CLIENT_ID
-        value: openwebui
+        valueFrom:
+          secretKeyRef:
+            name: open-webui-sso
+            key: OAUTH_CLIENT_ID
       - name: OAUTH_CLIENT_SECRET
-        value: e61b9037b271d2f38fc5174db6537156cb46fb9e
+        valueFrom:
+          secretKeyRef:
+            name: open-webui-sso
+            key: OAUTH_CLIENT_SECRET
       # Required. OIDC well known URL, for example https://accounts.google.com/.well-known/openid-configuration
       - name: OPENID_PROVIDER_URL
-        value: https://sso.${BASE_DOMAIN:=libre.pod}/.well-known/openid-configuration
+        valueFrom:
+          secretKeyRef:
+            name: open-webui-sso
+            key: OPENID_PROVIDER_URL
       - name: OAUTH_PROVIDER_NAME
         value: LibrePod SSO
       # OAUTH_SCOPES - Scopes to request. Defaults to openid email profile

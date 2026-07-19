@@ -29,15 +29,12 @@ spec:
         type: boolean
         default: false
 
-  secrets:
-    - name: OAUTH_CLIENT_SECRET
-      description: "OAuth2 client secret for LibrePod SSO integration"
-      required: false
-
   dependencies:
     required:
       - kind: IngressController
         description: "Traefik (provided by bootstrap)"
+      - kind: SSOProvider
+        description: "Casdoor + casdoor-sso-controller (provisions OIDC credentials into Secret/open-webui-sso)"
 
   templates:
     source: |
@@ -80,18 +77,3 @@ spec:
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
-          substituteFrom:
-            - kind: Secret
-              name: open-webui-config
-    secret: |
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: open-webui-config
-        namespace: flux-system
-        labels:
-          marketplace.io/managed: "true"
-          marketplace.io/app: "open-webui"
-      type: Opaque
-      stringData:
-        OAUTH_CLIENT_SECRET: "${OAUTH_CLIENT_SECRET}"
