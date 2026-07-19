@@ -36,18 +36,9 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
-          env:
-            - name: CASDOOR_BASE_URL
-              value: "http://casdoor.casdoor.svc.cluster.local:8000"
-            - name: CASDOOR_ADMIN_PASSWORD
-              # Casdoor default, intentionally left in place (in-cluster only).
-              # Onboarding later replaces it; the controller is unaffected
-              # because its access key is independent of the admin password.
-              value: "123"
-            - name: CREDS_FILE
-              value: "/creds/credentials.json"
-            - name: SECRET_NAMESPACE
-              value: "casdoor-sso-controller"
+          envFrom:
+            - configMapRef:
+                name: casdoor-sso-controller
           volumeMounts:
             - name: creds
               mountPath: /creds
@@ -63,13 +54,10 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+          envFrom:
+            - configMapRef:
+                name: casdoor-sso-controller
           env:
-            - name: BASE_DOMAIN
-              value: "${BASE_DOMAIN}"
-            - name: CASDOOR_BASE_URL
-              value: "http://casdoor.casdoor.svc.cluster.local:8000"
-            - name: CASDOOR_ORG
-              value: "librepod"
             - name: CASDOOR_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
