@@ -77,6 +77,7 @@ type SSOClientReconciler struct {
 // +kubebuilder:rbac:groups=marketplace.librepod.org,resources=ssoclients/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=marketplace.librepod.org,resources=ssoclients/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
 
 func (r *SSOClientReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
