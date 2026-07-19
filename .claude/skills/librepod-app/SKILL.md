@@ -494,7 +494,7 @@ spec:
       spec:
         dependsOn:
           - name: traefik              # Add traefik if app exposes a service to access via browser i.e. ingressroute
-          - name: nfs-provisioner      # Add nfs-provisioner if app uses PVC
+          - name: storage              # Add if app uses PVC. "storage" is the Flux Kustomization name (the nfs-provisioner app), not the app dir name.
         force: true                    # Force instructs the controller to recreate resources when patching fails due to an immutable field change.
         interval: 1h
         retryInterval: 2m
@@ -782,6 +782,31 @@ configMapGenerator:
   envs:
   - myapp.env
 ```
+
+### Environment variables — envFrom from a generated ConfigMap, never inline literals
+
+Non-secret app config MUST live in a `.env` file consumed by a `configMapGenerator`, and the Deployment loads it via `envFrom`. Inline `env:` with literal `value:`s is non-standard: it hides config from the generated ConfigMap, scatters values across the Deployment, and (for `${VAR}` placeholders) leans on Flux substitution reaching inline values rather than ConfigMap `data`, where it is guaranteed. Flux `postBuild.substitute` DOES reach ConfigMap data, so `${BASE_DOMAIN}` etc. belong in the `.env`.
+
+```yaml
+# ❌ WRONG — inline literal env in the Deployment
+env:
+  - name: DB_HOST
+    value: postgres
+  - name: APP_URL
+    value: "https://myapp.${BASE_DOMAIN}"
+
+# ✅ CORRECT — values in <app-name>.env, loaded via envFrom
+#   <app-name>.env:
+#     DB_HOST=postgres
+#     APP_URL=https://myapp.${BASE_DOMAIN}
+envFrom:
+  - configMapRef:
+      name: <app-name>   # kustomize rewrites this to the generated <app-name>-<hash>
+```
+
+Secrets use `secretGenerator` (or `secretKeyRef` to a separately-managed Secret) — never a plain ConfigMap. A container MAY carry both: `envFrom` for the config ConfigMap plus individual `env:` entries for `secretKeyRef`s.
+
+**Audit rule:** when reviewing an app, check each Deployment container for `env:` entries with a literal `value:`. Any non-secret literal that is not a `secretKeyRef` / `valueFrom` must move to the `.env` → `configMapGenerator` → `envFrom` chain. (Init containers count too.)
 
 ### storageClassName — patch in overlay, not base
 
