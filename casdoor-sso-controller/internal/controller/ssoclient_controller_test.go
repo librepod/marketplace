@@ -11,6 +11,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -36,6 +37,22 @@ func makeCR(name, clientID, ns string) *marketplacev1alpha1.SSOClient {
 }
 
 func newNS() string { return "ns-" + rand.String(5) }
+
+// failingPatchClient embeds a client.Client and turns every Patch against the
+// named object into a NotFound error, while passing all other calls through.
+// It reproduces the stale-cache delete race, where reconcile B's finalizer-
+// removal patch 404s because reconcile A already removed it and GC'd the object.
+type failingPatchClient struct {
+	client.Client
+	notFoundFor string
+}
+
+func (f *failingPatchClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	if obj.GetName() == f.notFoundFor {
+		return apierrors.NewNotFound(schema.GroupResource{Group: "marketplace.librepod.org", Resource: "ssoclients"}, f.notFoundFor)
+	}
+	return f.Client.Patch(ctx, obj, patch, opts...)
+}
 
 var _ = Describe("SSOClient controller", func() {
 	var (
@@ -437,6 +454,37 @@ var _ = Describe("SSOClient controller", func() {
 			// CR is gone (finalizer removed via retain fallback).
 			gone := &marketplacev1alpha1.SSOClient{}
 			Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: "stuck-sso", Namespace: ns}, gone))).To(BeTrue())
+		})
+
+		It("swallows a NotFound on the finalizer-removal patch (stale-cache delete race)", func() {
+			// Reproduces the live "Reconciler error: ... not found" logged on every
+			// delete: reconcile A removes the finalizer and the object is GC'd; that
+			// removal is itself an update event, so reconcile B re-enters the deletion
+			// path against a stale cache and its finalizer-removal patch 404s. The
+			// reconciler must treat that patch as a no-op (cleanup already happened),
+			// not surface it as an error. In this code path the only CR patch issued
+			// during the reconcile is the finalizer removal, so sabotaging Patch on
+			// the CR deterministically targets it.
+			ctx := context.Background()
+			fake := casdoor.NewFake()
+			fake.Apps["race"] = casdoor.Application{"name": "race", "clientId": "race", "clientSecret": "S"}
+			ns := newNS()
+			Expect(k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}})).To(Succeed())
+			cr := &marketplacev1alpha1.SSOClient{
+				ObjectMeta: metav1.ObjectMeta{Name: "race-sso", Namespace: ns, Finalizers: []string{finalizerName}},
+				Spec:       marketplacev1alpha1.SSOClientSpec{ClientID: "race", RedirectUris: []string{"https://race.${BASE_DOMAIN}/cb"}, CasdoorPolicy: "delete"},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, cr)).To(Succeed())
+
+			raceClient := &failingPatchClient{Client: k8sClient, notFoundFor: "race-sso"}
+			rr := &SSOClientReconciler{Client: raceClient, Scheme: scheme.Scheme, Casdoor: fake, BaseDomain: "libre.pod", Org: "librepod"}
+
+			_, err := rr.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "race-sso", Namespace: ns}})
+			Expect(err).NotTo(HaveOccurred(), "finalizer-removal NotFound must be swallowed, not surfaced")
+			// Cleanup still ran before the racing patch: the Casdoor app is gone.
+			Expect(fake.DeleteCalls).To(Equal(1))
+			Expect(fake.Apps).NotTo(HaveKey("race"))
 		})
 	})
 

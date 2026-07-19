@@ -28,7 +28,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: bootstrap
-          image: ghcr.io/librepod/casdoor-sso-controller:0.2.0
+          image: ghcr.io/librepod/casdoor-sso-controller:0.2.1
           imagePullPolicy: IfNotPresent
           command: ["/manager", "bootstrap"]
           securityContext:
@@ -47,7 +47,7 @@ spec:
             limits:   { cpu: 250m, memory: 256Mi }
       containers:
         - name: manager
-          image: ghcr.io/librepod/casdoor-sso-controller:0.2.0
+          image: ghcr.io/librepod/casdoor-sso-controller:0.2.1
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false
