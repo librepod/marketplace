@@ -20,9 +20,39 @@ spec:
         runAsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        - name: bootstrap
+          image: ghcr.io/librepod/casdoor-sso-controller:0.2.0
+          imagePullPolicy: IfNotPresent
+          command: ["/manager", "bootstrap"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: BASE_DOMAIN
+              value: "${BASE_DOMAIN}"
+            - name: CASDOOR_BASE_URL
+              value: "http://casdoor.casdoor.svc.cluster.local:8000"
+            - name: CASDOOR_ADMIN_PASSWORD
+              # Casdoor default, intentionally left in place (in-cluster only).
+              # Onboarding later replaces it; the controller is unaffected
+              # because its access key is independent of the admin password.
+              value: "123"
+            - name: CREDS_FILE
+              value: "/creds/credentials.json"
+            - name: SECRET_NAMESPACE
+              value: "casdoor-sso-controller"
+          volumeMounts:
+            - name: creds
+              mountPath: /creds
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits:   { cpu: 250m, memory: 256Mi }
       containers:
         - name: manager
-          image: ghcr.io/librepod/casdoor-sso-controller:0.1.0
+          image: ghcr.io/librepod/casdoor-sso-controller:0.2.0
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false
@@ -49,3 +79,7 @@ spec:
           resources:
             requests: { cpu: 50m, memory: 64Mi }
             limits:   { cpu: 250m, memory: 256Mi }
+      volumes:
+        - name: creds
+          persistentVolumeClaim:
+            claimName: casdoor-sso-creds
