@@ -247,7 +247,13 @@ fi
 HR_JSON=$(kubectl $KC get helmrelease -n "$NAMESPACE" -o json 2>/dev/null) || HR_JSON='{"items":[]}'
 HR_COUNT=$(echo "$HR_JSON" | jq -r '.items | length' 2>/dev/null || echo "0")
 if [[ "$HR_COUNT" != "0" ]]; then
-  HR_READY=$(echo "$HR_JSON" | jq -r '[.items[] | select(.status.conditions[]?.type == "Ready" and .status.conditions[]?.status == "True")] | length' 2>/dev/null || echo "0")
+  # Count HelmReleases whose Ready condition is True. Use any() so both
+  # predicates evaluate on the SAME condition object — the previous
+  # `.status.conditions[]?.type=="Ready" and .status.conditions[]?.status=="True"`
+  # iterated conditions twice independently, creating a cross-product that
+  # over-counted (e.g. 2/1 for one Ready HR) and could even count a
+  # Ready=False HR as Ready when another condition had status=True.
+  HR_READY=$(echo "$HR_JSON" | jq -r '[.items[] | select(any(.status.conditions[]?; .type == "Ready" and .status == "True"))] | length' 2>/dev/null || echo "0")
   if [[ "$HR_READY" == "$HR_COUNT" ]]; then
     record "PASS" "HelmReleases" "$HR_COUNT HelmRelease(s) Ready"
   else
