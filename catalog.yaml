@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-07-20T10:19:23Z"
+  generatedAt: "2026-07-20T10:40:11Z"
 apps:
   - name: baikal
     version: "0.11.1-nginx"
@@ -129,7 +129,7 @@ apps:
     description: "Self-hosted AI chat interface with Ollama integration"
     category: "AI"
     icon: "https://raw.githubusercontent.com/open-webui/open-webui/main/svelte/src/assets/logo.png"
-    sourceType: oci-helm
+    sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/open-webui"
   - name: reflector
     version: "10.0.0"
