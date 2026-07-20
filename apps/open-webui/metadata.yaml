@@ -12,10 +12,9 @@ spec:
   version: "12.10.0"
 
   source:
-    type: oci-helm
+    type: oci-kustomize
     url: "oci://ghcr.io/librepod/marketplace/apps/open-webui"
-    chartName: open-webui
-    chartVersion: "12.10.0"
+    path: ./overlays/librepod
 
   params:
     required:
@@ -29,20 +28,17 @@ spec:
         type: boolean
         default: false
 
-  secrets:
-    - name: OAUTH_CLIENT_SECRET
-      description: "OAuth2 client secret for LibrePod SSO integration"
-      required: false
-
   dependencies:
     required:
       - kind: IngressController
         description: "Traefik (provided by bootstrap)"
+      - kind: SSOProvider
+        description: "Casdoor + casdoor-sso-controller (provisions OIDC credentials into Secret/open-webui-sso)"
 
   templates:
     source: |
       apiVersion: source.toolkit.fluxcd.io/v1
-      kind: HelmRepository
+      kind: OCIRepository
       metadata:
         name: marketplace-open-webui
         namespace: flux-system
@@ -50,11 +46,13 @@ spec:
           marketplace.io/managed: "true"
           marketplace.io/app: "open-webui"
       spec:
-        interval: 12h
+        interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/open-webui
+        ref:
+          tag: "12.10.0"
     release: |
-      apiVersion: helm.toolkit.fluxcd.io/v2
-      kind: HelmRelease
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
       metadata:
         name: marketplace-open-webui
         namespace: flux-system
@@ -62,36 +60,20 @@ spec:
           marketplace.io/managed: "true"
           marketplace.io/app: "open-webui"
       spec:
-        interval: 1h
-        releaseName: open-webui
+        interval: 10m
         targetNamespace: open-webui
-        chart:
-          spec:
-            chart: open-webui
-            version: "12.10.0"
-            sourceRef:
-              kind: HelmRepository
-              name: marketplace-open-webui
-            interval: 12h
-        values:
-          persistence:
-            enabled: true
-            existingClaim: "open-webui-pvc"
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-open-webui
+        path: ./overlays/librepod
+        prune: true
+        wait: true
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
-          substituteFrom:
-            - kind: Secret
-              name: open-webui-config
-    secret: |
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: open-webui-config
-        namespace: flux-system
-        labels:
-          marketplace.io/managed: "true"
-          marketplace.io/app: "open-webui"
-      type: Opaque
-      stringData:
-        OAUTH_CLIENT_SECRET: "${OAUTH_CLIENT_SECRET}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml
