@@ -100,7 +100,7 @@ spec:
       # LibrePod SSO configuration
       #
       # OIDC credentials are NOT committed: the casdoor-sso-controller
-      # provisions them and writes Secret/open-webui (keys
+      # provisions them and writes Secret/open-webui-sso (keys
       # OAUTH_CLIENT_ID / OAUTH_CLIENT_SECRET / OPENID_PROVIDER_URL) in this
       # namespace from the SSOClient CR in this overlay. The HelmRelease may
       # install before that Secret exists; the pods then wait
@@ -115,18 +115,18 @@ spec:
       - name: OAUTH_CLIENT_ID
         valueFrom:
           secretKeyRef:
-            name: open-webui
+            name: open-webui-sso
             key: OAUTH_CLIENT_ID
       - name: OAUTH_CLIENT_SECRET
         valueFrom:
           secretKeyRef:
-            name: open-webui
+            name: open-webui-sso
             key: OAUTH_CLIENT_SECRET
       # Required. OIDC well known URL, for example https://accounts.google.com/.well-known/openid-configuration
       - name: OPENID_PROVIDER_URL
         valueFrom:
           secretKeyRef:
-            name: open-webui
+            name: open-webui-sso
             key: OPENID_PROVIDER_URL
       - name: OAUTH_PROVIDER_NAME
         value: LibrePod SSO

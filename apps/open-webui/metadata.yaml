@@ -34,7 +34,7 @@ spec:
       - kind: IngressController
         description: "Traefik (provided by bootstrap)"
       - kind: SSOProvider
-        description: "Casdoor + casdoor-sso-controller (provisions OIDC credentials into Secret/open-webui)"
+        description: "Casdoor + casdoor-sso-controller (provisions OIDC credentials into Secret/open-webui-sso)"
 
   templates:
     source: |
