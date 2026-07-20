@@ -1,6 +1,6 @@
 # Declares the open-webui OIDC client. The casdoor-sso-controller reconciles
 # this into a Casdoor Application (owner/name = admin/openwebui) and writes
-# clientId / clientSecret / issuer into Secret/open-webui-sso in THIS
+# clientId / clientSecret / issuer into Secret/open-webui in THIS
 # namespace. The HelmRelease below reads those via secretKeyRef, so no OIDC
 # secret is committed to git.
 #
@@ -10,7 +10,7 @@
 apiVersion: marketplace.librepod.org/v1alpha1
 kind: SSOClient
 metadata:
-  name: open-webui-sso          # default output Secret name
+  name: open-webui              # CR name; also the default output Secret name
   namespace: open-webui
 spec:
   clientId: openwebui           # Casdoor app name (id=admin/openwebui) AND OIDC client_id
@@ -22,7 +22,7 @@ spec:
   tokenFormat: JWT
   expireInHours: 168            # 7 days
   output:
-    secretName: open-webui-sso
+    secretName: open-webui
     keys:
       clientId: OAUTH_CLIENT_ID          # env-var names open-webui expects
       clientSecret: OAUTH_CLIENT_SECRET
