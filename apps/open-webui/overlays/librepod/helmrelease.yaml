@@ -89,11 +89,10 @@ spec:
         value: "20971520"
 
       # Admin Account Creation
-      # TODO: Get rid of hardcoded password here
       - name: WEBUI_ADMIN_EMAIL
-        value: admin@librepod.org
+        value: admin@libre.pod
       - name: WEBUI_ADMIN_PASSWORD
-        value: pass@w0rd
+        value: "123"
       - name: WEBUI_ADMIN_NAME
         value: System Administrator
 
