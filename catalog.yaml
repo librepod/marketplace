@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-07-21T20:17:47Z"
+  generatedAt: "2026-07-21T21:37:49Z"
 apps:
   - name: baikal
     version: "0.11.1-nginx"
@@ -124,7 +124,7 @@ apps:
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/obsidian-livesync"
   - name: open-webui
-    version: "12.10.0"
+    version: "0.10.2"
     displayName: "Open WebUI"
     description: "Self-hosted AI chat interface with Ollama integration"
     category: "AI"
