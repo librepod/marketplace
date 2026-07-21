@@ -9,7 +9,7 @@ spec:
   chart:
     spec:
       chart: open-webui
-      version: "12.10.0"
+      version: "15.2.0"
       sourceRef:
         kind: HelmRepository
         name: open-webui
@@ -135,8 +135,8 @@ spec:
         value: https://open-webui.${BASE_DOMAIN:=libre.pod}/oauth/oidc/callback
       # The redirect URI configured in your OIDC application. This must be set to <open-webui>/oauth/oidc/callback
       - name: ENABLE_OAUTH_GROUP_MANAGEMENT
-        value: "False"
+        value: "True"
       - name: ENABLE_OAUTH_GROUP_CREATION
-        value: "False"
+        value: "True"
       - name: WEBUI_AUTH_SIGNOUT_REDIRECT_URL
         value: https://open-webui.${BASE_DOMAIN:=libre.pod}
