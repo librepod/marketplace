@@ -28,6 +28,9 @@ spec:
       enabled: true
       existingClaim: "open-webui-pvc"
 
+    workload:
+      kind: "Deployment"
+
     # -------------------------------------------------------------------------
     # Custom CA certificate configuration
     # Mounts the LibrePod root CA and merges it with the system CA bundle
@@ -109,6 +112,8 @@ spec:
         value: /etc/ssl/certs/ca-certificates.crt
       - name: ENABLE_OAUTH_SIGNUP
         value: "True"
+      - name: ENABLE_LOGIN_FORM
+        value: "False"
       - name: DEFAULT_USER_ROLE
         value: user
       - name: OAUTH_CLIENT_ID
