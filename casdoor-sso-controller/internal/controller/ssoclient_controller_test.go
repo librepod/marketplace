@@ -512,6 +512,45 @@ var _ = Describe("SSOClient controller", func() {
 			Expect(c).NotTo(BeNil())
 			Expect(c.Status).To(Equal(metav1.ConditionTrue))
 		})
+
+		It("clears ScopesIgnored when scopes are removed (no stale warning)", func() {
+			// Regression guard for the sticky-condition bug: ScopesIgnored used
+			// to be set only inside `if scopes > 0`, so once True it lingered
+			// forever after an author removed the no-op scopes field. It must
+			// now flip back to False on the next reconcile.
+			ctx := context.Background()
+			ns := newNS()
+			Expect(k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}})).To(Succeed())
+			cr := &marketplacev1alpha1.SSOClient{
+				ObjectMeta: metav1.ObjectMeta{Name: "clr-sso", Namespace: ns},
+				Spec: marketplacev1alpha1.SSOClientSpec{
+					ClientID:     "clr",
+					RedirectUris: []string{"https://clr.${BASE_DOMAIN}/cb"},
+					Scopes:       []string{"openid"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+
+			req := reconcile.Request{NamespacedName: types.NamespacedName{Name: "clr-sso", Namespace: ns}}
+			_, err := r.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			got := &marketplacev1alpha1.SSOClient{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, got)).To(Succeed())
+			c := meta.FindStatusCondition(got.Status.Conditions, "ScopesIgnored")
+			Expect(c).NotTo(BeNil())
+			Expect(c.Status).To(Equal(metav1.ConditionTrue), "scopes set -> ScopesIgnored True")
+
+			// Remove scopes and reconcile again.
+			got.Spec.Scopes = nil
+			Expect(k8sClient.Update(ctx, got)).To(Succeed())
+			_, err = r.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, req.NamespacedName, got)).To(Succeed())
+			c = meta.FindStatusCondition(got.Status.Conditions, "ScopesIgnored")
+			Expect(c).NotTo(BeNil())
+			Expect(c.Status).To(Equal(metav1.ConditionFalse), "scopes removed -> ScopesIgnored must clear")
+			Expect(c.Reason).To(Equal("NoUnsupportedFields"))
+		})
 	})
 
 	Describe("rotation failure paths", func() {

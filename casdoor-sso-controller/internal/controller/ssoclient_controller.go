@@ -369,17 +369,25 @@ func (r *SSOClientReconciler) succeed(ctx context.Context, cr *marketplacev1alph
 	})
 	// spec.scopes is accepted for ergonomics but never applied: Casdoor's
 	// Application.scopes is []object (ScopeItem) and OIDC scopes are driven by
-	// the client's auth request, not this field. Surface it as a warning
-	// condition so authors notice the field is a no-op.
-	if len(cr.Spec.Scopes) > 0 {
-		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
-			Type:               "ScopesIgnored",
-			Status:             metav1.ConditionTrue,
-			Reason:             "UnsupportedField",
-			Message:            "spec.scopes is accepted but not applied; OIDC scopes come from the client auth request",
-			ObservedGeneration: cr.Generation,
-		})
+	// the client's auth request, not this field. The ScopesIgnored condition is
+	// reconciled to match current state EVERY pass — True (warning) when scopes
+	// are set, False once they are removed — so a stale warning never lingers
+	// after an author drops the no-op field. (Previously this was only set
+	// inside `if scopes > 0`, so removing scopes left ScopesIgnored=True
+	// forever — a sticky-condition bug.)
+	scopesIgnored := metav1.Condition{
+		Type:               "ScopesIgnored",
+		Status:             metav1.ConditionFalse,
+		Reason:             "NoUnsupportedFields",
+		Message:            "spec.scopes is not set; no fields are being ignored",
+		ObservedGeneration: cr.Generation,
 	}
+	if len(cr.Spec.Scopes) > 0 {
+		scopesIgnored.Status = metav1.ConditionTrue
+		scopesIgnored.Reason = "UnsupportedField"
+		scopesIgnored.Message = "spec.scopes is accepted but not applied; OIDC scopes come from the client auth request"
+	}
+	meta.SetStatusCondition(&cr.Status.Conditions, scopesIgnored)
 	if err := r.Status().Patch(ctx, cr, patch); err != nil {
 		return ctrl.Result{}, err
 	}
