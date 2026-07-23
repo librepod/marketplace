@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -19,6 +20,24 @@ type SSOClientSpec struct {
 	// CasdoorPolicy is "retain" (default) or "delete" on CR deletion.
 	// +kubebuilder:validation:Enum=retain;delete
 	CasdoorPolicy string `json:"casdoorPolicy,omitempty"`
+	// ApplicationOverrides is a free-form JSON object shallow-merged onto the
+	// Casdoor Application at provision time. Use it for Casdoor Application
+	// properties the CR does not model explicitly — branding and display fields
+	// such as logo, favicon, headerHtml, footerHtml, formOffset, themeData,
+	// formBackgroundUrl. New Casdoor properties can be configured per SSOClient
+	// by adding a key here, WITHOUT a CRD schema change or a controller release.
+	//
+	// Controller-managed keys are protected and silently ignored if present:
+	// name, clientId, clientSecret, organization, redirectUris, grantTypes,
+	// tokenFormat, expireInHours, enableSignUp, displayName, title. The
+	// controller stamps those last, so platform policy (e.g. enableSignUp=false)
+	// and identity cannot be bypassed via an override.
+	//
+	// Values are passed through verbatim; Casdoor validates them on apply and any
+	// error surfaces as a Failed phase. Nested objects/arrays replace the whole
+	// field (shallow merge, not deep merge).
+	// +optional
+	ApplicationOverrides *apiextensionsv1.JSON `json:"applicationOverrides,omitempty"`
 }
 
 // +kubebuilder:object:generate=true

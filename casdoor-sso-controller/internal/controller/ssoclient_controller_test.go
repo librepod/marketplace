@@ -588,4 +588,109 @@ var _ = Describe("SSOClient controller", func() {
 			Expect(err.Error()).To(ContainSubstring("immutable"))
 		})
 	})
+
+	Describe("applicationOverrides", func() {
+		It("applies overrides when creating the Casdoor app", func() {
+			ctx := context.Background()
+			fake := casdoor.NewFake()
+			rr := &SSOClientReconciler{Client: k8sClient, Scheme: scheme.Scheme, Casdoor: fake, BaseDomain: "libre.pod", Org: "librepod"}
+			ns := newNS()
+			Expect(k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}})).To(Succeed())
+			cr := &marketplacev1alpha1.SSOClient{
+				ObjectMeta: metav1.ObjectMeta{Name: "ov-sso", Namespace: ns},
+				Spec: marketplacev1alpha1.SSOClientSpec{
+					ClientID:     "ov",
+					RedirectUris: []string{"https://ov.${BASE_DOMAIN}/cb"},
+					ApplicationOverrides: overridesJSON(map[string]any{
+						"logo":       "https://openwebui.com/logo.png",
+						"formOffset": 4,
+					}),
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			_, err := rr.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "ov-sso", Namespace: ns}})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fake.Apps).To(HaveKey("ov"))
+			Expect(fake.Apps["ov"]["logo"]).To(Equal("https://openwebui.com/logo.png"))
+			Expect(fake.Apps["ov"]["formOffset"]).To(Equal(float64(4)))
+		})
+
+		It("reconciles drift on an override field", func() {
+			ctx := context.Background()
+			fake := casdoor.NewFake()
+			// Seed an app built via the same template.Build the reconciler uses
+			// (with the CR's overrides applied), then mutate the stored logo so it
+			// diverges from the CR. The reconciler must detect the drift and push
+			// the CR's value back.
+			seedSpec := marketplacev1alpha1.SSOClientSpec{
+				ClientID: "od", RedirectUris: []string{"https://od.${BASE_DOMAIN}/cb"},
+				ApplicationOverrides: overridesJSON(map[string]any{"logo": "https://new/logo.png"}),
+			}
+			seed := template.Build(seedSpec, "")
+			seed["organization"] = "librepod"
+			seed["redirectUris"] = []any{"https://od.libre.pod/cb"}
+			seed["logo"] = "https://old/logo.png" // diverges from the CR's override
+			seed["clientSecret"] = "S"
+			fake.Apps["od"] = seed
+			rr := &SSOClientReconciler{Client: k8sClient, Scheme: scheme.Scheme, Casdoor: fake, BaseDomain: "libre.pod", Org: "librepod"}
+			ns := newNS()
+			Expect(k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}})).To(Succeed())
+			cr := &marketplacev1alpha1.SSOClient{ObjectMeta: metav1.ObjectMeta{Name: "od-sso", Namespace: ns}, Spec: seedSpec}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			_, err := rr.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "od-sso", Namespace: ns}})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fake.UpdateCalls).To(BeNumerically(">=", 1))
+			Expect(fake.Apps["od"]["logo"]).To(Equal("https://new/logo.png"))
+		})
+
+		It("does not hot-loop when overrides are in sync", func() {
+			ctx := context.Background()
+			fake := casdoor.NewFake()
+			// Seed an app exactly in sync (built with the same overrides), so an
+			// override value of "" / a matching number does not trigger a
+			// perpetual UpdateApplication. This is the override analogue of the
+			// grantTypes-reorder and recover-without-update guards.
+			seedSpec := marketplacev1alpha1.SSOClientSpec{
+				ClientID: "os", RedirectUris: []string{"https://os.${BASE_DOMAIN}/cb"},
+				ApplicationOverrides: overridesJSON(map[string]any{"logo": "https://x/logo.png", "formOffset": 4}),
+			}
+			seed := template.Build(seedSpec, "")
+			seed["organization"] = "librepod"
+			seed["redirectUris"] = []any{"https://os.libre.pod/cb"}
+			seed["clientSecret"] = "S"
+			fake.Apps["os"] = seed
+			rr := &SSOClientReconciler{Client: k8sClient, Scheme: scheme.Scheme, Casdoor: fake, BaseDomain: "libre.pod", Org: "librepod"}
+			ns := newNS()
+			Expect(k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}})).To(Succeed())
+			cr := &marketplacev1alpha1.SSOClient{ObjectMeta: metav1.ObjectMeta{Name: "os-sso", Namespace: ns}, Spec: seedSpec}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			_, err := rr.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "os-sso", Namespace: ns}})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fake.UpdateCalls).To(Equal(0), "in-sync overrides must not trigger an update")
+		})
+
+		It("ignores managed fields set via overrides (enableSignUp stays false)", func() {
+			ctx := context.Background()
+			fake := casdoor.NewFake()
+			rr := &SSOClientReconciler{Client: k8sClient, Scheme: scheme.Scheme, Casdoor: fake, BaseDomain: "libre.pod", Org: "librepod"}
+			ns := newNS()
+			Expect(k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}})).To(Succeed())
+			cr := &marketplacev1alpha1.SSOClient{
+				ObjectMeta: metav1.ObjectMeta{Name: "mg-sso", Namespace: ns},
+				Spec: marketplacev1alpha1.SSOClientSpec{
+					ClientID:     "mg",
+					RedirectUris: []string{"https://mg.${BASE_DOMAIN}/cb"},
+					ApplicationOverrides: overridesJSON(map[string]any{
+						"enableSignUp": true, // managed -> must be ignored
+						"logo":         "https://x/l.png",
+					}),
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			_, err := rr.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "mg-sso", Namespace: ns}})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fake.Apps["mg"]["enableSignUp"]).To(BeFalse(), "platform policy must survive an override")
+			Expect(fake.Apps["mg"]["logo"]).To(Equal("https://x/l.png"), "non-managed override must still apply")
+		})
+	})
 })
