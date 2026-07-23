@@ -22,6 +22,13 @@ spec:
   grantTypes: [authorization_code, refresh_token]
   tokenFormat: JWT
   expireInHours: 168            # 7 days
+  # Free-form Casdoor Application branding. applicationOverrides is a passthrough:
+  # any Casdoor Application field not modeled above (logo, favicon, headerHtml,
+  # footerHtml, formOffset, themeData, ...) can be set here WITHOUT a controller
+  # or CRD release. Controller-managed keys (clientId, enableSignUp, ...) are
+  # ignored if listed here — the controller always owns them.
+  applicationOverrides:
+    logo: "https://openwebui.com/logo.png"
   output:
     secretName: open-webui-sso
     keys:
