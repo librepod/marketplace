@@ -32,8 +32,14 @@ const (
 // ManagedFields is the set of Casdoor Application keys the controller owns:
 // keys it derives from typed SSOClientSpec fields or forces as platform policy
 // (enableSignUp=false, identity == clientId, secret rotation). It is the
-// denylist for spec.applicationOverrides — a CR must not be able to bypass
-// platform policy or desync identity via a free-form override.
+// denylist for spec.applicationOverrides — a CR must not be able to desync the
+// controller's own identity/policy state via a free-form override.
+//
+// This is a controller-ownership boundary, NOT a security boundary: it guards
+// only the fields the typed reconcile loop depends on. Security-relevant
+// Casdoor fields the CR does not model (cert, providers, signinMethods,
+// enablePassword, ipRestriction, ...) are NOT listed and pass through
+// applicationOverrides verbatim — the CR author is trusted to set them.
 //
 // Build() stamps every key here unconditionally AFTER merging overrides (and
 // skips them while merging), and overrideKeys() excludes them from drift, so
