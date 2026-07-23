@@ -8,7 +8,7 @@ spec:
   category: "Security"
   website: "https://github.com/librepod/marketplace"
 
-  version: "0.2.2"
+  version: "0.2.3"
 
   source:
     type: oci-kustomize
@@ -34,7 +34,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/casdoor-sso-controller
         ref:
-          tag: "0.2.2"
+          tag: "0.2.3"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization
