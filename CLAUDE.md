@@ -79,6 +79,7 @@ reconciliation — see @docs/FLUX_WORKFLOW.md
 - **Do not parse the entire `./apps/` folder** unless explicitly asked to. Each app is self-contained — only dive into the specific app you're working on.
 - **Do not create namespaces manually** - Apps are responsible for creating their own namespaces
 - **Testing**: Uses Kustomize build command
+- **Commit, PR & public-doc hygiene**: never reference specific device or cluster hostnames (e.g. `librepod-dev`, `librepod-beelink`) in commit messages, PR titles/descriptions, or public-facing docs (READMEs). Use abstract environment pointers instead — `dev`, `prod`, `staging`. (Internal dev workflow docs like `docs/FLUX_WORKFLOW.md` may keep the operational cluster name.)
 
 ### PVC/PV Deletion with NFS Storage
 
