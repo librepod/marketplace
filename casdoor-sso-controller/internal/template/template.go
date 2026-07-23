@@ -4,7 +4,10 @@ import (
 	_ "embed"
 	"encoding/json"
 
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
 	"github.com/librepod/casdoor-sso-controller/api/v1alpha1"
+	"github.com/librepod/casdoor-sso-controller/internal/casdoor"
 )
 
 //go:embed application-template.json
@@ -28,16 +31,22 @@ func Build(spec v1alpha1.SSOClientSpec, clientSecret string) map[string]any {
 	if app == nil {
 		app = map[string]any{}
 	}
-	app["name"] = spec.ClientID
-	app["organization"] = spec.Organization
-	app["clientId"] = spec.ClientID
+	// Apply free-form overrides BEFORE any managed-field stamp so the stamps
+	// below always win. applyOverrides additionally skips managed keys
+	// (casdoor.ManagedFields), so this is belt-and-suspenders: a CR cannot
+	// bypass platform policy or desync identity via an override even if a
+	// future edit reorders the stamps.
+	applyOverrides(app, spec.ApplicationOverrides)
+	app[casdoor.FieldName] = spec.ClientID
+	app[casdoor.FieldOrganization] = spec.Organization
+	app[casdoor.FieldClientID] = spec.ClientID
 	// displayName/title are not CR-controlled yet; default them to the app's
 	// identity so every provisioned app is self-labeled in Casdoor instead of
 	// sharing a hardcoded brand string.
-	app["displayName"] = spec.ClientID
-	app["title"] = spec.ClientID
-	app["clientSecret"] = clientSecret
-	app["redirectUris"] = toAnySlice(spec.RedirectUris)
+	app[casdoor.FieldDisplayName] = spec.ClientID
+	app[casdoor.FieldTitle] = spec.ClientID
+	app[casdoor.FieldClientSecret] = clientSecret
+	app[casdoor.FieldRedirectUris] = toAnySlice(spec.RedirectUris)
 	// scopes is intentionally NOT overlaid from spec.Scopes: Casdoor's
 	// Application.scopes is []object (ScopeItem), and every working app
 	// (e.g. app-built-in) uses scopes:[]. Overlaying []string makes
@@ -48,16 +57,37 @@ func Build(spec v1alpha1.SSOClientSpec, clientSecret string) map[string]any {
 	// (6 grant types incl. authorization_code, JWT, 168h) instead of wiping
 	// them to []/""/0 — grantTypes=[] would silently disable the auth-code flow.
 	if len(spec.GrantTypes) > 0 {
-		app["grantTypes"] = toAnySlice(spec.GrantTypes)
+		app[casdoor.FieldGrantTypes] = toAnySlice(spec.GrantTypes)
 	}
 	if spec.TokenFormat != "" {
-		app["tokenFormat"] = spec.TokenFormat
+		app[casdoor.FieldTokenFormat] = spec.TokenFormat
 	}
 	if spec.ExpireInHours > 0 {
-		app["expireInHours"] = spec.ExpireInHours
+		app[casdoor.FieldExpireHours] = spec.ExpireInHours
 	}
-	app["enableSignUp"] = false // platform policy: sign-in only
+	app[casdoor.FieldEnableSignUp] = false // platform policy: sign-in only
 	return app
+}
+
+// applyOverrides shallow-merges spec.ApplicationOverrides onto app, skipping
+// controller-managed keys (casdoor.ManagedFields). A nil/empty override is a
+// no-op. Invalid JSON cannot occur for an apiextensionsv1.JSON that passed CRD
+// admission, but is defended anyway so a corrupt value never silently zeros the
+// app — it is dropped, and the missing field surfaces as drift/Casdoor error.
+func applyOverrides(app map[string]any, overrides *apiextensionsv1.JSON) {
+	if overrides == nil || len(overrides.Raw) == 0 {
+		return
+	}
+	var m map[string]any
+	if err := json.Unmarshal(overrides.Raw, &m); err != nil {
+		return
+	}
+	for k, v := range m {
+		if _, managed := casdoor.ManagedFields[k]; managed {
+			continue
+		}
+		app[k] = v
+	}
 }
 
 // toAnySlice converts a []string to []any so the resulting map round-trips

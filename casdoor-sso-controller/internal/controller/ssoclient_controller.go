@@ -5,10 +5,12 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strconv"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -209,7 +211,7 @@ func (r *SSOClientReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			}
 			// The rotate annotation is cleared AFTER upsertSecret (below), so a
 			// failed clear never leaves Casdoor rotated but the K8s Secret stale.
-		case drift(existing, desired):
+		case drift(existing, desired, overrideKeys(cr.Spec.ApplicationOverrides)...):
 			if err := r.Casdoor.UpdateApplication(ctx, mergeExisting(existing, desired)); err != nil {
 				return r.fail(ctx, &cr, fmt.Errorf("update application: %w", err))
 			}
@@ -458,6 +460,12 @@ func (r *SSOClientReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // zero value (so an omitted enableSignUp does not drift against a desired
 // false). Together this covers every CR-controlled field so editing the CR
 // reliably syncs to Casdoor without a no-op UpdateApplication hot-loop.
+//
+// overrideKeys are the free-form spec.applicationOverrides fields to also
+// reconcile (logo, favicon, ...). They are compared verbatim by overrideEqual,
+// not via the typed scalar/slice path, because their shape is arbitrary. The
+// set is passed variatically so callers without overrides (most CRs) call
+// drift(existing, desired) unchanged.
 // driftSliceFields/driftScalarFields are the Casdoor application fields drift()
 // reconciles. Expressed as casdoor field constants (not literals) so a typo or a
 // field rename is a compile error, and so TestDriftFieldsAreCasdoorConstants can
@@ -465,7 +473,7 @@ func (r *SSOClientReconciler) SetupWithManager(mgr ctrl.Manager) error {
 var driftSliceFields = []string{casdoor.FieldRedirectUris, casdoor.FieldGrantTypes}
 var driftScalarFields = []string{casdoor.FieldTokenFormat, casdoor.FieldExpireHours, casdoor.FieldOrganization, casdoor.FieldEnableSignUp}
 
-func drift(existing, desired casdoor.Application) bool {
+func drift(existing, desired casdoor.Application, overrideKeys ...string) bool {
 	for _, k := range driftSliceFields {
 		if !equalStringSet(anySliceToStrings(existing[k]), anySliceToStrings(desired[k])) {
 			return true
@@ -476,7 +484,54 @@ func drift(existing, desired casdoor.Application) bool {
 			return true
 		}
 	}
+	for _, k := range overrideKeys {
+		if !overrideEqual(existing[k], desired[k]) {
+			return true
+		}
+	}
 	return false
+}
+
+// overrideEqual compares a free-form applicationOverrides value between the
+// Casdoor response (existing) and the CR's desired value. Both are JSON-decoded
+// into native Go types (existing via the Casdoor API, desired via
+// template.applyOverrides). Scalars route through scalarEqual so an absent key
+// (nil) compares equal to the zero value the way the typed fields do — this
+// prevents a hot-loop when an override sets a branding field to "" and Casdoor
+// returns it as "" (the documented shape: Casdoor returns empty strings, not
+// omits). Nested objects/arrays use reflect.DeepEqual; a per-field hot-loop
+// from Casdoor transforming a nested value is an acceptable, narrow failure.
+func overrideEqual(a, b any) bool {
+	switch a.(type) {
+	case map[string]any, []any:
+		return reflect.DeepEqual(a, b)
+	default:
+		return scalarEqual(a, b)
+	}
+}
+
+// overrideKeys returns the top-level Casdoor Application keys a CR's
+// applicationOverrides sets, so drift() can reconcile them. Controller-managed
+// keys (casdoor.ManagedFields) are excluded: the controller owns them and
+// compares them via the typed-field path. Invalid/empty JSON yields no keys — a
+// truly invalid value cannot reach here through CRD admission, and if it did it
+// would also fail the Casdoor apply and surface as a Failed phase.
+func overrideKeys(j *apiextensionsv1.JSON) []string {
+	if j == nil || len(j.Raw) == 0 {
+		return nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal(j.Raw, &m); err != nil {
+		return nil
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		if _, managed := casdoor.ManagedFields[k]; managed {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 // scalarEqual compares a CR-controlled scalar across the Casdoor JSON shape

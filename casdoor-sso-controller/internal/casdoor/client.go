@@ -25,7 +25,39 @@ const (
 	FieldTokenFormat  = "tokenFormat"
 	FieldExpireHours  = "expireInHours"
 	FieldEnableSignUp = "enableSignUp"
+	FieldDisplayName  = "displayName"
+	FieldTitle        = "title"
 )
+
+// ManagedFields is the set of Casdoor Application keys the controller owns:
+// keys it derives from typed SSOClientSpec fields or forces as platform policy
+// (enableSignUp=false, identity == clientId, secret rotation). It is the
+// denylist for spec.applicationOverrides — a CR must not be able to desync the
+// controller's own identity/policy state via a free-form override.
+//
+// This is a controller-ownership boundary, NOT a security boundary: it guards
+// only the fields the typed reconcile loop depends on. Security-relevant
+// Casdoor fields the CR does not model (cert, providers, signinMethods,
+// enablePassword, ipRestriction, ...) are NOT listed and pass through
+// applicationOverrides verbatim — the CR author is trusted to set them.
+//
+// Build() stamps every key here unconditionally AFTER merging overrides (and
+// skips them while merging), and overrideKeys() excludes them from drift, so
+// protection holds even if the override sets them. Expressed as field constants
+// (not literals) so a rename is a compile error and a test can guard the link.
+var ManagedFields = map[string]struct{}{
+	FieldName:         {},
+	FieldOrganization: {},
+	FieldClientID:     {},
+	FieldClientSecret: {},
+	FieldRedirectUris: {},
+	FieldGrantTypes:   {},
+	FieldTokenFormat:  {},
+	FieldExpireHours:  {},
+	FieldEnableSignUp: {},
+	FieldDisplayName:  {},
+	FieldTitle:        {},
+}
 
 type Config struct {
 	BaseURL string // e.g. http://casdoor.casdoor.svc.cluster.local:8000
