@@ -371,25 +371,22 @@ func (r *SSOClientReconciler) succeed(ctx context.Context, cr *marketplacev1alph
 	})
 	// spec.scopes is accepted for ergonomics but never applied: Casdoor's
 	// Application.scopes is []object (ScopeItem) and OIDC scopes are driven by
-	// the client's auth request, not this field. The ScopesIgnored condition is
-	// reconciled to match current state EVERY pass — True (warning) when scopes
-	// are set, False once they are removed — so a stale warning never lingers
-	// after an author drops the no-op field. (Previously this was only set
-	// inside `if scopes > 0`, so removing scopes left ScopesIgnored=True
-	// forever — a sticky-condition bug.)
-	scopesIgnored := metav1.Condition{
-		Type:               "ScopesIgnored",
-		Status:             metav1.ConditionFalse,
-		Reason:             "NoUnsupportedFields",
-		Message:            "spec.scopes is not set; no fields are being ignored",
-		ObservedGeneration: cr.Generation,
-	}
+	// the client's auth request, not this field. The ScopesIgnored condition
+	// exists ONLY while scopes are set (so an author notices the no-op field)
+	// and is REMOVED entirely when they are not — a CR with no scopes carries no
+	// such condition at all, rather than a misleading always-False entry. The
+	// removal also clears any condition left by a CR that previously set scopes.
 	if len(cr.Spec.Scopes) > 0 {
-		scopesIgnored.Status = metav1.ConditionTrue
-		scopesIgnored.Reason = "UnsupportedField"
-		scopesIgnored.Message = "spec.scopes is accepted but not applied; OIDC scopes come from the client auth request"
+		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+			Type:               "ScopesIgnored",
+			Status:             metav1.ConditionTrue,
+			Reason:             "UnsupportedField",
+			Message:            "spec.scopes is accepted but not applied; OIDC scopes come from the client auth request",
+			ObservedGeneration: cr.Generation,
+		})
+	} else {
+		meta.RemoveStatusCondition(&cr.Status.Conditions, "ScopesIgnored")
 	}
-	meta.SetStatusCondition(&cr.Status.Conditions, scopesIgnored)
 	if err := r.Status().Patch(ctx, cr, patch); err != nil {
 		return ctrl.Result{}, err
 	}

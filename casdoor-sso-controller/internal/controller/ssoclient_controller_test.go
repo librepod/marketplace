@@ -513,11 +513,12 @@ var _ = Describe("SSOClient controller", func() {
 			Expect(c.Status).To(Equal(metav1.ConditionTrue))
 		})
 
-		It("clears ScopesIgnored when scopes are removed (no stale warning)", func() {
-			// Regression guard for the sticky-condition bug: ScopesIgnored used
-			// to be set only inside `if scopes > 0`, so once True it lingered
-			// forever after an author removed the no-op scopes field. It must
-			// now flip back to False on the next reconcile.
+		It("clears ScopesIgnored when scopes are removed (condition gone, not False)", func() {
+			// ScopesIgnored must exist ONLY while scopes are set, and be REMOVED
+			// entirely once they are not — not left as a misleading always-False
+			// entry. This guards both the original sticky-condition bug (lingered
+			// True) and the follow-up (lingered False): after removal the
+			// condition must be absent.
 			ctx := context.Background()
 			ns := newNS()
 			Expect(k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}})).To(Succeed())
@@ -546,10 +547,26 @@ var _ = Describe("SSOClient controller", func() {
 			_, err = r.Reconcile(ctx, req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(k8sClient.Get(ctx, req.NamespacedName, got)).To(Succeed())
-			c = meta.FindStatusCondition(got.Status.Conditions, "ScopesIgnored")
-			Expect(c).NotTo(BeNil())
-			Expect(c.Status).To(Equal(metav1.ConditionFalse), "scopes removed -> ScopesIgnored must clear")
-			Expect(c.Reason).To(Equal("NoUnsupportedFields"))
+			Expect(meta.FindStatusCondition(got.Status.Conditions, "ScopesIgnored")).To(BeNil(),
+				"scopes removed -> ScopesIgnored must be gone entirely, not linger as False")
+		})
+
+		It("never adds ScopesIgnored when scopes are unset", func() {
+			// A CR with no scopes (the common case) must not carry a
+			// ScopesIgnored condition at all.
+			ctx := context.Background()
+			ns := newNS()
+			Expect(k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}})).To(Succeed())
+			cr := makeCR("noscope-sso", "noscope", ns)
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			req := reconcile.Request{NamespacedName: types.NamespacedName{Name: "noscope-sso", Namespace: ns}}
+			_, err := r.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			got := &marketplacev1alpha1.SSOClient{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, got)).To(Succeed())
+			Expect(meta.FindStatusCondition(got.Status.Conditions, "ScopesIgnored")).To(BeNil(),
+				"no-scopes CR must not carry a ScopesIgnored condition")
+			Expect(got.Status.Phase).To(Equal("Ready"))
 		})
 	})
 
