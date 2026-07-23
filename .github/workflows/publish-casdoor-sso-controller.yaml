@@ -42,7 +42,7 @@ jobs:
       - name: Build & push
         id: img
         run: |
-          TAG="0.2.3"
+          TAG="0.2.4"
           docker buildx build --push \
             --metadata-file metadata.json \
             -t ghcr.io/librepod/casdoor-sso-controller:${TAG} \
@@ -66,7 +66,7 @@ jobs:
 
   # Publish a PR-tagged image for branch/PR testing. Unsigned by design: the dev
   # cluster runs no image-signature admission controller, so signing is unenforced
-  # here and would only slow the PR run. Released tags (0.2.3/latest) are still
+  # here and would only slow the PR run. Released tags (0.2.4/latest) are still
   # produced + key-signed by build-and-sign on master.
   build-pr:
     needs: test
