@@ -18,7 +18,10 @@ spec:
   redirectUris:
     - "https://open-webui.${BASE_DOMAIN}/oauth/oidc/callback"
     - "https://open-webui.${BASE_DOMAIN}"
-  scopes: [openid, profile, email]   # accepted for ergonomics; OIDC scopes come from the auth request
+  # scopes intentionally omitted: spec.scopes is a no-op on the Casdoor
+  # Application (OIDC scopes come from open-webui's own auth request — see
+  # OAUTH_SCOPES in the HelmRelease, defaulting to openid email profile).
+  # Setting it here only raised a ScopesIgnored/UnsupportedField warning.
   grantTypes: [authorization_code, refresh_token]
   tokenFormat: JWT
   expireInHours: 168            # 7 days
