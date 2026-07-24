@@ -1,0 +1,58 @@
+# Strategic-merge patch: give the vaultwarden pod trust for the private
+# LibrePod Intermediate CA so its server-side OIDC token exchange to
+# https://sso.${BASE_DOMAIN} passes TLS verification.
+#
+# Same approach as apps/open-webui (see its helmrelease.yaml): mount the
+# LibrePod root CA (from configMap/step-certificates-certs), fuse it with the
+# image's system CA bundle in an init container, then mount the merged bundle
+# over /etc/ssl/certs/ca-certificates.crt and point SSL_CERT_FILE at it.
+#
+# PLATFORM DEPENDENCY: configMap/step-certificates-certs must exist in THIS
+# namespace (it is not auto-replicated from step-ca). Until a platform-level
+# replication mechanism exists, the CM must be present here (open-webui has the
+# same dependency).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vaultwarden
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: merge-ca-bundle
+          image: alpine:3.19
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              echo "Merging LibrePod root CA with system CA bundle..."
+              cat /etc/ssl/certs/ca-certificates.crt > /mnt/merged-ca/ca-certificates.crt
+              echo "" >> /mnt/merged-ca/ca-certificates.crt
+              echo "# LibrePod Root CA" >> /mnt/merged-ca/ca-certificates.crt
+              cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+              echo "CA bundle merged successfully!"
+          volumeMounts:
+            - name: root-ca-cert
+              mountPath: /mnt/root-ca
+              readOnly: true
+            - name: merged-ca-bundle
+              mountPath: /mnt/merged-ca
+      containers:
+        - name: vaultwarden
+          volumeMounts:
+            - name: merged-ca-bundle
+              mountPath: /etc/ssl/certs/ca-certificates.crt
+              subPath: ca-certificates.crt
+              readOnly: true
+          env:
+            - name: SSL_CERT_FILE
+              value: /etc/ssl/certs/ca-certificates.crt
+      volumes:
+        - name: root-ca-cert
+          configMap:
+            name: step-certificates-certs
+            items:
+              - key: root_ca.crt
+                path: root_ca.crt
+        - name: merged-ca-bundle
+          emptyDir: {}

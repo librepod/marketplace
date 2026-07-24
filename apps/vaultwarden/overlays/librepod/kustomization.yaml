@@ -8,6 +8,9 @@ resources:
 
 namespace: vaultwarden
 
+patches:
+  - path: deployment-ca-patch.yaml
+
 images:
 - name: vaultwarden/server
   newTag: 1.36.0-alpine
