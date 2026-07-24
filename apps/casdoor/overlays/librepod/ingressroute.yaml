@@ -12,4 +12,4 @@ spec:
     priority: 1
     services:
     - name: casdoor
-      port: 8000
+      port: 80
