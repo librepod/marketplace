@@ -18,6 +18,9 @@ spec:
       - type: configmap
         name: casdoor-env
 
+    service:
+      port: 80
+
     extraVolumeMounts:
     - name: data
       mountPath: /data
