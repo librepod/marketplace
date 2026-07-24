@@ -9,6 +9,7 @@ resources:
 - ../../components/mysql
 - ../../components/redis
 - ingressroute.yaml
+- ssoclient.yaml
 
 # Secret generator for seafile-secret
 # Note: disableNameSuffixHash is false by default, so hash suffix will be added
