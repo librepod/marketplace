@@ -5,9 +5,12 @@
 # enter a single ID-server address; the relay is auto-discovered at the
 # same host on :21117 (which is hbbr here).
 #
-# No hostNetwork: the pod lives on the normal pod network and is reached
-# via the tailnet (Tailscale/Headscale subnet routing advertising the
-# cluster Service CIDR).
+# hostNetwork: hbbs/hbbr bind the canonical ports (21115-21119) directly on
+# the host, so clients reach the server at the node's tailnet address (e.g.
+# <node>.tailnet.libre.pod:21116) without a ClusterIP hop or subnet-route
+# advertising — same pattern as wg-easy. The ClusterIP Service is retained so
+# the in-cluster DNS name still resolves (its endpoints become the node IP);
+# both the hostname and the 10.43.x ClusterIP keep working.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,6 +22,8 @@ spec:
     type: Recreate
   template:
     spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: hbbs
           image: rustdesk/rustdesk-server
