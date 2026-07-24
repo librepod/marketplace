@@ -14,6 +14,18 @@ resources:
 - ingressroute.yaml
 - ssoclient.yaml
 
+# Mirror the LibrePod root + intermediate CA (from step-ca) into this namespace
+# so immich-server can trust the *.libre.pod TLS cert, which is issued by the
+# internal StepClusterIssuer (not a public CA). Reflector fills .data from
+# step-ca/step-certificates-certs. disableNameSuffixHash keeps the name exact so
+# the HelmRelease's persistence configMap reference matches.
+configMapGenerator:
+- name: step-certificates-certs
+  options:
+    disableNameSuffixHash: true
+    annotations:
+      reflector.v1.k8s.emberstack.com/reflects: "step-ca/step-certificates-certs"
+
 # Only the bundled postgres image is a plain container the overlay tags directly
 # (its Deployment now lives in components/postgres). The immich server / valkey
 # images are managed by the Helm chart (image.tag in patch-helmrelease.yaml), not

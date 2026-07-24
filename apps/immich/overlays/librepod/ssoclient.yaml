@@ -26,6 +26,8 @@ spec:
   clientId: immich              # Casdoor app name (id=admin/immich) AND OIDC client_id
   organization: librepod        # platform org (created at bootstrap); login users must live here
   redirectUris:
+    # for logging in with OAuth from the Mobile App
+    - "app.immich:///oauth-callback"
     # immich sends these exactly during the OAuth flow (official immich docs):
     - "https://immich.${BASE_DOMAIN}/auth/login"        # web sign-in
     - "https://immich.${BASE_DOMAIN}/user-settings"     # web: link existing account

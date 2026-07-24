@@ -40,9 +40,61 @@ spec:
     server:
       controllers:
         main:
+          # Init container merges the LibrePod root + intermediate CA into the
+          # alpine system bundle. Without this, immich-server (Node.js) cannot
+          # verify the *.libre.pod cert — it is issued by the internal
+          # StepClusterIssuer, not a public CA — so its OIDC HTTPS calls to
+          # https://sso.libre.pod fail with "unable to get local issuer
+          # certificate". Adapted to the immich chart's bjw-s common v5 schema.
+          initContainers:
+            merge-ca-bundle:
+              image:
+                repository: alpine
+                tag: "3.19"
+                pullPolicy: IfNotPresent
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -e
+                  cat /etc/ssl/certs/ca-certificates.crt > /mnt/merged-ca/ca-certificates.crt
+                  echo "" >> /mnt/merged-ca/ca-certificates.crt
+                  echo "# LibrePod Root CA" >> /mnt/merged-ca/ca-certificates.crt
+                  cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+                  echo "" >> /mnt/merged-ca/ca-certificates.crt
+                  echo "# LibrePod Intermediate CA" >> /mnt/merged-ca/ca-certificates.crt
+                  cat /mnt/root-ca/intermediate_ca.crt >> /mnt/merged-ca/ca-certificates.crt
           containers:
             main:
               # DB_* connection vars come from the immich-env ConfigMap.
               envFrom:
                 - configMapRef:
                     name: immich-env
+              env:
+                # Trust the merged CA bundle (system + LibrePod CAs) for the
+                # OIDC HTTPS calls. SSL_CERT_FILE covers OpenSSL-based tooling;
+                # NODE_EXTRA_CA_CERTS covers Node's tls/fetch (immich is Node).
+                SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+                NODE_EXTRA_CA_CERTS: /etc/ssl/certs/ca-certificates.crt
+      persistence:
+        # LibrePod CA bundle (root + intermediate), mirrored from step-ca by
+        # Reflector (see kustomization.yaml). Mounted into the init container.
+        root-ca-cert:
+          type: configMap
+          name: step-certificates-certs
+          advancedMounts:
+            main:
+              merge-ca-bundle:
+                - path: /mnt/root-ca
+                  readOnly: true
+        # EmptyDir where the init container writes the merged system+LibrePod
+        # bundle; the main container reads it (subPath) as its CA trust file.
+        merged-ca-bundle:
+          type: emptyDir
+          advancedMounts:
+            main:
+              merge-ca-bundle:
+                - path: /mnt/merged-ca
+              main:
+                - path: /etc/ssl/certs/ca-certificates.crt
+                  subPath: ca-certificates.crt
+                  readOnly: true
