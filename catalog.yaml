@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-07-24T10:33:43Z"
+  generatedAt: "2026-07-24T11:05:25Z"
 apps:
   - name: baikal
     version: "0.11.1-nginx"
@@ -91,6 +91,14 @@ apps:
     icon: "https://raw.githubusercontent.com/juanfont/headscale/main/docs/logo.png"
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/headscale"
+  - name: immich
+    version: "v3.0.3"
+    displayName: "Immich"
+    description: "Self-hosted photo and video backup solution (Google Photos alternative)"
+    category: "Media"
+    icon: "https://raw.githubusercontent.com/immich-app/immich/main/design/immich-logo.svg"
+    sourceType: oci-kustomize
+    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/immich"
   - name: litellm
     version: "v1.81.9-stable.patch.1"
     displayName: "LiteLLM"
