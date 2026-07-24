@@ -9,6 +9,11 @@ labels:
   pairs:
     app.kubernetes.io/component: mysql
 
+configMapGenerator:
+- name: mysql
+  envs:
+  - mysql.env
+
 resources:
 - deployment.yaml
 - service.yaml

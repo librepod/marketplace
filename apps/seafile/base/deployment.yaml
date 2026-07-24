@@ -43,8 +43,6 @@ spec:
           image: seafileltd/seafile-mc
           imagePullPolicy: IfNotPresent
           env:
-            - name: SEAF_SERVER_STORAGE_TYPE
-              value: "disk"
             - name: SEAFILE_AI_SECRET_KEY
               valueFrom:
                 secretKeyRef:
@@ -65,10 +63,6 @@ spec:
                 secretKeyRef:
                   name: seafile-sso
                   key: OAUTH_CLIENT_SECRET
-            - name: SSL_CERT_FILE
-              value: /etc/ssl/certs/ca-certificates.crt
-            - name: REQUESTS_CA_BUNDLE
-              value: /etc/ssl/certs/ca-certificates.crt
           envFrom:
             - configMapRef:
                 name: seafile
@@ -98,18 +92,18 @@ spec:
                     OAUTH_ENABLE_INSECURE_TRANSPORT = False
                     OAUTH_CLIENT_ID = os.environ["OAUTH_CLIENT_ID"]
                     OAUTH_CLIENT_SECRET = os.environ["OAUTH_CLIENT_SECRET"]
-                    OAUTH_REDIRECT_URL = "https://seafile.${BASE_DOMAIN}/oauth/callback/"
+                    OAUTH_REDIRECT_URL = "https://seafile.${BASE_DOMAIN:=libre.pod}/oauth/callback/"
                     OAUTH_PROVIDER = "casdoor"
-                    OAUTH_AUTHORIZATION_URL = "https://sso.${BASE_DOMAIN}/login/oauth/authorize"
-                    OAUTH_TOKEN_URL = "https://sso.${BASE_DOMAIN}/api/login/oauth/access_token"
-                    OAUTH_USER_INFO_URL = "https://sso.${BASE_DOMAIN}/api/userinfo"
+                    OAUTH_AUTHORIZATION_URL = "https://sso.${BASE_DOMAIN:=libre.pod}/login/oauth/authorize"
+                    OAUTH_TOKEN_URL = "https://sso.${BASE_DOMAIN:=libre.pod}/api/login/oauth/access_token"
+                    OAUTH_USER_INFO_URL = "https://sso.${BASE_DOMAIN:=libre.pod}/api/userinfo"
                     OAUTH_SCOPE = ["openid", "profile", "email"]
                     OAUTH_ATTRIBUTE_MAP = {
                         "sub":   (True,  "uid"),
                         "name":  (False, "name"),
                         "email": (False, "contact_email"),
                     }
-                    CSRF_TRUSTED_ORIGINS = ["https://seafile.${BASE_DOMAIN}"]
+                    CSRF_TRUSTED_ORIGINS = ["https://seafile.${BASE_DOMAIN:=libre.pod}"]
                     # <<< librepod-sso (managed) <<<
                     PY
           ports:

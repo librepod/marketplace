@@ -8,7 +8,7 @@ spec:
     - websecure
   routes:
     - kind: Rule
-      match: Host(`seafile.${BASE_DOMAIN}`)
+      match: Host(`seafile.${BASE_DOMAIN:=libre.pod}`)
       services:
         - name: seafile
           port: 80
