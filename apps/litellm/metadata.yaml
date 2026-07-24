@@ -22,11 +22,19 @@ spec:
         description: "Base domain (app will be at litellm.BASE_DOMAIN)"
         type: string
         example: "example.com"
-    optional:
-      - name: LITELLM_SALT_KEY
-        description: "Encryption salt key for LiteLLM"
-        type: string
-        default: ""
+  secrets:
+    - name: LITELLM_SALT_KEY
+      description: "Salt key LiteLLM uses to encrypt credentials stored in its DB (e.g. provider API keys). Generated once per install."
+      required: true
+      generate:
+        type: random
+        length: 64
+    - name: DB_PASSWORD
+      description: "PostgreSQL password (A-Za-z0-9 only — no special chars, since it is URL-embedded in DATABASE_URL). Shared by the bundled postgres and litellm."
+      required: true
+      generate:
+        type: random
+        length: 40
 
   dependencies:
     required:
@@ -71,7 +79,6 @@ spec:
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
-            LITELLM_SALT_KEY: "${LITELLM_SALT_KEY}"
           substituteFrom:
             - kind: Secret
               name: litellm-config
@@ -87,6 +94,7 @@ spec:
       type: Opaque
       stringData:
         LITELLM_SALT_KEY: "${LITELLM_SALT_KEY}"
+        DB_PASSWORD: "${DB_PASSWORD}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization
