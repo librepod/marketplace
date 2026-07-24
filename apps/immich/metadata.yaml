@@ -11,7 +11,7 @@ spec:
 
   # Application version (the immich-server container image tag), NOT the Helm
   # chart version. Chart version is pinned internally in the OCIRepository.
-  version: "v3.0.0"
+  version: "v3.0.3"
 
   source:
     type: oci-kustomize
@@ -56,7 +56,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/immich
         ref:
-          tag: "v3.0.0"
+          tag: "v3.0.3"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization
