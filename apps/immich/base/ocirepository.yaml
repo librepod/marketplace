@@ -9,4 +9,4 @@ spec:
   url: oci://ghcr.io/immich-app/immich-charts/immich
   ref:
     # Pin the chart minor (0.13.x) so patch updates flow in automatically.
-    semver: "~0.13.0"
+    semver: "0.13.*"

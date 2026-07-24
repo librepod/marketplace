@@ -24,4 +24,3 @@ resources:
 - ocirepository.yaml
 - helmrelease.yaml
 - pvc.yaml
-- postgres.yaml

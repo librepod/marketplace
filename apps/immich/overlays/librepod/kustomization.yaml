@@ -3,14 +3,21 @@ kind: Kustomization
 
 namespace: immich
 
+# Sidecar postgres (required — immich v3 ships no DB in its chart). Follows the
+# litellm/gogs convention: the component is composed here rather than baked into
+# base, keeping base minimal.
+components:
+- ../../components/postgres
+
 resources:
 - ../../base
 - ingressroute.yaml
 - ssoclient.yaml
 
-# Only the bundled postgres image is a plain container the overlay tags directly.
-# The immich server / valkey images are managed by the Helm chart (image.tag in
-# patch-helmrelease.yaml), not by this images transformer.
+# Only the bundled postgres image is a plain container the overlay tags directly
+# (its Deployment now lives in components/postgres). The immich server / valkey
+# images are managed by the Helm chart (image.tag in patch-helmrelease.yaml), not
+# by this images transformer.
 images:
 - name: ghcr.io/immich-app/postgres
   newTag: 14-vectorchord0.4.3-pgvectors0.2.0

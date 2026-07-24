@@ -8,11 +8,12 @@
 # initContainer below makes a best effort to chown the data dir to the postgres
 # user; if the cluster's NFS export uses root-squash this will fail and postgres
 # will need a local/block storageClass instead (override via patch-storage-class).
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: postgres
+  labels:
+    app.kubernetes.io/name: immich
 spec:
   replicas: 1
   strategy:
@@ -63,15 +64,3 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: 128Mi
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: postgres
-spec:
-  type: ClusterIP
-  ports:
-    - port: 5432
-      targetPort: postgres
-      protocol: TCP
-      name: postgres

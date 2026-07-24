@@ -12,7 +12,7 @@ spec:
         containers:
           main:
             image:
-              tag: v3.0.0
+              tag: v3.0.3
 
     immich:
       persistence:
