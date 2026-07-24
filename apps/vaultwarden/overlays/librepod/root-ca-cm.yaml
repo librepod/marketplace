@@ -1,0 +1,16 @@
+# Reflected copy of the cluster's step-CA root certificate. The Reflector
+# controller (emberstack) watches this stub and populates root_ca.crt /
+# intermediate_ca.crt from ConfigMap/step-certificates-certs in the step-ca
+# namespace. The vaultwarden pod merges the LibrePod root CA into its trust
+# bundle (see deployment-ca-patch.yaml merge-ca-bundle init container) so it can
+# verify the step-CA-signed *.librepod.dev TLS certs — needed for the
+# server-side OIDC token exchange against sso.librepod.dev. Same pattern as
+# open-webui and seafile.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: step-certificates-certs
+  namespace: vaultwarden
+  annotations:
+    reflector.v1.k8s.emberstack.com/reflects: "step-ca/step-certificates-certs"
+data: {}

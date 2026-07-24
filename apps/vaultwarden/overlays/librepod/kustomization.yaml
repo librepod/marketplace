@@ -5,6 +5,7 @@ resources:
 - ../../base
 - ingressroute.yaml
 - ssoclient.yaml
+- root-ca-cm.yaml
 
 namespace: vaultwarden
 
