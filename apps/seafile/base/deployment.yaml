@@ -22,6 +22,22 @@ spec:
           volumeMounts:
             - name: seafile-data
               mountPath: /shared
+        - name: merge-ca-bundle
+          image: alpine:3.19
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              cat /etc/ssl/certs/ca-certificates.crt > /mnt/merged-ca/ca-certificates.crt
+              echo "" >> /mnt/merged-ca/ca-certificates.crt
+              echo "# LibrePod Root CA" >> /mnt/merged-ca/ca-certificates.crt
+              cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+          volumeMounts:
+            - name: root-ca-cert
+              mountPath: /mnt/root-ca
+              readOnly: true
+            - name: merged-ca-bundle
+              mountPath: /mnt/merged-ca
       containers:
         - name: seafile
           image: seafileltd/seafile-mc
@@ -49,6 +65,10 @@ spec:
                 secretKeyRef:
                   name: seafile-sso
                   key: OAUTH_CLIENT_SECRET
+            - name: SSL_CERT_FILE
+              value: /etc/ssl/certs/ca-certificates.crt
+            - name: REQUESTS_CA_BUNDLE
+              value: /etc/ssl/certs/ca-certificates.crt
           envFrom:
             - configMapRef:
                 name: seafile
@@ -81,7 +101,7 @@ spec:
                     OAUTH_REDIRECT_URL = "https://seafile.${BASE_DOMAIN}/oauth/callback/"
                     OAUTH_PROVIDER = "casdoor"
                     OAUTH_AUTHORIZATION_URL = "https://sso.${BASE_DOMAIN}/login/oauth/authorize"
-                    OAUTH_TOKEN_URL = "https://sso.${BASE_DOMAIN}/login/oauth/access_token"
+                    OAUTH_TOKEN_URL = "https://sso.${BASE_DOMAIN}/api/login/oauth/access_token"
                     OAUTH_USER_INFO_URL = "https://sso.${BASE_DOMAIN}/api/userinfo"
                     OAUTH_SCOPE = ["openid", "profile", "email"]
                     OAUTH_ATTRIBUTE_MAP = {
@@ -97,6 +117,10 @@ spec:
           volumeMounts:
             - name: seafile-data
               mountPath: /shared
+            - name: merged-ca-bundle
+              mountPath: /etc/ssl/certs/ca-certificates.crt
+              subPath: ca-certificates.crt
+              readOnly: true
           resources:
             requests:
               memory: "256Mi"
@@ -108,3 +132,11 @@ spec:
         - name: seafile-data
           persistentVolumeClaim:
             claimName: seafile-data
+        - name: root-ca-cert
+          configMap:
+            name: step-certificates-certs
+            items:
+              - key: root_ca.crt
+                path: root_ca.crt
+        - name: merged-ca-bundle
+          emptyDir: {}
