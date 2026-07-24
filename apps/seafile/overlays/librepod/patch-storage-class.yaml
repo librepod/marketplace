@@ -1,0 +1,24 @@
+# Add the LibrePod storage class to every PVC. The base/component PVCs omit
+# storageClassName so they stay portable; this overlay patch fills it in.
+# Multi-document patch: each doc matches its PVC by name (no patches.target —
+# see kustomize docs / repo memory on multi-doc patches).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: seafile-data
+spec:
+  storageClassName: nfs-client
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-data
+spec:
+  storageClassName: nfs-client
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data
+spec:
+  storageClassName: nfs-client

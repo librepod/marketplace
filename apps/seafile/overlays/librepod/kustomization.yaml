@@ -12,6 +12,10 @@ resources:
 - ssoclient.yaml
 - root-ca-cm.yaml
 
+# Patch storageClassName onto every PVC (base/components stay portable).
+patches:
+- path: ./patch-storage-class.yaml
+
 # Secret generator for seafile-secret
 # Note: disableNameSuffixHash is false by default, so hash suffix will be added
 secretGenerator:
