@@ -39,8 +39,8 @@ spec:
         description: "Traefik (provided by traefik app)"
       - kind: StorageClass
         description: "nfs-client (provided by nfs-provisioner / storage). NOTE: a local/block storage class is strongly recommended for the postgres data volume."
-      - kind: IdentityProvider
-        description: "Casdoor (provided by casdoor app) — for optional OIDC single sign-on, configured in Immich's admin UI"
+      - kind: SSOProvider
+        description: "Casdoor + casdoor-sso-controller (auto-provisions the immich OIDC client and credentials into Secret/immich-sso). Note: immich v3 can't be configured for OAuth at deploy time — after install, enable OAuth once in Immich → Administration → Settings → OAuth (issuer https://sso.BASE_DOMAIN, client id 'immich', secret from Secret/immich-sso)."
 
   templates:
     source: |

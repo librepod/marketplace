@@ -6,6 +6,7 @@ namespace: immich
 resources:
 - ../../base
 - ingressroute.yaml
+- ssoclient.yaml
 
 # Only the bundled postgres image is a plain container the overlay tags directly.
 # The immich server / valkey images are managed by the Helm chart (image.tag in
