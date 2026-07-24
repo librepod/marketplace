@@ -1,0 +1,55 @@
+# Declares the immich OIDC client. The casdoor-sso-controller reconciles this
+# into a Casdoor Application (owner/name = admin/immich) and writes clientId /
+# clientSecret / issuer into Secret/immich-sso in THIS namespace.
+#
+# IMPORTANT — immich is NOT wired like open-webui: immich v3 does NOT read OAuth
+# from environment variables. It accepts OAuth config only from the admin UI
+# (Administration -> Settings -> OAuth) or from a full IMMICH_CONFIG_FILE, and
+# the latter freezes the entire Settings page read-only. So immich does NOT
+# consume this Secret at runtime — there is no secretKeyRef in the HelmRelease.
+#
+# This SSOClient exists so the Casdoor side is fully automated: it provisions
+# the client, registers immich's exact redirect URIs, and generates the secret.
+# The values land in Secret/immich-sso for a cluster operator to retrieve and
+# paste into Immich's OAuth settings on first setup (a one-time manual step —
+# see metadata.yaml SSOProvider dependency).
+#
+# ${BASE_DOMAIN} is expanded by Flux postBuild.substitute at deploy time (and
+# by the dev-render step), so the CR that lands on-cluster carries concrete
+# redirect URIs.
+apiVersion: marketplace.librepod.org/v1alpha1
+kind: SSOClient
+metadata:
+  name: immich-sso              # default output Secret name
+  namespace: immich
+spec:
+  clientId: immich              # Casdoor app name (id=admin/immich) AND OIDC client_id
+  organization: librepod        # platform org (created at bootstrap); login users must live here
+  redirectUris:
+    # immich sends these exactly during the OAuth flow (official immich docs):
+    - "https://immich.${BASE_DOMAIN}/auth/login"        # web sign-in
+    - "https://immich.${BASE_DOMAIN}/user-settings"     # web: link existing account
+    # immich ships a built-in forwarder at /api/oauth/mobile-redirect that
+    # redirects to the app.immich:///oauth-callback custom scheme. Register it
+    # so admins who enable immich's "Mobile Redirect URI Override" get a working
+    # mobile login even if a provider rejects the bare custom scheme.
+    - "https://immich.${BASE_DOMAIN}/api/oauth/mobile-redirect"
+  # scopes intentionally omitted: spec.scopes is a no-op on the Casdoor
+  # Application (OIDC scopes come from immich's own auth request — immich
+  # requests "openid email profile" by default). Setting it here only raises a
+  # ScopesIgnored/UnsupportedField warning.
+  grantTypes: [authorization_code, refresh_token]
+  tokenFormat: JWT
+  expireInHours: 168            # 7 days
+  # Free-form Casdoor Application branding (controller passthrough — no CRD
+  # release needed). Controller-managed keys (clientId, enableSignUp, ...) are
+  # ignored if listed here.
+  applicationOverrides:
+    logo: "https://raw.githubusercontent.com/immich-app/immich/main/design/immich-logo.svg"
+  output:
+    secretName: immich-sso
+    keys:
+      clientId: OAUTH_CLIENT_ID        # retrieved by operator, pasted into Immich Settings
+      clientSecret: OAUTH_CLIENT_SECRET
+      issuer: OAUTH_ISSUER_URL         # immich accepts issuer or full discovery URL
+  casdoorPolicy: retain        # keep the Casdoor app if this CR is deleted

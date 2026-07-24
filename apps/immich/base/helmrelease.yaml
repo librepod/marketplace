@@ -1,0 +1,20 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: immich
+spec:
+  interval: 12h
+  install:
+    strategy:
+      name: RetryOnFailure
+      retryInterval: 2m
+  upgrade:
+    strategy:
+      name: RetryOnFailure
+      retryInterval: 3m
+  # chartRef (no version) mirrors the casdoor app: the cluster's HelmRelease CRD
+  # does not support chartRef.version, and the OCIRepository above already pins
+  # the chart semver range. All values are injected from overlays/librepod.
+  chartRef:
+    kind: OCIRepository
+    name: immich-helm-charts

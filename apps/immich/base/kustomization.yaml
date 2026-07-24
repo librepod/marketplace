@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: immich
+
+labels:
+- includeSelectors: true
+  includeTemplates: true
+  pairs:
+    app.kubernetes.io/name: immich
+
+# immich-env is referenced by name from the immich Helm chart (the chart's server
+# container loads DB_* connection vars from it via envFrom). A hash suffix would
+# break that reference, so the suffix is disabled to keep the name stable.
+configMapGenerator:
+- name: immich-env
+  envs:
+  - immich.env
+  options:
+    disableNameSuffixHash: true
+
+resources:
+- namespace.yaml
+- ocirepository.yaml
+- helmrelease.yaml
+- pvc.yaml

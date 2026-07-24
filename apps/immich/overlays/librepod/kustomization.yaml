@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: immich
+
+# Sidecar postgres (required — immich v3 ships no DB in its chart). Follows the
+# litellm/gogs convention: the component is composed here rather than baked into
+# base, keeping base minimal.
+components:
+- ../../components/postgres
+
+resources:
+- ../../base
+- ingressroute.yaml
+- ssoclient.yaml
+
+# Only the bundled postgres image is a plain container the overlay tags directly
+# (its Deployment now lives in components/postgres). The immich server / valkey
+# images are managed by the Helm chart (image.tag in patch-helmrelease.yaml), not
+# by this images transformer.
+images:
+- name: ghcr.io/immich-app/postgres
+  newTag: 14-vectorchord0.4.3-pgvectors0.2.0
+
+patches:
+- path: ./patch-helmrelease.yaml
+  target:
+    kind: HelmRelease
+# No target selector here: this patch file is multi-document (one PVC per doc),
+# so each document self-identifies its PVC by metadata.name. A target selector
+# is only allowed on single-document patches.
+- path: ./patch-storage-class.yaml
