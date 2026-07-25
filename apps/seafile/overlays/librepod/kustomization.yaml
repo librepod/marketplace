@@ -16,20 +16,6 @@ resources:
 patches:
 - path: ./patch-storage-class.yaml
 
-# Secret generator for seafile-secret
-# Note: disableNameSuffixHash is false by default, so hash suffix will be added
-secretGenerator:
-- name: seafile-secret
-  type: Opaque
-  literals:
-  - MYSQL_ROOT_PASSWORD=changeme_root_password
-  - INIT_SEAFILE_MYSQL_ROOT_PASSWORD=changeme_root_password
-  - SEAFILE_MYSQL_DB_PASSWORD=changeme_db_password
-  - REDIS_PASSWORD=changeme_redis_password
-  - JWT_PRIVATE_KEY=KezopZyJ0NDdB9zjUtbAjDAie6MF8rB0pfbGeRLD
-  - INIT_SEAFILE_ADMIN_PASSWORD=changeme_admin_password
-
-
 # Image tag transformers
 images:
 - name: seafileltd/seafile-mc
