@@ -48,6 +48,12 @@ spec:
       generate:
         type: random
         length: 32
+    - name: JWT_PRIVATE_KEY
+      description: "Seafile JWT signing key (surfaced to seafile-mc as SEAFILE_AI_SECRET_KEY); stable per-install"
+      required: false
+      generate:
+        type: random
+        length: 40
 
   dependencies:
     required:
@@ -55,6 +61,8 @@ spec:
         description: "Traefik (provided by bootstrap)"
       - kind: StorageClass
         description: "nfs-client (provided by bootstrap)"
+      - kind: SSOProvider
+        description: "Casdoor SSO (provided by casdoor-sso-controller)"
 
   templates:
     source: |
@@ -81,8 +89,12 @@ spec:
           marketplace.io/managed: "true"
           marketplace.io/app: "seafile"
       spec:
-        interval: 10m
-        targetNamespace: seafile
+        dependsOn:
+          - name: casdoor-sso
+        force: true
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
         sourceRef:
           kind: OCIRepository
           name: marketplace-seafile
@@ -111,6 +123,7 @@ spec:
         SEAFILE_MYSQL_DB_PASSWORD: "${SEAFILE_MYSQL_DB_PASSWORD}"
         REDIS_PASSWORD: "${REDIS_PASSWORD}"
         INIT_SEAFILE_ADMIN_PASSWORD: "${INIT_SEAFILE_ADMIN_PASSWORD}"
+        JWT_PRIVATE_KEY: "${JWT_PRIVATE_KEY}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization

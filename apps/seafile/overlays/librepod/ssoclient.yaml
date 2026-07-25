@@ -1,0 +1,26 @@
+# The casdoor-sso-controller reconciles this CR: it provisions the Casdoor
+# OAuth/OIDC application (clientId "seafile") and writes the client id/secret
+# into Secret/seafile-sso in this namespace. Seafile reads
+# OAUTH_CLIENT_ID/OAUTH_CLIENT_SECRET from that Secret via env (Task 2);
+# OAUTH_ISSUER is the controller's discovery URL and is left unused — Seafile
+# takes its endpoints from the literal URLs injected into seahub_settings.py.
+apiVersion: marketplace.librepod.org/v1alpha1
+kind: SSOClient
+metadata:
+  name: seafile-sso
+  namespace: seafile
+spec:
+  clientId: seafile
+  organization: librepod
+  redirectUris:
+    - "https://seafile.${BASE_DOMAIN}/oauth/callback/"
+  grantTypes: [authorization_code, refresh_token]
+  tokenFormat: JWT
+  expireInHours: 168
+  output:
+    secretName: seafile-sso
+    keys:
+      clientId: OAUTH_CLIENT_ID
+      clientSecret: OAUTH_CLIENT_SECRET
+      issuer: OAUTH_ISSUER
+  casdoorPolicy: retain

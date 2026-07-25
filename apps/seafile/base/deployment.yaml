@@ -22,13 +22,27 @@ spec:
           volumeMounts:
             - name: seafile-data
               mountPath: /shared
+        - name: merge-ca-bundle
+          image: alpine:3.19
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              cat /etc/ssl/certs/ca-certificates.crt > /mnt/merged-ca/ca-certificates.crt
+              echo "" >> /mnt/merged-ca/ca-certificates.crt
+              echo "# LibrePod Root CA" >> /mnt/merged-ca/ca-certificates.crt
+              cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+          volumeMounts:
+            - name: root-ca-cert
+              mountPath: /mnt/root-ca
+              readOnly: true
+            - name: merged-ca-bundle
+              mountPath: /mnt/merged-ca
       containers:
         - name: seafile
           image: seafileltd/seafile-mc
           imagePullPolicy: IfNotPresent
           env:
-            - name: SEAF_SERVER_STORAGE_TYPE
-              value: "disk"
             - name: SEAFILE_AI_SECRET_KEY
               valueFrom:
                 secretKeyRef:
@@ -39,16 +53,68 @@ spec:
                 secretKeyRef:
                   name: seafile-secret
                   key: INIT_SEAFILE_ADMIN_PASSWORD
+            - name: OAUTH_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: seafile-sso
+                  key: OAUTH_CLIENT_ID
+            - name: OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: seafile-sso
+                  key: OAUTH_CLIENT_SECRET
           envFrom:
             - configMapRef:
                 name: seafile
             - secretRef:
                 name: seafile-secret
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - sh
+                  - -c
+                  - |
+                    f=/shared/seafile/conf/seahub_settings.py
+                    m="# >>> librepod-sso (managed) >>>"
+                    # Wait for seafile-mc to generate the file (first boot).
+                    i=0
+                    while [ ! -f "$f" ] && [ "$i" -lt 60 ]; do sleep 2; i=$((i+1)); done
+                    [ -f "$f" ] || exit 0
+                    # Append once (marker-guarded). os.environ is read by seahub
+                    # at import time, so rotation just needs a pod restart.
+                    grep -q "$m" "$f" && exit 0
+                    cat >> "$f" <<'PY'
+
+                    # >>> librepod-sso (managed) >>>
+                    import os
+                    ENABLE_OAUTH = True
+                    OAUTH_ENABLE_INSECURE_TRANSPORT = False
+                    OAUTH_CLIENT_ID = os.environ["OAUTH_CLIENT_ID"]
+                    OAUTH_CLIENT_SECRET = os.environ["OAUTH_CLIENT_SECRET"]
+                    OAUTH_REDIRECT_URL = "https://seafile.${BASE_DOMAIN:=libre.pod}/oauth/callback/"
+                    OAUTH_PROVIDER = "casdoor"
+                    OAUTH_AUTHORIZATION_URL = "https://sso.${BASE_DOMAIN:=libre.pod}/login/oauth/authorize"
+                    OAUTH_TOKEN_URL = "https://sso.${BASE_DOMAIN:=libre.pod}/api/login/oauth/access_token"
+                    OAUTH_USER_INFO_URL = "https://sso.${BASE_DOMAIN:=libre.pod}/api/userinfo"
+                    OAUTH_SCOPE = ["openid", "profile", "email"]
+                    OAUTH_ATTRIBUTE_MAP = {
+                        "sub":   (True,  "uid"),
+                        "name":  (False, "name"),
+                        "email": (False, "contact_email"),
+                    }
+                    CSRF_TRUSTED_ORIGINS = ["https://seafile.${BASE_DOMAIN:=libre.pod}"]
+                    # <<< librepod-sso (managed) <<<
+                    PY
           ports:
             - containerPort: 80
           volumeMounts:
             - name: seafile-data
               mountPath: /shared
+            - name: merged-ca-bundle
+              mountPath: /etc/ssl/certs/ca-certificates.crt
+              subPath: ca-certificates.crt
+              readOnly: true
           resources:
             requests:
               memory: "256Mi"
@@ -60,3 +126,11 @@ spec:
         - name: seafile-data
           persistentVolumeClaim:
             claimName: seafile-data
+        - name: root-ca-cert
+          configMap:
+            name: step-certificates-certs
+            items:
+              - key: root_ca.crt
+                path: root_ca.crt
+        - name: merged-ca-bundle
+          emptyDir: {}
