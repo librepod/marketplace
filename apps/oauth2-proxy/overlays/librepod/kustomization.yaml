@@ -10,3 +10,4 @@ resources:
 - middleware.yaml
 - middleware-errors.yaml
 - ssoclient.yaml
+- secret-cookie.yaml
