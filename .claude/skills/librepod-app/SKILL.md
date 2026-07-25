@@ -69,6 +69,24 @@ This skill covers creating LibrePod Marketplace applications using Kustomize. Ev
 
 ---
 
+## Authority — this skill is the source of truth
+
+This skill is the **canonical, authoritative specification** of LibrePod app conventions. The templates, naming, field placements, and rules documented here *are* the standard — not one option among several. Treat them as the reference when creating, auditing, or fixing any app.
+
+**Never use a sibling app as an example to repeat.** Do not mine `apps/<other-app>/` for patterns, and do not justify a choice with "app X does it this way" or "follow the same approach as app Y." Sibling apps are disqualified as templates for three reasons:
+
+- **App-specific exceptions** — legitimate, localized deviations documented inline within that app (e.g. non-HTTP exposure, a native-SSO quirk, a distroless image needing special handling). They belong to that app and do not generalize.
+- **Drift** — apps written before a convention was finalized may not yet reflect the current standard.
+- **Mistakes** — some apps carry outright bugs that pre-date the standard (wrong version tag, mis-scoped patch, mangled substitution).
+
+Copying from a sibling app propagates exceptions, drift, and mistakes instead of the standard.
+
+**Resolution rule:** when a live app's files contradict this skill, **this skill is correct** and the app is what gets fixed. Raise apps *toward* the standard; never lower the standard to match an app. If a deviation is genuinely required for a specific app, document *why* inline within that app alone — it is still never a pattern to repeat elsewhere.
+
+**Dependencies are not style examples.** References to system apps elsewhere in this skill — `traefik`, `storage`/`nfs-provisioner`, `oauth2-proxy`, `casdoor` — name real cluster *dependencies* an app must declare in `dependsOn`/`dependencies`. They describe infrastructure an app relies on, not a stylistic layout to imitate.
+
+---
+
 ## App Types
 
 | Type | Base contains | Use when |
@@ -926,7 +944,7 @@ Add any additional substitution variables from `metadata.yaml`'s `postBuild.subs
 
 ## Creation Checklist
 
-1. **Gather info**: if a URL was provided, fetch it and extract app details; otherwise ask the user for app name, image/chart, port, storage needs, env vars, secrets needed
+1. **Gather info**: source app details from the upstream URL/docs (or by asking the user) — app name, image/chart, port, storage needs, env vars, secrets needed. **Never gather conventions/structure from a sibling app under `apps/`; this skill is the only pattern source** (see the Authority section).
 2. **Research SSO**: check the app's docs for OIDC/OAuth2/SSO support — native SSO takes priority over oauth2-proxy (see [SSO Configuration](#sso-configuration))
 3. **Confirm with user**: present a summary of what will be created (name, image, port, storage, SSO approach, deployment type) and wait for approval before writing any files
 4. **Create base**: `namespace.yaml`, `deployment.yaml`+`service.yaml` (or `ocirepository.yaml`+`helmrelease.yaml`), optionally `pvc.yaml`, `.env`, `kustomization.yaml`
