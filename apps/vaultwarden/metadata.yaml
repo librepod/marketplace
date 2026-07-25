@@ -37,6 +37,8 @@ spec:
         description: "Traefik (provided by bootstrap)"
       - kind: StorageClass
         description: "nfs-client (provided by bootstrap)"
+      - kind: SSOProvider
+        description: "Casdoor SSO (provided by casdoor-sso-controller)"
 
   templates:
     source: |
@@ -63,6 +65,8 @@ spec:
           marketplace.io/managed: "true"
           marketplace.io/app: "vaultwarden"
       spec:
+        dependsOn:
+          - name: casdoor-sso-controller
         interval: 10m
         targetNamespace: vaultwarden
         sourceRef:
