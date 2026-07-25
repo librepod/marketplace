@@ -36,7 +36,7 @@ spec:
     - "https://<app>.${BASE_DOMAIN}/oauth/oidc/callback"   # ${BASE_DOMAIN} expanded by Flux AND the controller
   scopes: [openid, profile, email]   # accepted but NOT applied (see Notes); OIDC scopes come from the client auth request
   grantTypes: [authorization_code, refresh_token]
-  tokenFormat: JWT
+  tokenFormat: JWT-Standard      # see "Token format" below — JWT-Standard, not plain JWT
   expireInHours: 168
   output:
     secretName: <app>-sso        # Secret written into the app namespace
@@ -66,6 +66,59 @@ Notes:
 - **`redirectUris` drives drift reconciliation.** Editing this list (or
   `grantTypes` / `tokenFormat` / `expireInHours`) on the CR will make
   the controller `update-application` on the next reconcile to match.
+
+## Token format: prefer `JWT-Standard`
+
+`tokenFormat` controls what Casdoor puts inside the ID/access tokens. Casdoor
+offers four values; **default to `JWT-Standard`** for native-OIDC apps:
+
+| Format | Claims emitted | Use |
+|--------|----------------|-----|
+| `JWT` | The **entire Casdoor user object** (every field, incl. empty) | Avoid for OIDC clients |
+| `JWT-Empty` | Only non-empty user fields | Too sparse (omits `email` unless set) |
+| `JWT-Custom` | Only the fields listed in `tokenFields` | Explicit-whitelist fallback |
+| `JWT-Standard` | Spec-compliant OIDC claims only | **Recommended** |
+
+### The trap: plain `JWT` + a strict OIDC client (hit on vaultwarden)
+
+Plain `JWT` embeds the whole user object. One of those fields is `address`,
+which in Casdoor's data model is a `[]string` — so it is serialized as
+`"address": []`. **Strict** OIDC client libraries deserialize the OIDC
+`address` claim as a structured object and abort the *entire token parse* on
+`[]`. Rust's `openidconnect` crate (used by **vaultwarden**) does exactly this:
+
+```
+[vaultwarden::sso_client][ERROR] Failed to contact token endpoint: Parse(
+  "address: invalid length 0, expected struct AddressClaim with 6 elements",
+  [123, 10, 32, 32, 34, 97, 99, 99, 101, 115, 115, ...])
+```
+
+Symptom: after the IdP redirect, the app shows a screen full of numbers (the
+raw token byte array dumped in the error) and SSO login fails — even though
+the redirect, login, and TLS are all fine. **Lenient** libraries (Python
+`authlib`, used by open-webui / seafile / litellm) tolerate Casdoor's shapes,
+so they worked with plain `JWT`; only the strict Rust client choked.
+
+`JWT-Standard` emits standard OIDC claims and includes `address` **only when
+the `address` scope is requested** — so for the usual `openid email profile`
+the claim is omitted and the parse error disappears. It also stops leaking
+`password` / `passwordSalt`, which plain `JWT` puts in the token.
+
+If `JWT-Standard` is unsuitable for some app, the fallback is `JWT-Custom`
+with an explicit field whitelist via `applicationOverrides` (a non-managed
+Casdoor field), which also excludes `address`:
+
+```yaml
+spec:
+  tokenFormat: JWT-Custom
+  applicationOverrides:
+    tokenFields: [Email, Name, DisplayName]   # Casdoor User struct field names; no Address
+```
+
+> `tokenFormat` is a **controller-managed** (typed SSOClient spec) field — set
+> it directly on the CR. `tokenFields`, by contrast, is *not* managed and goes
+> through `applicationOverrides`. Picking the right door for each field is easy
+> to get backwards.
 
 ## 2. Wire the chart to the Secret
 
