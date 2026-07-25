@@ -71,7 +71,7 @@ spec:
           marketplace.io/app: "litellm"
       spec:
         dependsOn:
-          - name: casdoor-sso
+          - name: casdoor
         interval: 10m
         targetNamespace: litellm
         sourceRef:

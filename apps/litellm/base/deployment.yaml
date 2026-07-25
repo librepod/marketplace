@@ -89,10 +89,11 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: litellm-data
-        # LibrePod private CA, distributed as step-certificates-certs in this
-        # namespace (see FLUX bootstrap / sso-app-author-guide). Reflector
-        # annotation is set on the source, but apps still need the CM present
-        # in-namespace — it is placed there during cluster bootstrap.
+        # LibrePod private CA. The step-certificates-certs ConfigMap is NOT
+        # auto-distributed; each app self-services it via a Reflector "reflects"
+        # stub in its overlay (see overlays/librepod/kustomization.yaml
+        # configMapGenerator, mirroring open-webui). Reflector then populates
+        # root_ca.crt + intermediate_ca.crt here from namespace step-ca.
         - name: root-ca-cert
           configMap:
             name: step-certificates-certs
