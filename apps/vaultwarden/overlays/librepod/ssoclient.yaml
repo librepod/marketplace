@@ -15,7 +15,14 @@ spec:
   redirectUris:
     - "https://vaultwarden.${BASE_DOMAIN}/identity/connect/oidc-signin"
   grantTypes: [authorization_code, refresh_token]
-  tokenFormat: JWT
+  # JWT-Standard, NOT plain JWT. vaultwarden uses Rust's strict `openidconnect`
+  # crate, which fails to deserialize the `"address": []` claim that plain JWT
+  # emits (Casdoor's user `address` is a []string) -> the whole token parse
+  # aborts and SSO login fails. JWT-Standard emits spec-compliant OIDC claims
+  # and includes `address` only when the address scope is requested (it isn't),
+  # so the claim is omitted. It also avoids leaking password/passwordSalt.
+  # See docs/sso-app-author-guide.md "Token format".
+  tokenFormat: JWT-Standard
   expireInHours: 168
   output:
     secretName: vaultwarden-sso
