@@ -9,7 +9,7 @@ spec:
   category: "AI"
   website: "https://github.com/BerriAI/litellm"
 
-  version: "v1.81.9-stable.patch.1"
+  version: "v1.93.0"
 
   source:
     type: oci-kustomize
@@ -59,7 +59,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/litellm
         ref:
-          tag: "v1.81.9-stable.patch.1"
+          tag: "v1.93.0"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization
