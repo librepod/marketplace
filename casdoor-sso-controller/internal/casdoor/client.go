@@ -60,7 +60,7 @@ var ManagedFields = map[string]struct{}{
 }
 
 type Config struct {
-	BaseURL string // e.g. http://casdoor.casdoor.svc.cluster.local:8000
+	BaseURL string // e.g. http://casdoor.casdoor.svc.cluster.local (Service port 80, the http default)
 
 	// AccessKey and AccessSecret are a Casdoor M2M Access Key (managed under
 	// the Keys page), sent as query params on every admin-API request. Casdoor
