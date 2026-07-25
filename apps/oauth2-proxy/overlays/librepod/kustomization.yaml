@@ -9,3 +9,4 @@ resources:
 - ingressroute.yaml
 - middleware.yaml
 - middleware-errors.yaml
+- ssoclient.yaml
