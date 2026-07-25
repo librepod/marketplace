@@ -3,11 +3,11 @@ kind: Component
 
 namespace: litellm
 
-labels:
-- includeSelectors: true
-  includeTemplates: true
-  pairs:
-    app.kubernetes.io/name: litellm
+# No `labels:` transformer here on purpose. A Component's transformers merge into
+# the overlay root and would stamp app.kubernetes.io/name=litellm onto the postgres
+# pod — leaking it into the litellm Service selector (which matches on that label).
+# Labels are hardcoded on the postgres Deployment/Service as component=postgres.
+# See memory: kustomize-component-transformer-scope.
 
 configMapGenerator:
 - name: postgres-config
