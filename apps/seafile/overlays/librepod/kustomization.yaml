@@ -10,7 +10,19 @@ resources:
 - ../../components/redis
 - ingressroute.yaml
 - ssoclient.yaml
-- root-ca-cm.yaml
+
+# Mirror the LibrePod root + intermediate CA (from step-ca) into this namespace
+# so the seafile pod can trust the *.libre.pod TLS cert (issued by the internal
+# StepClusterIssuer, not a public CA) for the server-side OAuth token/userinfo
+# exchange. Reflector fills .data from step-ca/step-certificates-certs.
+# disableNameSuffixHash keeps the name exact so the deployment's configMap volume
+# reference matches.
+configMapGenerator:
+- name: step-certificates-certs
+  options:
+    disableNameSuffixHash: true
+    annotations:
+      reflector.v1.k8s.emberstack.com/reflects: "step-ca/step-certificates-certs"
 
 # Patch storageClassName onto every PVC (base/components stay portable).
 patches:
