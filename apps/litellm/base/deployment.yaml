@@ -8,6 +8,30 @@ spec:
     type: Recreate
   template:
     spec:
+      # Merge the LibrePod private CA (step-certificates root + intermediate)
+      # into the system CA bundle before litellm starts, so the OIDC
+      # token/userinfo calls litellm makes to https://sso.${BASE_DOMAIN}/
+      # trust the cluster's private CA. Same pattern as open-webui/vaultwarden.
+      initContainers:
+        - name: merge-ca-bundle
+          image: alpine:3.19
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              cat /etc/ssl/certs/ca-certificates.crt > /mnt/merged-ca/ca-certificates.crt
+              echo "" >> /mnt/merged-ca/ca-certificates.crt
+              echo "# LibrePod Root CA" >> /mnt/merged-ca/ca-certificates.crt
+              cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+              echo "" >> /mnt/merged-ca/ca-certificates.crt
+              echo "# LibrePod Intermediate CA" >> /mnt/merged-ca/ca-certificates.crt
+              cat /mnt/root-ca/intermediate_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+          volumeMounts:
+            - name: root-ca-cert
+              mountPath: /mnt/root-ca
+              readOnly: true
+            - name: merged-ca-bundle
+              mountPath: /mnt/merged-ca
       containers:
         - name: litellm
           image: litellm/litellm
@@ -18,6 +42,17 @@ spec:
           envFrom:
             - configMapRef:
                 name: litellm-env
+          env:
+            - name: GENERIC_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: litellm-sso
+                  key: GENERIC_CLIENT_ID
+            - name: GENERIC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: litellm-sso
+                  key: GENERIC_CLIENT_SECRET
           ports:
             - name: http
               containerPort: 4000
@@ -42,6 +77,11 @@ spec:
               subPath: config.yaml
             - name: data
               mountPath: /root/.config
+            # Overrides the system CA bundle with root+intermediate merged above.
+            - name: merged-ca-bundle
+              mountPath: /etc/ssl/certs/ca-certificates.crt
+              subPath: ca-certificates.crt
+              readOnly: true
       volumes:
         - name: config
           configMap:
@@ -49,3 +89,17 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: litellm-data
+        # LibrePod private CA, distributed as step-certificates-certs in this
+        # namespace (see FLUX bootstrap / sso-app-author-guide). Reflector
+        # annotation is set on the source, but apps still need the CM present
+        # in-namespace — it is placed there during cluster bootstrap.
+        - name: root-ca-cert
+          configMap:
+            name: step-certificates-certs
+            items:
+              - key: root_ca.crt
+                path: root_ca.crt
+              - key: intermediate_ca.crt
+                path: intermediate_ca.crt
+        - name: merged-ca-bundle
+          emptyDir: {}

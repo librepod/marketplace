@@ -3,11 +3,11 @@ kind: Kustomization
 
 components:
 - ../../components/postgres
-- ../../components/gluetun
 
 resources:
 - ../../base
 - ingressroute.yaml
+- ssoclient.yaml
 
 namespace: litellm
 

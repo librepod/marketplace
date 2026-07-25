@@ -34,6 +34,8 @@ spec:
         description: "Traefik (provided by bootstrap)"
       - kind: StorageClass
         description: "nfs-client (provided by bootstrap)"
+      - kind: SSOProvider
+        description: "Casdoor SSO (provided by casdoor-sso-controller)"
 
   templates:
     source: |
@@ -60,6 +62,8 @@ spec:
           marketplace.io/managed: "true"
           marketplace.io/app: "litellm"
       spec:
+        dependsOn:
+          - name: casdoor-sso
         interval: 10m
         targetNamespace: litellm
         sourceRef:

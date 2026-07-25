@@ -1,0 +1,26 @@
+# The casdoor-sso-controller reconciles this CR: it provisions the Casdoor
+# OIDC Application (clientId "litellm") and writes the client id/secret into
+# Secret/litellm-sso in this namespace. LiteLLM reads GENERIC_CLIENT_ID/
+# GENERIC_CLIENT_SECRET from that Secret (Task 2); GENERIC_ISSUER is the
+# controller's discovery URL and is left unused — litellm takes its endpoints
+# from the literal GENERIC_*_ENDPOINT env vars (see Global Constraints).
+apiVersion: marketplace.librepod.org/v1alpha1
+kind: SSOClient
+metadata:
+  name: litellm-sso
+  namespace: litellm
+spec:
+  clientId: litellm
+  organization: librepod
+  redirectUris:
+    - "https://litellm.${BASE_DOMAIN}/sso/callback"
+  grantTypes: [authorization_code, refresh_token]
+  tokenFormat: JWT
+  expireInHours: 168
+  output:
+    secretName: litellm-sso
+    keys:
+      clientId: GENERIC_CLIENT_ID
+      clientSecret: GENERIC_CLIENT_SECRET
+      issuer: GENERIC_ISSUER
+  casdoorPolicy: retain
