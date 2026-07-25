@@ -5,9 +5,31 @@ resources:
 - ../../base
 - ingressroute.yaml
 - ssoclient.yaml
-- root-ca-cm.yaml
 
 namespace: vaultwarden
+
+configMapGenerator:
+  # Reflected copy of the cluster's step-CA root certificate. The Reflector
+  # controller (emberstack) watches this empty stub and populates root_ca.crt /
+  # intermediate_ca.crt from ConfigMap/step-certificates-certs in the step-ca
+  # namespace. The vaultwarden pod merges the LibrePod root CA into its trust
+  # bundle (see deployment-ca-patch.yaml) so its server-side OIDC token
+  # exchange to sso.<domain> passes TLS verification. Same pattern as
+  # open-webui and seafile.
+  #
+  # disableNameSuffixHash is REQUIRED here: the name MUST stay exactly
+  # step-certificates-certs. Reflector re-populates this same object when the
+  # source changes (it keys off the reflects annotation), and the CA-mount
+  # volume in deployment-ca-patch.yaml references it by this exact name. A
+  # kustomize hash suffix would survive mechanically (kustomize rewrites the
+  # volume ref), but any future edit to this generator would re-hash the
+  # object -> prune + recreate an empty stub -> a brief window where the pod
+  # can't mount the CA -> OIDC startup failure.
+  - name: step-certificates-certs
+    options:
+      disableNameSuffixHash: true
+      annotations:
+        reflector.v1.k8s.emberstack.com/reflects: "step-ca/step-certificates-certs"
 
 patches:
   - path: deployment-ca-patch.yaml
