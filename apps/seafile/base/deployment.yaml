@@ -94,9 +94,9 @@ spec:
                     OAUTH_CLIENT_SECRET = os.environ["OAUTH_CLIENT_SECRET"]
                     OAUTH_REDIRECT_URL = "https://seafile.${BASE_DOMAIN:=libre.pod}/oauth/callback/"
                     OAUTH_PROVIDER = "casdoor"
-                    OAUTH_AUTHORIZATION_URL = "https://sso.${BASE_DOMAIN:=libre.pod}/login/oauth/authorize"
-                    OAUTH_TOKEN_URL = "https://sso.${BASE_DOMAIN:=libre.pod}/api/login/oauth/access_token"
-                    OAUTH_USER_INFO_URL = "https://sso.${BASE_DOMAIN:=libre.pod}/api/userinfo"
+                    OAUTH_AUTHORIZATION_URL = "https://id.${BASE_DOMAIN:=libre.pod}/login/oauth/authorize"
+                    OAUTH_TOKEN_URL = "https://id.${BASE_DOMAIN:=libre.pod}/api/login/oauth/access_token"
+                    OAUTH_USER_INFO_URL = "https://id.${BASE_DOMAIN:=libre.pod}/api/userinfo"
                     OAUTH_SCOPE = ["openid", "profile", "email"]
                     OAUTH_ATTRIBUTE_MAP = {
                         "sub":   (True,  "uid"),

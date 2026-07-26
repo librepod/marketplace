@@ -14,7 +14,7 @@ configMapGenerator:
   # intermediate_ca.crt from ConfigMap/step-certificates-certs in the step-ca
   # namespace. The vaultwarden pod merges the LibrePod root CA into its trust
   # bundle (see deployment-ca-patch.yaml) so its server-side OIDC token
-  # exchange to sso.<domain> passes TLS verification. Same pattern as
+  # exchange to id.<domain> passes TLS verification. Same pattern as
   # open-webui and seafile.
   #
   # disableNameSuffixHash is REQUIRED here: the name MUST stay exactly

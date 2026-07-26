@@ -44,7 +44,7 @@ spec:
           # alpine system bundle. Without this, immich-server (Node.js) cannot
           # verify the *.libre.pod cert — it is issued by the internal
           # StepClusterIssuer, not a public CA — so its OIDC HTTPS calls to
-          # https://sso.libre.pod fail with "unable to get local issuer
+          # https://id.libre.pod fail with "unable to get local issuer
           # certificate". Adapted to the immich chart's bjw-s common v5 schema.
           initContainers:
             merge-ca-bundle:

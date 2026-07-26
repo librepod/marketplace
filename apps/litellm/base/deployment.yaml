@@ -10,7 +10,7 @@ spec:
     spec:
       # Merge the LibrePod private CA (step-certificates root + intermediate)
       # into the system CA bundle before litellm starts, so the OIDC
-      # token/userinfo calls litellm makes to https://sso.${BASE_DOMAIN}/
+      # token/userinfo calls litellm makes to https://id.${BASE_DOMAIN}/
       # trust the cluster's private CA. Same pattern as open-webui/vaultwarden.
       initContainers:
         - name: merge-ca-bundle

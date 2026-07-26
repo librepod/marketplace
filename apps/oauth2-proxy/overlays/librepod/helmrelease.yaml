@@ -19,7 +19,7 @@ spec:
     # OIDC provider configuration (Casdoor)
     extraArgs:
       provider: oidc
-      oidc-issuer-url: https://sso.${BASE_DOMAIN:=libre.pod}
+      oidc-issuer-url: https://id.${BASE_DOMAIN:=libre.pod}
       redirect-url: https://oauth2-proxy.${BASE_DOMAIN:=libre.pod}/oauth2/callback
       cookie-domain: .${BASE_DOMAIN:=libre.pod}
       whitelist-domain: .${BASE_DOMAIN:=libre.pod}
