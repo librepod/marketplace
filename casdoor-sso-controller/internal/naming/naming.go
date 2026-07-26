@@ -53,9 +53,13 @@ func DefaultKeys() v1alpha1.SSOClientKeys {
 	return Keys(&v1alpha1.SSOClient{})
 }
 
-// IssuerURL builds the OIDC discovery URL from BASE_DOMAIN. Most OIDC clients
-// expect the full well-known endpoint, not the bare issuer, so they can fetch
-// /.well-known/openid-configuration.
-func IssuerURL(baseDomain string) string {
-	return "https://sso." + baseDomain + "/.well-known/openid-configuration"
+// IssuerURL builds the OIDC discovery URL from BASE_DOMAIN and the IdP subdomain.
+// Most OIDC clients expect the full well-known endpoint, not the bare issuer, so
+// they can fetch /.well-known/openid-configuration. An empty subdomain defaults
+// to "id" — the platform's canonical user-facing IdP host.
+func IssuerURL(baseDomain, subdomain string) string {
+	if subdomain == "" {
+		subdomain = "id"
+	}
+	return "https://" + subdomain + "." + baseDomain + "/.well-known/openid-configuration"
 }

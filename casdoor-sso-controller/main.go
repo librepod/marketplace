@@ -65,6 +65,7 @@ func main() {
 	}
 
 	baseDomain := os.Getenv("BASE_DOMAIN")
+	idpSubdomain := os.Getenv("IDP_SUBDOMAIN")
 	org := os.Getenv("CASDOOR_ORG")
 	if org == "" {
 		org = "librepod"
@@ -73,11 +74,12 @@ func main() {
 	casdoorClient := buildCasdoorClient()
 
 	if err := (&controller.SSOClientReconciler{
-		Client:     mgr.GetClient(),
-		Scheme:     mgr.GetScheme(),
-		Casdoor:    casdoorClient,
-		BaseDomain: baseDomain,
-		Org:        org,
+		Client:       mgr.GetClient(),
+		Scheme:       mgr.GetScheme(),
+		Casdoor:      casdoorClient,
+		BaseDomain:   baseDomain,
+		IdpSubdomain: idpSubdomain,
+		Org:          org,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog(err, "unable to register reconciler")
 		os.Exit(1)
