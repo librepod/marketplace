@@ -26,7 +26,7 @@ spec:
 
     extraArgs:
       provider: oidc
-      oidc-issuer-url: https://sso.${BASE_DOMAIN:=libre.pod}
+      oidc-issuer-url: https://id.${BASE_DOMAIN:=libre.pod}
       redirect-url: https://oauth2-proxy.${BASE_DOMAIN:=libre.pod}/oauth2/callback
       # static:// is the v7.x idiom for "forward-auth only, no upstream".
       # file:///dev/null works only by accident and 404s any real request.
@@ -54,7 +54,7 @@ spec:
           secretKeyRef:
             name: oauth2-proxy-cookie
             key: cookie-secret
-      - name: SSL_CERT_FILE                     # trust the private LibrePod CA for sso.<domain> TLS
+      - name: SSL_CERT_FILE                     # trust the private LibrePod CA for id.<domain> TLS
         value: /etc/ssl/certs/ca-certificates.crt
 
     # Private CA trust: merge the LibrePod root CA into the system bundle
