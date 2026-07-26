@@ -39,7 +39,10 @@ spec:
       scope: "openid email profile"            # profile -> preferred_username claim
       # Forward-auth (Traefik) essentials.
       reverse-proxy: "true"                     # REQUIRED: honor X-Forwarded-{Proto,Host,Uri}
-      trusted-proxy-ip: "10.42.0.0/16"          # cluster pod CIDR (Traefik source IPs); VERIFY on cluster
+      # NOTE: oauth2-proxy v7.x has NO per-source-IP gating of X-Forwarded headers. The
+      # only related flag (--trusted-ip) is an auth-BYPASS list — do NOT use it here.
+      # Spoofing is mitigated structurally: the oauth2-proxy Service is ClusterIP-only,
+      # so only in-cluster callers (Traefik) can reach /oauth2/auth.
       set-xauthrequest: "true"                  # emit X-Auth-Request-* identity headers
       pass-user-headers: "true"                 # emit X-Forwarded-{User,Email,Groups,Preferred-Username}
       skip-provider-button: "true"              # seamless SSO (no interstitial button)
