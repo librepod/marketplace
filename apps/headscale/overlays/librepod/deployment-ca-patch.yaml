@@ -1,0 +1,61 @@
+# Strategic-merge patch: give the headscale pod trust for the private LibrePod
+# Intermediate CA so its startup-time OIDC discovery to
+# https://id.${BASE_DOMAIN}/.well-known/openid-configuration passes TLS
+# verification. Without this, headscale fails at init with
+# "x509: certificate signed by unknown authority" (CrashLoopBackOff).
+#
+# Canonical LibrePod CA-trust pattern (same as vaultwarden/open-webui/seafile):
+# an init container (alpine) fuses the system CA bundle with the LibrePod root
+# CA (from configMap/step-certificates-certs, Reflector-replicated from step-ca),
+# then the headscale container mounts the merged bundle over the system bundle
+# and SSL_CERT_FILE points Go's crypto/tls at it. headscale performs OIDC
+# provider discovery at startup, so this trust is required to even boot.
+#
+# PLATFORM DEPENDENCY: configMap/step-certificates-certs must exist in THIS
+# namespace — see the Reflector stub in overlays/librepod/kustomization.yaml
+# (it reflects step-ca/step-certificates-certs). hostNetwork is unrelated.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: headscale
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: merge-ca-bundle
+          image: alpine:3.19
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              echo "Merging LibrePod root CA with system CA bundle..."
+              cat /etc/ssl/certs/ca-certificates.crt > /mnt/merged-ca/ca-certificates.crt
+              echo "" >> /mnt/merged-ca/ca-certificates.crt
+              echo "# LibrePod Root CA" >> /mnt/merged-ca/ca-certificates.crt
+              cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+              echo "CA bundle merged successfully!"
+          volumeMounts:
+            - name: root-ca-cert
+              mountPath: /mnt/root-ca
+              readOnly: true
+            - name: merged-ca-bundle
+              mountPath: /mnt/merged-ca
+      containers:
+        - name: headscale
+          volumeMounts:
+            - name: merged-ca-bundle
+              mountPath: /etc/ssl/certs/ca-certificates.crt
+              subPath: ca-certificates.crt
+              readOnly: true
+          env:
+            - name: SSL_CERT_FILE
+              value: /etc/ssl/certs/ca-certificates.crt
+      volumes:
+        - name: root-ca-cert
+          configMap:
+            name: step-certificates-certs
+            items:
+              - key: root_ca.crt
+                path: root_ca.crt
+        - name: merged-ca-bundle
+          emptyDir: {}

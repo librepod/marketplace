@@ -85,10 +85,17 @@ log:
   format: text
 
 # OIDC single sign-on (native headscale support — no oauth2-proxy needed).
-# Disabled for initial verification — re-enable after registering Casdoor client
-# and mounting step-ca root CA for TLS trust.
-# oidc:
-#   issuer: https://id.${BASE_DOMAIN}
-#   client_id: ${OIDC_CLIENT_ID}
-#   client_secret: ${OIDC_CLIENT_SECRET}
-#   scope: ["openid", "profile", "email"]
+# client_id is the public OIDC client id (must equal SSOClient.spec.clientId
+# "headscale"). The secret is NOT inlined or Flux-substituted: headscale reads
+# it from a file via client_secret_path, mounted from Secret/headscale-sso
+# (provisioned by casdoor-sso-controller in this namespace; see deployment.yaml).
+# client_secret and client_secret_path are mutually exclusive. issuer uses
+# ${BASE_DOMAIN} (standard Flux postBuild.substitute).
+oidc:
+  issuer: https://id.${BASE_DOMAIN}
+  client_id: headscale
+  client_secret_path: /etc/headscale/oidc/client_secret
+  scope: ["openid", "profile", "email"]
+  pkce:
+    enabled: true
+  email_verified_required: false

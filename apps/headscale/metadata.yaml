@@ -26,17 +26,6 @@ spec:
         description: "FRP tunnel domain (public domain for Tailscale client connections)"
         type: string
         example: "vla1.libreport.ru"
-      # TODO: Uncomment when Casdoor provisioning logic auto-creates OIDC clients per app
-      # - name: OIDC_CLIENT_ID
-      #   description: "OIDC client ID registered in Casdoor for headscale"
-      #   type: string
-      #   example: "headscale"
-
-  # TODO: Uncomment when Casdoor provisioning logic auto-creates OIDC clients per app
-  # secrets:
-  #   - name: OIDC_CLIENT_SECRET
-  #     description: "OIDC client secret from Casdoor for headscale authentication"
-  #     required: true
 
   dependencies:
     required:
@@ -44,10 +33,8 @@ spec:
         description: "Traefik (provided by bootstrap)"
       - kind: StorageClass
         description: "nfs-client (provided by bootstrap)"
-      # TODO: Uncomment when Casdoor provisioning logic auto-creates OIDC clients per app
-      # - kind: App
-      #   name: casdoor
-      #   description: "SSO provider for OIDC authentication"
+      - kind: SSOProvider
+        description: "Casdoor SSO (provided by casdoor-sso-controller)"
 
   templates:
     source: |
@@ -77,6 +64,7 @@ spec:
         dependsOn:
           - name: traefik
           - name: storage
+          - name: casdoor-sso
         force: true
         interval: 10m
         retryInterval: 2m
@@ -88,33 +76,18 @@ spec:
         path: ./overlays/librepod
         prune: true
         wait: true
+        # OIDC client_id is a literal in config.yaml and the client secret is
+        # read from a file (client_secret_path) mounted from the
+        # controller-provisioned Secret/headscale-sso in the headscale namespace.
+        # Only ${BASE_DOMAIN}/${FRP_DOMAIN} need Flux substitution — no
+        # substituteFrom and no cross-namespace Secret.
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
             FRP_DOMAIN: "${FRP_DOMAIN}"
-          # TODO: Uncomment when Casdoor provisioning logic auto-creates OIDC clients per app
-          #   OIDC_CLIENT_ID: "${OIDC_CLIENT_ID}"
-          # substituteFrom:
-          #   - kind: Secret
-          #     name: headscale-config
-    # TODO: Uncomment when Casdoor provisioning logic auto-creates OIDC clients per app
-    # secret: |
-    #   apiVersion: v1
-    #   kind: Secret
-    #   metadata:
-    #     name: headscale-config
-    #     namespace: flux-system
-    #     labels:
-    #       marketplace.io/managed: "true"
-    #       marketplace.io/app: "headscale"
-    #   type: Opaque
-    #   stringData:
-    #     OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization
       resources:
         - source.yaml
         - release.yaml
-      # TODO: Uncomment when Casdoor provisioning logic auto-creates OIDC clients per app
-      # - secret.yaml

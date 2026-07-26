@@ -1,0 +1,39 @@
+# Declares the headscale OIDC client. The casdoor-sso-controller reconciles
+# this CR into a Casdoor Application (owner/name = admin/headscale) and writes
+# clientId / clientSecret / issuer into Secret/headscale-sso in THIS namespace
+# (headscale) — the standard app-namespace pattern, NOT cross-namespace.
+#
+# How headscale consumes the secret: headscale reads OIDC config from its YAML
+# file (it has no env-var config support), but it DOES support
+# oidc.client_secret_path — reading the client secret from a FILE. The
+# Deployment (base/deployment.yaml) mounts this Secret's clientSecret key to
+# /etc/headscale/oidc/client_secret and config.yaml points client_secret_path
+# at it. client_id ("headscale") is a public literal in config.yaml; the issuer
+# uses ${BASE_DOMAIN} (Flux substitute). So no Flux substituteFrom and no
+# cross-namespace Secret are needed — sidestepping the controller's cross-ns
+# OwnerReference limitation entirely.
+#
+# ${FRP_DOMAIN} is expanded by Flux postBuild.substitute at deploy time (and the
+# dev-render step), so the on-cluster CR carries a concrete redirect URI. The
+# callback is on the FRP tunnel domain because a Tailscale client reaches it
+# BEFORE joining the VPN (server_url is also FRP).
+apiVersion: marketplace.librepod.org/v1alpha1
+kind: SSOClient
+metadata:
+  name: headscale-sso
+  namespace: headscale
+spec:
+  clientId: headscale              # Casdoor app name (id=admin/headscale) AND OIDC client_id
+  organization: librepod           # platform org (created at bootstrap); login users must live here
+  redirectUris:
+    - "https://headscale.${FRP_DOMAIN}/oidc/callback"
+  grantTypes: [authorization_code, refresh_token]
+  tokenFormat: JWT-Standard        # standard OIDC claims only; avoids the plain-JWT address-claim trap (see docs/sso-app-author-guide.md)
+  expireInHours: 168               # 7 days
+  output:
+    secretName: headscale-sso      # written to THIS namespace (headscale), not flux-system
+    keys:
+      clientId: OIDC_CLIENT_ID       # unused by headscale (client_id is a literal in config.yaml)
+      clientSecret: OIDC_CLIENT_SECRET  # mounted as /etc/headscale/oidc/client_secret via client_secret_path
+      issuer: OIDC_ISSUER            # unused by headscale (issuer uses ${BASE_DOMAIN} substitute)
+  casdoorPolicy: retain            # keep the Casdoor app if this CR is deleted
