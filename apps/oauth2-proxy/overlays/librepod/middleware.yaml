@@ -6,7 +6,17 @@ spec:
   forwardAuth:
     address: http://oauth2-proxy.oauth2-proxy.svc.cluster.local/oauth2/auth
     trustForwardHeader: true
-    # HINT: Use the whoami web app to view all the headers returned from the oauth2-proxy
-    authResponseHeadersRegex: ^X-(Auth|Forwarded)-
+    # Copy oauth2-proxy's identity headers onto the request forwarded to the
+    # upstream app. Authorization is intentionally NOT listed: bearer-forwarding
+    # is off by default (--set-authorization-header omitted) so we don't clobber
+    # an app's own Authorization header. To opt in, add --set-authorization-header
+    # to the HelmRelease and add "Authorization" here.
     authResponseHeaders:
-      - Authorization
+      - X-Auth-Request-User
+      - X-Auth-Request-Email
+      - X-Auth-Request-Groups
+      - X-Auth-Request-Preferred-Username
+      - X-Forwarded-User
+      - X-Forwarded-Email
+      - X-Forwarded-Groups
+      - X-Forwarded-Preferred-Username

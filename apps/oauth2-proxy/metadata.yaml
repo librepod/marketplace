@@ -27,6 +27,8 @@ spec:
     required:
       - kind: IngressController
         description: "Traefik (provided by traefik app)"
+      - kind: SSOProvider
+        description: "Casdoor + casdoor-sso-controller (provisions OIDC credentials into Secret/oauth2-proxy-sso)"
 
   templates:
     source: |

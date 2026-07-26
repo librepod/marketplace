@@ -1,0 +1,29 @@
+# Declares the oauth2-proxy OIDC client. The casdoor-sso-controller reconciles
+# this into a Casdoor Application (owner/name = admin/oauth2-proxy) and writes
+# clientId / clientSecret / issuer into Secret/oauth2-proxy-sso in THIS
+# namespace. The HelmRelease reads client-id / client-secret via the chart's
+# config.existingSecret; oidc-issuer-url is unused at runtime (the issuer is a
+# literal --oidc-issuer-url flag, because extraArgs can't reference a Secret).
+#
+# ${BASE_DOMAIN} is expanded by Flux postBuild.substitute at deploy time, so the
+# CR that lands on-cluster carries a concrete redirect URI.
+apiVersion: marketplace.librepod.org/v1alpha1
+kind: SSOClient
+metadata:
+  name: oauth2-proxy-sso
+  namespace: oauth2-proxy
+spec:
+  clientId: oauth2-proxy              # Casdoor app name (id=admin/oauth2-proxy) AND OIDC client_id
+  organization: librepod              # platform org (created at bootstrap); login users must live here
+  redirectUris:
+    - "https://oauth2-proxy.${BASE_DOMAIN}/oauth2/callback"
+  grantTypes: [authorization_code, refresh_token]
+  tokenFormat: JWT-Standard           # plain JWT embeds the whole user object (incl. password/salt); JWT-Standard avoids the leak
+  expireInHours: 168                  # 7 days
+  output:
+    secretName: oauth2-proxy-sso
+    keys:
+      clientId: client-id             # chart reads OAUTH2_PROXY_CLIENT_ID from this key
+      clientSecret: client-secret     # chart reads OAUTH2_PROXY_CLIENT_SECRET from this key
+      issuer: oidc-issuer-url         # unused at runtime (kept for parity with other consumers)
+  casdoorPolicy: retain               # keep the Casdoor app if this CR is deleted
