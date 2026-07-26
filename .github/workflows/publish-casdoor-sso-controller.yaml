@@ -42,7 +42,7 @@ jobs:
       - name: Build & push
         id: img
         run: |
-          TAG="0.2.4"
+          TAG="0.2.5"
           docker buildx build --push \
             --metadata-file metadata.json \
             -t ghcr.io/librepod/casdoor-sso-controller:${TAG} \

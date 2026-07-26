@@ -32,9 +32,22 @@ func TestDefaults(t *testing.T) {
 }
 
 func TestIssuerURL_IsDiscoveryEndpoint(t *testing.T) {
-	got := IssuerURL("libre.pod")
-	want := "https://sso.libre.pod/.well-known/openid-configuration"
-	if got != want {
-		t.Fatalf("IssuerURL=%q want %q", got, want)
+	tests := []struct {
+		name       string
+		baseDomain string
+		subdomain  string
+		want       string
+	}{
+		{name: "empty subdomain defaults to id", baseDomain: "libre.pod", subdomain: "", want: "https://id.libre.pod/.well-known/openid-configuration"},
+		{name: "explicit id", baseDomain: "libre.pod", subdomain: "id", want: "https://id.libre.pod/.well-known/openid-configuration"},
+		{name: "custom subdomain", baseDomain: "libre.pod", subdomain: "auth", want: "https://auth.libre.pod/.well-known/openid-configuration"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := IssuerURL(tc.baseDomain, tc.subdomain)
+			if got != tc.want {
+				t.Fatalf("IssuerURL(%q,%q)=%q want %q", tc.baseDomain, tc.subdomain, got, tc.want)
+			}
+		})
 	}
 }

@@ -30,7 +30,7 @@ headscale:
 # OIDC — disabled for now, will be enabled after Casdoor integration.
 # oidc:
 #   enabled: true
-#   issuer: "https://sso.${BASE_DOMAIN:=libre.pod}"
+#   issuer: "https://id.${BASE_DOMAIN:=libre.pod}"
 #   client_id: "${OIDC_CLIENT_ID}"
 #   client_secret_path: "/etc/headplane/oidc_client_secret"
 #   scope: "openid profile email"

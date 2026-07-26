@@ -1,6 +1,6 @@
 # Strategic-merge patch: give the vaultwarden pod trust for the private
 # LibrePod Intermediate CA so its server-side OIDC token exchange to
-# https://sso.${BASE_DOMAIN} passes TLS verification.
+# https://id.${BASE_DOMAIN} passes TLS verification.
 #
 # Same approach as apps/open-webui (see its helmrelease.yaml): mount the
 # LibrePod root CA (from configMap/step-certificates-certs), fuse it with the

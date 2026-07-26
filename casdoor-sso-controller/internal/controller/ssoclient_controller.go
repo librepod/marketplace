@@ -64,10 +64,11 @@ const (
 // Secret in the app's namespace.
 type SSOClientReconciler struct {
 	client.Client
-	Scheme     *runtime.Scheme
-	Casdoor    casdoor.Client
-	BaseDomain string
-	Org        string
+	Scheme       *runtime.Scheme
+	Casdoor      casdoor.Client
+	BaseDomain   string
+	IdpSubdomain string
+	Org          string
 	// secretGen overrides the default secret generator (test seam). Nil => newClientSecret.
 	secretGen func() (string, error)
 	// clearAnnotationErr, when non-nil, makes clearAnnotation return this error
@@ -341,7 +342,7 @@ func (r *SSOClientReconciler) upsertSecret(ctx context.Context, cr *marketplacev
 		}
 		sec.Data[keys.ClientID] = []byte(clientID)
 		sec.Data[keys.ClientSecret] = []byte(secret)
-		sec.Data[keys.Issuer] = []byte(naming.IssuerURL(r.BaseDomain))
+		sec.Data[keys.Issuer] = []byte(naming.IssuerURL(r.BaseDomain, r.IdpSubdomain))
 		return ctrl.SetControllerReference(cr, sec, r.Scheme)
 	})
 	return err
