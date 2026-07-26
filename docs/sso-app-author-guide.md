@@ -56,7 +56,7 @@ Notes:
 - **No committed secret.** Leave the Casdoor `clientSecret` generation to the
   controller — do not seed one in `init_data.json` or hardcode one in the chart.
 - **`issuer` is the discovery URL.** The controller writes the full
-  `https://sso.<BASE_DOMAIN>/.well-known/openid-configuration` endpoint into the
+  `https://id.<BASE_DOMAIN>/.well-known/openid-configuration` endpoint into the
   Secret's `issuer` key — exactly what clients like open-webui's
   `OPENID_PROVIDER_URL` expect, not the bare issuer.
 - **`scopes` is a no-op (accepted for ergonomics).** The CR accepts a `scopes`
