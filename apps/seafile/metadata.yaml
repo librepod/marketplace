@@ -90,7 +90,7 @@ spec:
           marketplace.io/app: "seafile"
       spec:
         dependsOn:
-          - name: casdoor-sso
+          - name: casdoor-sso-controller
         force: true
         interval: 1h
         retryInterval: 2m
