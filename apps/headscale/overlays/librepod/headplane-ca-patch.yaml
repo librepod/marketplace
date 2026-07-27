@@ -1,0 +1,69 @@
+# Strategic-merge patch: give the headplane pod trust for the private LibrePod
+# Intermediate CA so its OIDC discovery and token-exchange calls to
+# https://id.${BASE_DOMAIN} pass TLS verification. With oidc.enabled: true
+# (components/headplane/config.yaml), headplane fetches the OIDC discovery
+# document at startup and exchanges the auth code for tokens server-side —
+# both are HTTPS to the privately-signed id.<domain>, so without this trust
+# headplane's SSO init fails with "x509: certificate signed by unknown
+# authority".
+#
+# This is the SAME canonical LibrePod CA-trust pattern as
+# deployment-ca-patch.yaml (which covers the headscale control server) and
+# vaultwarden/open-webui/seafile: an alpine init container fuses the system
+# CA bundle with the LibrePod root CA, the app container mounts the merged
+# bundle over the system bundle, and SSL_CERT_FILE points Go's crypto/tls
+# at it. headplane is a Go app (ghcr.io/tale/headplane) so SSL_CERT_FILE is
+# honored by its standard crypto/x509 cert pool.
+#
+# PLATFORM DEPENDENCY: configMap/step-certificates-certs must exist in THIS
+# namespace (headscale) — see the Reflector stub in overlays/librepod/
+# kustomization.yaml (it reflects step-ca/step-certificates-certs). headplane
+# is a component deployed into the headscale namespace, so it reuses the same
+# reflected ConfigMap; no second declaration is needed.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: headplane
+spec:
+  template:
+    spec:
+      initContainers:
+        # Appended alongside the component's generate-cookie-secret init
+        # container (strategic-merge keys initContainers by name).
+        - name: merge-ca-bundle
+          image: alpine:3.19
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              echo "Merging LibrePod root CA with system CA bundle..."
+              cat /etc/ssl/certs/ca-certificates.crt > /mnt/merged-ca/ca-certificates.crt
+              echo "" >> /mnt/merged-ca/ca-certificates.crt
+              echo "# LibrePod Root CA" >> /mnt/merged-ca/ca-certificates.crt
+              cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+              echo "CA bundle merged successfully!"
+          volumeMounts:
+            - name: root-ca-cert
+              mountPath: /mnt/root-ca
+              readOnly: true
+            - name: merged-ca-bundle
+              mountPath: /mnt/merged-ca
+      containers:
+        - name: headplane
+          volumeMounts:
+            - name: merged-ca-bundle
+              mountPath: /etc/ssl/certs/ca-certificates.crt
+              subPath: ca-certificates.crt
+              readOnly: true
+          env:
+            - name: SSL_CERT_FILE
+              value: /etc/ssl/certs/ca-certificates.crt
+      volumes:
+        - name: root-ca-cert
+          configMap:
+            name: step-certificates-certs
+            items:
+              - key: root_ca.crt
+                path: root_ca.crt
+        - name: merged-ca-bundle
+          emptyDir: {}
