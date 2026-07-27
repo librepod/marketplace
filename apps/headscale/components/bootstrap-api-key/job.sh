@@ -21,13 +21,27 @@ set -eu
 NS="${HEADSCALE_NAMESPACE:-headscale}"
 EXP="${API_KEY_EXPIRATION:-999d}"
 
-# The alpine image has no kubectl — download the one matching the cluster's
-# minor version (stable-1.34 channel) from the official source. (We avoid
-# third-party kubectl images: bitnami/kubectl:1.34 is unpublished and the
-# bitnami catalog has been churning. busybox wget handles dl.k8s.io fine.)
+# The alpine image has no kubectl. Download one matching the cluster's ACTUAL
+# minor version — discovered from the API at runtime, never hard-pinned. A fixed
+# channel like stable-1.34 would silently fall outside kubectl's ±1 skew window
+# once the cluster upgrades past 1.35, breaking this Job a year+ from now.
 if ! command -v kubectl >/dev/null 2>&1; then
-  echo "Downloading kubectl..."
-  KV="$(wget -qO- https://dl.k8s.io/release/stable-1.34.txt)"
+  SA=/var/run/secrets/kubernetes.io/serviceaccount
+  # busybox wget has no --ca-certificate flag and verifies TLS strictly, so build
+  # a bundle that trusts the cluster CA (for the in-cluster /version call) on top
+  # of the system CAs, and point wget at it via SSL_CERT_FILE.
+  cat /etc/ssl/certs/ca-certificates.crt "$SA/ca.crt" > /tmp/ca-bundle.crt 2>/dev/null || cat "$SA/ca.crt" > /tmp/ca-bundle.crt
+  export SSL_CERT_FILE=/tmp/ca-bundle.crt
+  # system:authenticated can read /version (discovery), so the SA token is enough.
+  VER_JSON="$(wget -q -O - --header="Authorization: Bearer $(cat "$SA/token")" https://kubernetes.default.svc/version)"
+  MAJ="$(echo "$VER_JSON" | sed -n 's/.*"major": *"\([0-9]*\)".*/\1/p')"
+  MIN="$(echo "$VER_JSON" | sed -n 's/.*"minor": *"\([0-9]*\)".*/\1/p')"
+  if [ -z "$MAJ" ] || [ -z "$MIN" ]; then
+    echo "ERROR: could not parse cluster version from /version: $VER_JSON" >&2
+    exit 1
+  fi
+  KV="$(wget -qO- "https://dl.k8s.io/release/stable-${MAJ}.${MIN}.txt")"
+  echo "Downloading kubectl ${KV} (matching server ${MAJ}.${MIN})..."
   wget -qO /tmp/kubectl "https://dl.k8s.io/release/${KV}/bin/linux/amd64/kubectl"
   chmod +x /tmp/kubectl
   export PATH=/tmp:$PATH
