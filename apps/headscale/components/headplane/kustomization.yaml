@@ -24,3 +24,4 @@ resources:
   - service.yaml
   - deployment.yaml
   - ingressroute.yaml
+  - ssoclient.yaml

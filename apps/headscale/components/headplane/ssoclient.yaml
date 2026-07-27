@@ -1,0 +1,39 @@
+# Declares the headplane OIDC client. The casdoor-sso-controller reconciles
+# this CR into a Casdoor Application (owner/name = admin/headplane) and writes
+# clientId / clientSecret / issuer into Secret/headplane-sso in THIS namespace
+# (headscale — headplane is a component of the headscale app).
+#
+# How headplane consumes the secret: headplane reads its OIDC config from its
+# YAML config file, but supports oidc.client_secret_path — reading the client
+# secret from a FILE. The Deployment (deployment.yaml) mounts this Secret's
+# clientSecret key to /etc/headplane/oidc/client_secret and config.yaml points
+# client_secret_path at it. client_id ("headplane") is a public literal in
+# config.yaml; the issuer uses ${BASE_DOMAIN} (Flux substitute). So no Flux
+# substituteFrom and no cross-namespace Secret are needed — same pattern as the
+# headscale control server's own SSOClient (overlays/librepod/ssoclient.yaml).
+#
+# ${BASE_DOMAIN} is expanded by Flux postBuild.substitute at deploy time (and
+# the controller), so the on-cluster CR carries a concrete redirect URI. The
+# callback is on the BASE_DOMAIN (cluster ingress), NOT the FRP tunnel domain:
+# headplane is an admin UI reached via headplane.<BASE_DOMAIN>, and the browser
+# completes the OIDC redirect before/independent of any Tailscale tunnel.
+apiVersion: marketplace.librepod.org/v1alpha1
+kind: SSOClient
+metadata:
+  name: headplane-sso
+  namespace: headscale
+spec:
+  clientId: headplane             # Casdoor app name (id=admin/headplane) AND OIDC client_id
+  organization: librepod          # platform org (created at bootstrap); login users must live here
+  redirectUris:
+    - "https://headplane.${BASE_DOMAIN}/admin/oidc/callback"
+  grantTypes: [authorization_code, refresh_token]
+  tokenFormat: JWT-Standard       # standard OIDC claims only; avoids the plain-JWT address-claim trap (see docs/sso-app-author-guide.md)
+  expireInHours: 168              # 7 days
+  output:
+    secretName: headplane-sso     # written to THIS namespace (headscale)
+    keys:
+      clientId: OIDC_CLIENT_ID       # unused by headplane (client_id is a literal in config.yaml)
+      clientSecret: OIDC_CLIENT_SECRET  # mounted as /etc/headplane/oidc/client_secret via client_secret_path
+      issuer: OIDC_ISSUER            # unused by headplane (issuer uses ${BASE_DOMAIN} substitute)
+  casdoorPolicy: retain           # keep the Casdoor app if this CR is deleted
