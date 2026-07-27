@@ -64,7 +64,7 @@ spec:
         dependsOn:
           - name: traefik
           - name: storage
-          - name: casdoor-sso
+          - name: casdoor-sso-controller
         force: true
         interval: 10m
         retryInterval: 2m
