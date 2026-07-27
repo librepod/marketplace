@@ -26,12 +26,26 @@ headscale:
   # Read-only access to the Headscale config file (shared ConfigMap from base).
   config_path: "/etc/headscale/config.yaml"
   config_strict: true
+  # Headscale API key — REQUIRED for headplane to function and for OIDC
+  # (it reads headscale users to link OIDC identities). Read from a file via
+  # headplane's whitelisted `api_key_path` secret path, mounted from
+  # Secret/headscale-api-key. That Secret is created once per deployment
+  # (manual one-time setup, NOT committed) — see deployment.yaml for the
+  # procedure. The volume is `optional: true` so headplane still boots before
+  # the key exists; SSO is simply inactive until it is added.
+  api_key_path: "/etc/headscale/api_key"
 
-# OIDC — disabled for now, will be enabled after Casdoor integration.
-# oidc:
-#   enabled: true
-#   issuer: "https://id.${BASE_DOMAIN:=libre.pod}"
-#   client_id: "${OIDC_CLIENT_ID}"
-#   client_secret_path: "/etc/headplane/oidc_client_secret"
-#   scope: "openid profile email"
-#   use_pkce: true
+# OIDC single sign-on (native headplane support — no oauth2-proxy needed).
+# client_id is a literal ("headplane", matching SSOClient.spec.clientId); the
+# client secret is read from a file via client_secret_path, mounted from
+# Secret/headplane-sso which the casdoor-sso-controller provisions from the
+# SSOClient CR in this directory (ssoclient.yaml). issuer uses ${BASE_DOMAIN}
+# (standard Flux postBuild.substitute); headplane auto-discovers endpoints
+# from /.well-known/openid-configuration. PKCE is S256 (headplane's only mode).
+oidc:
+  enabled: true
+  issuer: "https://id.${BASE_DOMAIN:=libre.pod}"
+  client_id: "headplane"
+  client_secret_path: "/etc/headplane/oidc/client_secret"
+  scope: "openid profile email"
+  use_pkce: true

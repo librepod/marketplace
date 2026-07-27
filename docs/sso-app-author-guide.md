@@ -149,14 +149,18 @@ The Secret name is `spec.output.secretName` and the keys are the
 (wherever it lives) pointing at the same callback URL as `spec.redirectUris` —
 OIDC requires them to match.
 
-## 3. Order your app after `casdoor-sso`
+## 3. Order your app after `casdoor-sso-controller`
 
 Add a Flux dependency so your app's Kustomization reconciles after the CRD and
-controller exist (otherwise the CR is briefly rejected until Flux retries):
+controller exist (otherwise the CR is briefly rejected until Flux retries). The
+target is the **Flux Kustomization** named `casdoor-sso-controller` — **not** a
+bare `casdoor-sso` (no such Kustomization exists; it hard-fails
+`DependencyNotReady` and blocks the whole app tree). The controller *runs* in
+namespace `casdoor-sso`, but `dependsOn` references the Kustomization name:
 
 ```yaml
 dependsOn:
-  - name: casdoor-sso
+  - name: casdoor-sso-controller
 ```
 
 ## 4. Trust the private CA (mount the LibrePod root CA)
@@ -330,6 +334,29 @@ the new value.
 
 Sign-up is disabled by platform policy (`enableSignUp: false`); manage users via
 the (forthcoming) user-management app rather than open registration.
+
+## Non-controller secrets
+
+The SSOClient controller provisions the OIDC **client** credentials only. Some
+apps additionally need a secret it cannot provision — for example **Headplane**
+requires a Headscale API key (`headscale.api_key` / `api_key_path`) to read
+Headscale users and link OIDC identities. Provision such secrets out-of-band as
+a per-deployment Secret in the app namespace (not committed), and expose them
+the way the app prefers:
+
+- If the app reads a secret from a **file** via a `_path` config key (Headplane's
+  `api_key_path` is a whitelisted secret path), mount the Secret as a file.
+- Mark the volume `optional: true` if the pod should boot before the manual
+  secret exists (SSO stays inactive until it is added and the pod is restarted).
+
+```bash
+# Headplane example — mint a long-lived Headscale API key, store it, restart:
+API_KEY=$(kubectl exec deploy/headscale -n headscale -c headscale -- \
+            headscale apikeys create --expiration 999d)
+kubectl -n headscale create secret generic headscale-api-key \
+            --from-literal=api_key="$API_KEY"
+kubectl rollout restart deploy/headplane -n headscale
+```
 
 ---
 

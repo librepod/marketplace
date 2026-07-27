@@ -53,6 +53,23 @@ spec:
               mountPath: /etc/headscale/config.yaml
               subPath: config.yaml
               readOnly: true
+            # OIDC client secret — read via oidc.client_secret_path in config.yaml.
+            # Secret/headplane-sso is provisioned by casdoor-sso-controller from
+            # the SSOClient CR (ssoclient.yaml). Only the clientSecret key is
+            # projected, as "client_secret".
+            - name: oidc-secret
+              mountPath: /etc/headplane/oidc
+              readOnly: true
+            # Headscale API key — read via headscale.api_key_path in config.yaml.
+            # Secret/headscale-api-key is created once per deployment (manual;
+            # see the setup comment in the volumes section below). Mounted via
+            # subPath into /etc/headscale/ alongside the shared config. The pod
+            # boots even before the Secret exists (volume is optional); create
+            # the Secret then rollout restart to activate SSO.
+            - name: headscale-api-key
+              mountPath: /etc/headscale/api_key
+              subPath: api_key
+              readOnly: true
           # Headplane has no HTTP health endpoint — use TCP socket probes.
           # The image includes /bin/hp_healthcheck for Docker HEALTHCHECK,
           # but TCP probes are simpler and don't require knowing the exact URL.
@@ -88,3 +105,24 @@ spec:
         - name: headscale-config
           configMap:
             name: headscale-config
+        # OIDC client secret (consumed via oidc.client_secret_path).
+        - name: oidc-secret
+          secret:
+            secretName: headplane-sso
+            items:
+              - key: OIDC_CLIENT_SECRET
+                path: client_secret
+        # Headscale API key (consumed via headscale.api_key_path).
+        # OPTIONAL: created manually per-deployment, NOT committed. One-time setup:
+        #   API_KEY=$(kubectl exec deploy/headscale -n headscale -c headscale -- \
+        #               headscale apikeys create --expiration 999d)
+        #   kubectl -n headscale create secret generic headscale-api-key \
+        #               --from-literal=api_key="$API_KEY"
+        #   kubectl rollout restart deploy/headplane -n headscale
+        - name: headscale-api-key
+          secret:
+            secretName: headscale-api-key
+            optional: true
+            items:
+              - key: api_key
+                path: api_key

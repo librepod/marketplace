@@ -44,3 +44,4 @@ components:
 patches:
 - path: patch-storage-class.yaml
 - path: deployment-ca-patch.yaml
+- path: headplane-ca-patch.yaml
