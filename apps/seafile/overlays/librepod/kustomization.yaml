@@ -27,6 +27,10 @@ configMapGenerator:
 # Patch storageClassName onto every PVC (base/components stay portable).
 patches:
 - path: ./patch-storage-class.yaml
+# Inject the LibrePod root-CA trust (init container + volumes) into the
+# Deployment. Separate from base so every SSO app carries CA trust the same way
+# (see deployment-ca-patch.yaml).
+- path: deployment-ca-patch.yaml
 
 # Image tag transformers
 images:

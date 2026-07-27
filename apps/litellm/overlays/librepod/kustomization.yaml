@@ -33,3 +33,7 @@ patches:
 - path: patch-storage.yaml
   target:
     kind: PersistentVolumeClaim
+# Inject the LibrePod root+intermediate CA trust (init container + volumes)
+# into the Deployment. Separate from base so every SSO app carries CA trust the
+# same way (see deployment-ca-patch.yaml).
+- path: deployment-ca-patch.yaml

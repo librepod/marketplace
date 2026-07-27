@@ -1,0 +1,65 @@
+# Strategic-merge patch: give the litellm pod trust for the private LibrePod
+# Intermediate CA so its server-side OIDC token/userinfo exchange to
+# https://id.${BASE_DOMAIN} passes TLS verification.
+#
+# Canonical LibrePod CA-trust pattern (same as vaultwarden/headscale/seafile):
+# an init container (alpine) fuses the system CA bundle with the LibrePod root
+# AND intermediate CA (from configMap/step-certificates-certs, Reflector-
+# replicated from step-ca), then the litellm container mounts the merged bundle
+# over the system bundle path (/etc/ssl/certs/ca-certificates.crt). litellm
+# (Python) reads the bundle at that default path, so no SSL_CERT_FILE env var is
+# needed here — the in-place overwrite is enough.
+#
+# This lives in the overlay (not base) so every SSO app carries its CA trust the
+# same way: a deployment-ca-patch.yaml strategic-merge patch. Mirrors
+# headscale/vaultwarden/seafile.
+#
+# PLATFORM DEPENDENCY: configMap/step-certificates-certs must exist in THIS
+# namespace — see the Reflector stub in overlays/librepod/kustomization.yaml
+# (it reflects step-ca/step-certificates-certs, carrying root_ca.crt +
+# intermediate_ca.crt).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: merge-ca-bundle
+          image: alpine:3.19
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              cat /etc/ssl/certs/ca-certificates.crt > /mnt/merged-ca/ca-certificates.crt
+              echo "" >> /mnt/merged-ca/ca-certificates.crt
+              echo "# LibrePod Root CA" >> /mnt/merged-ca/ca-certificates.crt
+              cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+              echo "" >> /mnt/merged-ca/ca-certificates.crt
+              echo "# LibrePod Intermediate CA" >> /mnt/merged-ca/ca-certificates.crt
+              cat /mnt/root-ca/intermediate_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+          volumeMounts:
+            - name: root-ca-cert
+              mountPath: /mnt/root-ca
+              readOnly: true
+            - name: merged-ca-bundle
+              mountPath: /mnt/merged-ca
+      containers:
+        - name: litellm
+          volumeMounts:
+            - name: merged-ca-bundle
+              mountPath: /etc/ssl/certs/ca-certificates.crt
+              subPath: ca-certificates.crt
+              readOnly: true
+      volumes:
+        - name: root-ca-cert
+          configMap:
+            name: step-certificates-certs
+            items:
+              - key: root_ca.crt
+                path: root_ca.crt
+              - key: intermediate_ca.crt
+                path: intermediate_ca.crt
+        - name: merged-ca-bundle
+          emptyDir: {}

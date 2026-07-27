@@ -8,30 +8,6 @@ spec:
     type: Recreate
   template:
     spec:
-      # Merge the LibrePod private CA (step-certificates root + intermediate)
-      # into the system CA bundle before litellm starts, so the OIDC
-      # token/userinfo calls litellm makes to https://id.${BASE_DOMAIN}/
-      # trust the cluster's private CA. Same pattern as open-webui/vaultwarden.
-      initContainers:
-        - name: merge-ca-bundle
-          image: alpine:3.19
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              set -e
-              cat /etc/ssl/certs/ca-certificates.crt > /mnt/merged-ca/ca-certificates.crt
-              echo "" >> /mnt/merged-ca/ca-certificates.crt
-              echo "# LibrePod Root CA" >> /mnt/merged-ca/ca-certificates.crt
-              cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-certificates.crt
-              echo "" >> /mnt/merged-ca/ca-certificates.crt
-              echo "# LibrePod Intermediate CA" >> /mnt/merged-ca/ca-certificates.crt
-              cat /mnt/root-ca/intermediate_ca.crt >> /mnt/merged-ca/ca-certificates.crt
-          volumeMounts:
-            - name: root-ca-cert
-              mountPath: /mnt/root-ca
-              readOnly: true
-            - name: merged-ca-bundle
-              mountPath: /mnt/merged-ca
       containers:
         - name: litellm
           image: litellm/litellm
@@ -77,11 +53,6 @@ spec:
               subPath: config.yaml
             - name: data
               mountPath: /root/.config
-            # Overrides the system CA bundle with root+intermediate merged above.
-            - name: merged-ca-bundle
-              mountPath: /etc/ssl/certs/ca-certificates.crt
-              subPath: ca-certificates.crt
-              readOnly: true
       volumes:
         - name: config
           configMap:
@@ -89,18 +60,3 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: litellm-data
-        # LibrePod private CA. The step-certificates-certs ConfigMap is NOT
-        # auto-distributed; each app self-services it via a Reflector "reflects"
-        # stub in its overlay (see overlays/librepod/kustomization.yaml
-        # configMapGenerator, mirroring open-webui). Reflector then populates
-        # root_ca.crt + intermediate_ca.crt here from namespace step-ca.
-        - name: root-ca-cert
-          configMap:
-            name: step-certificates-certs
-            items:
-              - key: root_ca.crt
-                path: root_ca.crt
-              - key: intermediate_ca.crt
-                path: intermediate_ca.crt
-        - name: merged-ca-bundle
-          emptyDir: {}
