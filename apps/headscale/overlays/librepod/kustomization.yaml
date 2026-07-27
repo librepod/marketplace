@@ -40,6 +40,7 @@ images:
 components:
   - ../../components/frp-upstreams
   - ../../components/headplane
+  - ../../components/bootstrap-api-key
 
 patches:
 - path: patch-storage-class.yaml

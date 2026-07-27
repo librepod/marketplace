@@ -61,14 +61,12 @@ spec:
               mountPath: /etc/headplane/oidc
               readOnly: true
             # Headscale API key — read via oidc.headscale_api_key_path in
-            # config.yaml (v0.6.3 field name). Secret/headscale-api-key is
-            # created once per deployment (manual; see the setup comment in the
-            # volumes section below). Mounted via subPath into /etc/headscale/.
-            # NOTE: the volume is optional so the Deployment itself applies
-            # before the Secret exists, but headplane's config validator
-            # CRASHES (CrashLoopBackOff) without the key once OIDC is enabled —
-            # so in practice you must create the Secret, then rollout restart,
-            # before headplane will serve.
+            # config.yaml (v0.6.3 field name). Mounted via subPath into
+            # /etc/headscale/. The Secret is provisioned automatically on first
+            # install by the bootstrap-api-key component (a post-deploy Job that
+            # mints the key). The volume is REQUIRED (see below), so this pod
+            # waits in ContainerCreating — NOT CrashLoopBackOff — until the Job
+            # has created the Secret, then starts cleanly. No manual restart.
             - name: headscale-api-key
               mountPath: /etc/headscale/api_key
               subPath: api_key
@@ -116,16 +114,17 @@ spec:
               - key: OIDC_CLIENT_SECRET
                 path: client_secret
         # Headscale API key (consumed via oidc.headscale_api_key_path).
-        # OPTIONAL: created manually per-deployment, NOT committed. One-time setup:
-        #   API_KEY=$(kubectl exec deploy/headscale -n headscale -c headscale -- \
-        #               headscale apikeys create --expiration 999d)
-        #   kubectl -n headscale create secret generic headscale-api-key \
-        #               --from-literal=api_key="$API_KEY"
-        #   kubectl rollout restart deploy/headplane -n headscale
+        # REQUIRED: provisioned automatically on first install by the
+        # bootstrap-api-key component (components/bootstrap-api-key/), a Job that
+        # waits for headscale, mints a key via `headscale apikeys create`, and
+        # writes this Secret. Because this volume is required, the headplane pod
+        # waits in ContainerCreating until the Secret exists (no CrashLoopBackOff,
+        # no manual rollout restart). To re-provision — e.g. after a headscale DB
+        # reset invalidates the key — delete the bootstrap Job AND this Secret,
+        # then `flux reconcile`: Flux recreates the Job and mints a fresh key.
         - name: headscale-api-key
           secret:
             secretName: headscale-api-key
-            optional: true
             items:
               - key: api_key
                 path: api_key
