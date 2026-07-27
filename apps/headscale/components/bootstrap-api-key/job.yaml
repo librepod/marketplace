@@ -27,11 +27,14 @@ spec:
       serviceAccountName: headscale-bootstrap-api-key
       containers:
         - name: bootstrap-api-key
-          # bitnami/kubectl ships kubectl matching the cluster version (1.34)
-          # and runs as a non-root user. This avoids the download-at-runtime
-          # dance (busybox wget redirect handling / apk-needs-root) that rolling
-          # our own on alpine would require.
-          image: bitnami/kubectl:1.34
+          # alpine:3.19 (already pulled cluster-wide for the CA-bundle init
+          # containers) + a runtime kubectl download — the repo's bootstrap
+          # convention (apps/step-certificates/.../job.sh). We avoid third-party
+          # kubectl images: bitnami/kubectl:1.34 is unpublished and the bitnami
+          # catalog has been churning. busybox wget handles dl.k8s.io fine
+          # (verified on the cluster). The script pins kubectl to the stable-1.34
+          # channel to match the server's minor version.
+          image: alpine:3.19
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "/scripts/bootstrap-api-key.sh"]
           envFrom:
@@ -39,6 +42,7 @@ spec:
                 name: cm-headscale-bootstrap-api-key
           securityContext:
             runAsNonRoot: true
+            runAsUser: 1000
             allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]

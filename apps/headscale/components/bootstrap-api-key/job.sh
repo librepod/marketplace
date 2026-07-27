@@ -21,8 +21,32 @@ set -eu
 NS="${HEADSCALE_NAMESPACE:-headscale}"
 EXP="${API_KEY_EXPIRATION:-999d}"
 
+# The alpine image has no kubectl — download the one matching the cluster's
+# minor version (stable-1.34 channel) from the official source. (We avoid
+# third-party kubectl images: bitnami/kubectl:1.34 is unpublished and the
+# bitnami catalog has been churning. busybox wget handles dl.k8s.io fine.)
+if ! command -v kubectl >/dev/null 2>&1; then
+  echo "Downloading kubectl..."
+  KV="$(wget -qO- https://dl.k8s.io/release/stable-1.34.txt)"
+  wget -qO /tmp/kubectl "https://dl.k8s.io/release/${KV}/bin/linux/amd64/kubectl"
+  chmod +x /tmp/kubectl
+  export PATH=/tmp:$PATH
+fi
+
 echo "Waiting for headscale Deployment to be Available..."
-kubectl wait deploy/headscale -n "$NS" --for=condition=Available --timeout=300s
+# Poll with `kubectl get` (not `kubectl wait`, which needs list/watch — RBAC we
+# deliberately don't grant; resourceName-scoped get is enough and tighter).
+AVAIL=""
+for i in $(seq 1 60); do
+  AVAIL="$(kubectl get deploy/headscale -n "$NS" -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null)"
+  [ "$AVAIL" = "True" ] && break
+  sleep 5
+done
+if [ "$AVAIL" != "True" ]; then
+  echo "ERROR: headscale Deployment never became Available" >&2
+  exit 1
+fi
+echo "headscale is Available."
 
 # Idempotency: a re-run (e.g. after this Job was deleted and recreated by Flux)
 # must NOT mint a second key. If the Secret exists, assume the key is valid.
