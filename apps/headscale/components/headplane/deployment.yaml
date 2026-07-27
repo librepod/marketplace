@@ -60,12 +60,15 @@ spec:
             - name: oidc-secret
               mountPath: /etc/headplane/oidc
               readOnly: true
-            # Headscale API key — read via headscale.api_key_path in config.yaml.
-            # Secret/headscale-api-key is created once per deployment (manual;
-            # see the setup comment in the volumes section below). Mounted via
-            # subPath into /etc/headscale/ alongside the shared config. The pod
-            # boots even before the Secret exists (volume is optional); create
-            # the Secret then rollout restart to activate SSO.
+            # Headscale API key — read via oidc.headscale_api_key_path in
+            # config.yaml (v0.6.3 field name). Secret/headscale-api-key is
+            # created once per deployment (manual; see the setup comment in the
+            # volumes section below). Mounted via subPath into /etc/headscale/.
+            # NOTE: the volume is optional so the Deployment itself applies
+            # before the Secret exists, but headplane's config validator
+            # CRASHES (CrashLoopBackOff) without the key once OIDC is enabled —
+            # so in practice you must create the Secret, then rollout restart,
+            # before headplane will serve.
             - name: headscale-api-key
               mountPath: /etc/headscale/api_key
               subPath: api_key
@@ -112,7 +115,7 @@ spec:
             items:
               - key: OIDC_CLIENT_SECRET
                 path: client_secret
-        # Headscale API key (consumed via headscale.api_key_path).
+        # Headscale API key (consumed via oidc.headscale_api_key_path).
         # OPTIONAL: created manually per-deployment, NOT committed. One-time setup:
         #   API_KEY=$(kubectl exec deploy/headscale -n headscale -c headscale -- \
         #               headscale apikeys create --expiration 999d)

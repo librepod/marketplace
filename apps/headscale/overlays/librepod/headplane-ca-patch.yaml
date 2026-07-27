@@ -10,10 +10,18 @@
 # This is the SAME canonical LibrePod CA-trust pattern as
 # deployment-ca-patch.yaml (which covers the headscale control server) and
 # vaultwarden/open-webui/seafile: an alpine init container fuses the system
-# CA bundle with the LibrePod root CA, the app container mounts the merged
-# bundle over the system bundle, and SSL_CERT_FILE points Go's crypto/tls
-# at it. headplane is a Go app (ghcr.io/tale/headplane) so SSL_CERT_FILE is
-# honored by its standard crypto/x509 cert pool.
+# CA bundle with the LibrePod root CA, and the app container mounts the merged
+# bundle over the system bundle.
+#
+# IMPORTANT — headplane is a NODE.JS app (ghcr.io/tale/headplane), NOT Go.
+# Node's TLS stack ignores SSL_CERT_FILE entirely; without the env below,
+# headplane's server-side OIDC discovery to https://id.<domain> fails with
+# "Failed to reach OIDC provider for discovery" (x509 unknown authority) and
+# the OIDC connector never initializes. Node trusts extra CAs via
+# NODE_EXTRA_CA_CERTS, so we point it at the SAME merged bundle. SSL_CERT_FILE
+# is kept too (harmless, and matches the cluster-wide convention so a future
+# image swap to a Go binary would still work). See headplane's own TLS docs:
+# https://headplane.net/configuration/tls#custom-certificate-authorities
 #
 # PLATFORM DEPENDENCY: configMap/step-certificates-certs must exist in THIS
 # namespace (headscale) — see the Reflector stub in overlays/librepod/
@@ -56,6 +64,11 @@ spec:
               subPath: ca-certificates.crt
               readOnly: true
           env:
+            # Node.js (headplane's runtime) honors NODE_EXTRA_CA_CERTS, NOT
+            # SSL_CERT_FILE — this is the one that actually makes OIDC
+            # discovery trust the private LibrePod CA. See the file header.
+            - name: NODE_EXTRA_CA_CERTS
+              value: /etc/ssl/certs/ca-certificates.crt
             - name: SSL_CERT_FILE
               value: /etc/ssl/certs/ca-certificates.crt
       volumes:

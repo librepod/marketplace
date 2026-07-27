@@ -26,14 +26,6 @@ headscale:
   # Read-only access to the Headscale config file (shared ConfigMap from base).
   config_path: "/etc/headscale/config.yaml"
   config_strict: true
-  # Headscale API key — REQUIRED for headplane to function and for OIDC
-  # (it reads headscale users to link OIDC identities). Read from a file via
-  # headplane's whitelisted `api_key_path` secret path, mounted from
-  # Secret/headscale-api-key. That Secret is created once per deployment
-  # (manual one-time setup, NOT committed) — see deployment.yaml for the
-  # procedure. The volume is `optional: true` so headplane still boots before
-  # the key exists; SSO is simply inactive until it is added.
-  api_key_path: "/etc/headscale/api_key"
 
 # OIDC single sign-on (native headplane support — no oauth2-proxy needed).
 # client_id is a literal ("headplane", matching SSOClient.spec.clientId); the
@@ -49,3 +41,19 @@ oidc:
   client_secret_path: "/etc/headplane/oidc/client_secret"
   scope: "openid profile email"
   use_pkce: true
+  # Headscale API key — REQUIRED for headplane to even start when OIDC is
+  # enabled. headplane reads headscale users to link OIDC identities, and its
+  # config validator fails HARD on a missing key (CrashLoopBackOff), so unlike
+  # a plain optional mount the pod will not serve until the Secret exists.
+  # Read from a file via headplane's `_path` secret-path pattern, mounted from
+  # Secret/headscale-api-key at /etc/headscale/api_key (see deployment.yaml).
+  # That Secret is created once per deployment (manual one-time setup, NOT
+  # committed) — mint it then `kubectl rollout restart deploy/headplane`.
+  #
+  # FIELD LOCATION: this lives under `oidc:` as `headscale_api_key_path` in
+  # headplane v0.6.3. The `headscale.api_key_path` spelling (recommended in
+  # the current headplane.net docs) was introduced in a release AFTER 0.6.3
+  # and is silently ignored by 0.6.3 — using it makes headplane crash with
+  # "oidc.headscale_api_key must be a string (was missing)". Do not "fix" this
+  # to headscale.api_key_path without also bumping the image past 0.6.3.
+  headscale_api_key_path: "/etc/headscale/api_key"
