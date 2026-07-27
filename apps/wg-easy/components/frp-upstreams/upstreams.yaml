@@ -23,7 +23,9 @@ spec:
     # here.
     host: wg-easy-wireguard.wg-easy.svc.cluster.local
     port: 51820
-    # Public port — the port allocated on the FRP server.  WireGuard
-    # clients connect to FRP_SERVER_ADDR:51820.
+    # Public port — allocated on the FRP server.  WireGuard clients connect
+    # to FRP_SERVER_ADDR:<port>.  Defaults to 51820.  Set FRP_REMOTE_PORT=0
+    # via postBuild.substitute to let the relay auto-assign a port (then
+    # read the assigned port from frpc logs / the frps dashboard).
     server:
-      port: 51820
+      port: ${FRP_REMOTE_PORT:-51820}
