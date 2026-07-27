@@ -14,7 +14,12 @@
 apiVersion: frp.zufardhiyaulhaq.com/v1alpha1
 kind: Upstream
 metadata:
-  name: wg-easy-wireguard
+  # Proxy name registered with the FRP server (frps). MUST be unique per relay
+  # across all devices sharing that relay -- frps rejects a second client
+  # registering the same proxy name ("proxy ... already exists"). Defaults to
+  # wg-easy-wireguard; set WIREGUARD_PROXY_NAME per device (e.g.
+  # wg-easy-wireguard-<device>) when two devices share a relay.
+  name: ${WIREGUARD_PROXY_NAME:-wg-easy-wireguard}
 spec:
   client: libreport
   udp:

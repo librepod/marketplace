@@ -35,6 +35,10 @@ spec:
         description: "Public port on the FRP relay. Default 51820. Set to 0 to let the relay auto-assign (discover the port in frpc logs / frps dashboard)."
         type: string
         default: "51820"
+      - name: WIREGUARD_PROXY_NAME
+        description: "FRP proxy name (the Upstream CR name). Must be unique per relay when devices share a relay. Default wg-easy-wireguard; set wg-easy-wireguard-<device> to share."
+        type: string
+        default: "wg-easy-wireguard"
 
   dependencies:
     required:
@@ -85,6 +89,7 @@ spec:
             BASE_DOMAIN: "${BASE_DOMAIN}"
             FRP_SERVER_ADDR: "${FRP_SERVER_ADDR}"
             FRP_REMOTE_PORT: "${FRP_REMOTE_PORT}"
+            WIREGUARD_PROXY_NAME: "${WIREGUARD_PROXY_NAME}"
             TZ: "${TZ}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
