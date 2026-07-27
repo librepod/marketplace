@@ -23,5 +23,6 @@ resources:
   - pvc.yaml
   - service.yaml
   - deployment.yaml
+  - middleware-root-redirect.yaml
   - ingressroute.yaml
   - ssoclient.yaml

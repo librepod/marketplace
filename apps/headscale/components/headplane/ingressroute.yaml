@@ -11,6 +11,10 @@ spec:
   routes:
     - kind: Rule
       match: Host(`headplane.${BASE_DOMAIN:=libre.pod}`)
+      middlewares:
+        # 302 the bare root / to /admin — headplane serves its whole UI under
+        # /admin, so without this a visit to the host root gets a bare 404.
+        - name: headplane-root-redirect
       services:
         - name: headplane
           port: 80
