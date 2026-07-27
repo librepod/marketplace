@@ -31,6 +31,10 @@ spec:
         description: "Timezone for the wg-easy server (IANA name, e.g. Europe/Moscow)"
         type: string
         default: "UTC"
+      - name: FRP_REMOTE_PORT
+        description: "Public port on the FRP relay. Default 51820. Set to 0 to let the relay auto-assign (discover the port in frpc logs / frps dashboard)."
+        type: string
+        default: "51820"
 
   dependencies:
     required:
@@ -80,6 +84,7 @@ spec:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
             FRP_SERVER_ADDR: "${FRP_SERVER_ADDR}"
+            FRP_REMOTE_PORT: "${FRP_REMOTE_PORT}"
             TZ: "${TZ}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
