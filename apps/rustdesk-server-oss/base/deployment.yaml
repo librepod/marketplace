@@ -7,7 +7,7 @@
 #
 # hostNetwork: hbbs/hbbr bind the canonical ports (21115-21119) directly on
 # the host, so clients reach the server at the node's tailnet address (e.g.
-# <node>.tailnet.libre.pod:21116) without a ClusterIP hop or subnet-route
+# <node>.ts.libre.pod:21116) without a ClusterIP hop or subnet-route
 # advertising — same pattern as wg-easy. The ClusterIP Service is retained so
 # the in-cluster DNS name still resolves (its endpoints become the node IP);
 # both the hostname and the 10.43.x ClusterIP keep working.
