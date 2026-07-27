@@ -159,6 +159,151 @@ dependsOn:
   - name: casdoor-sso
 ```
 
+## 4. Trust the private CA (mount the LibrePod root CA)
+
+The app makes **server-side** HTTPS calls to `https://id.<BASE_DOMAIN>` — OIDC
+discovery, the token exchange, and the userinfo endpoint. That certificate is
+issued by the cluster's internal `StepClusterIssuer`, **not** a public CA, so
+the app's TLS stack rejects it:
+
+- Go: `x509: certificate signed by unknown authority`
+- Node: `unable to get local issuer certificate`
+- Python `requests`: `SSLCertVerificationError`
+
+Every SSO app therefore merges the LibrePod root CA into its trust bundle. The
+wiring lives in the overlay and has two parts: **(1)** replicate the CA into the
+app namespace, and **(2)** fuse it into the pod's trust bundle and point the app
+at it.
+
+### (1) Replicate the CA into the namespace (Reflector stub)
+
+The CA lives in `ConfigMap/step-certificates-certs` in namespace `step-ca` and
+is **not** auto-distributed. Each app pulls a copy via a Reflector `reflects`
+stub in its overlay `kustomization.yaml` — identical for every app:
+
+```yaml
+configMapGenerator:
+  - name: step-certificates-certs
+    options:
+      disableNameSuffixHash: true              # REQUIRED — see below
+      annotations:
+        reflector.v1.k8s.emberstack.com/reflects: "step-ca/step-certificates-certs"
+```
+
+> `disableNameSuffixHash: true` is **required**, not cosmetic. The volume mounts
+> `configMap/step-certificates-certs` by this exact name, and Reflector keys its
+> replication off the `reflects` annotation on this exact object. A kustomize
+> hash suffix survives mechanically (kustomize rewrites the volume ref), but any
+> future edit to the generator re-hashes the object → prune + recreate an empty
+> stub → a window where the pod can't mount the CA → OIDC startup failure.
+
+### (2) Fuse + mount the CA, and point the app at it
+
+An `alpine` init container concatenates the system CA bundle with the LibrePod
+root CA (and, for some apps, the intermediate) into an `emptyDir`, which the
+main container mounts over `/etc/ssl/certs/ca-certificates.crt`. How you express
+that depends on the workload:
+
+**Raw `Deployment`** (headscale, vaultwarden, seafile, litellm) — a strategic-
+merge patch in the overlay, `overlays/librepod/deployment-ca-patch.yaml`:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: <app>
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: merge-ca-bundle
+          image: alpine:3.19
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              cat /etc/ssl/certs/ca-certificates.crt > /mnt/merged-ca/ca-certificates.crt
+              echo "" >> /mnt/merged-ca/ca-certificates.crt
+              echo "# LibrePod Root CA" >> /mnt/merged-ca/ca-certificates.crt
+              cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+              # If the app also needs the intermediate (litellm, immich), append it:
+              # echo "" >> /mnt/merged-ca/ca-certificates.crt
+              # echo "# LibrePod Intermediate CA" >> /mnt/merged-ca/ca-certificates.crt
+              # cat /mnt/root-ca/intermediate_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+          volumeMounts:
+            - { name: root-ca-cert, mountPath: /mnt/root-ca, readOnly: true }
+            - { name: merged-ca-bundle, mountPath: /mnt/merged-ca }
+      containers:
+        - name: <app>
+          volumeMounts:
+            - name: merged-ca-bundle
+              mountPath: /etc/ssl/certs/ca-certificates.crt
+              subPath: ca-certificates.crt
+              readOnly: true
+      volumes:
+        - name: root-ca-cert
+          configMap:
+            name: step-certificates-certs
+            items:
+              - { key: root_ca.crt, path: root_ca.crt }
+              # - { key: intermediate_ca.crt, path: intermediate_ca.crt }   # if appended above
+        - name: merged-ca-bundle
+          emptyDir: {}
+```
+
+Register it under `patches:` in the overlay `kustomization.yaml`. The trust *env
+vars* (next subsection) go wherever the app's other env vars live — in the
+Deployment `env:` (headscale, vaultwarden) or the `envFrom` ConfigMap (seafile's
+`base/seafile.env`, litellm's `base/litellm.env`) — **not** necessarily in this
+patch.
+
+**`HelmRelease`** (immich, open-webui, oauth2-proxy) — there is **no generic
+snippet**: each chart names its init-container/volume hooks differently, so copy
+the values block from the closest existing app:
+
+| App | Chart schema family | Copy from |
+|-----|---------------------|-----------|
+| immich | bjw-s common v5 (`controllers.main`, `persistence.advancedMounts`) | `apps/immich/overlays/librepod/patch-helmrelease.yaml` |
+| open-webui | open-webui chart (`volumes`, `volumeMounts.initContainer`/`.container`, `extraInitContainers`) | `apps/open-webui/overlays/librepod/helmrelease.yaml` |
+| oauth2-proxy | oauth2-proxy chart (`extraVolumes`, `extraVolumeMounts`, `extraInitContainers`) | `apps/oauth2-proxy/overlays/librepod/helmrelease.yaml` |
+
+The init-container *script* and the two volume names (`root-ca-cert`,
+`merged-ca-bundle`) are identical across all of them — only the surrounding
+Helm-values shape differs.
+
+### Which trust env var(s)?
+
+The merged bundle is mounted at the system bundle path, but most runtimes do
+**not** read that path by default — they need an env var pointed at it:
+
+| Env var(s) to set | When | Apps |
+|-------------------|------|------|
+| `SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt` | Go, or Python using `ssl`/`httpx` | headscale, vaultwarden, oauth2-proxy, open-webui |
+| `SSL_CERT_FILE` **and** `REQUESTS_CA_BUNDLE` | Python using `requests` (honors `REQUESTS_CA_BUNDLE`, not `SSL_CERT_FILE`) | seafile, litellm |
+| `SSL_CERT_FILE` **and** `NODE_EXTRA_CA_CERTS` | Node.js (`tls`/`fetch` ignores `SSL_CERT_FILE`) | immich |
+
+> Rule of thumb: always set `SSL_CERT_FILE`; add `REQUESTS_CA_BUNDLE` for a
+> Python `requests`-based app and `NODE_EXTRA_CA_CERTS` for a Node app. A
+> missing env var surfaces as a *runtime* TLS error after the pod boots
+> (discovery/token exchange fails) — distinct from the boot-time `x509` crash
+> you get when no CA is mounted at all.
+
+### Gotcha: strategic-merge reorders list items (raw-`Deployment` carrier)
+
+A kustomize strategic-merge patch emits **patch-new list items before the
+Deployment's existing sibling items**. If your base `Deployment` already has its
+own init containers or volumes (e.g. seafile's `set-ownership` init container, or
+`config`/`data` volumes), the CA items jump to the front of `initContainers` /
+`volumeMounts` / `volumes`. This is **functionally safe** — Kubernetes treats
+`volumeMounts`/`volumes` order as irrelevant, and the existing init containers
+are independent of the CA merge — but it is **not byte-identical**: the
+pod-template hash changes, so the pod restarts once on the next reconcile.
+
+It only bites apps whose base has sibling items: headscale/vaultwarden have none
+(byte-identical); seafile/litellm do (one-time restart). If a zero-restart
+refactor matters, use a JSON6902 *append* patch (`op: add ... /-`) instead — at
+the cost of a second patch mechanism.
+
 ## Verifying it worked
 
 ```bash

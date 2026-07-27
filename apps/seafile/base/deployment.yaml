@@ -22,22 +22,6 @@ spec:
           volumeMounts:
             - name: seafile-data
               mountPath: /shared
-        - name: merge-ca-bundle
-          image: alpine:3.19
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              set -e
-              cat /etc/ssl/certs/ca-certificates.crt > /mnt/merged-ca/ca-certificates.crt
-              echo "" >> /mnt/merged-ca/ca-certificates.crt
-              echo "# LibrePod Root CA" >> /mnt/merged-ca/ca-certificates.crt
-              cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-certificates.crt
-          volumeMounts:
-            - name: root-ca-cert
-              mountPath: /mnt/root-ca
-              readOnly: true
-            - name: merged-ca-bundle
-              mountPath: /mnt/merged-ca
       containers:
         - name: seafile
           image: seafileltd/seafile-mc
@@ -111,10 +95,6 @@ spec:
           volumeMounts:
             - name: seafile-data
               mountPath: /shared
-            - name: merged-ca-bundle
-              mountPath: /etc/ssl/certs/ca-certificates.crt
-              subPath: ca-certificates.crt
-              readOnly: true
           resources:
             requests:
               memory: "256Mi"
@@ -126,11 +106,3 @@ spec:
         - name: seafile-data
           persistentVolumeClaim:
             claimName: seafile-data
-        - name: root-ca-cert
-          configMap:
-            name: step-certificates-certs
-            items:
-              - key: root_ca.crt
-                path: root_ca.crt
-        - name: merged-ca-bundle
-          emptyDir: {}
