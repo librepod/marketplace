@@ -3,7 +3,15 @@ kind: Job
 metadata:
   name: headscale-bootstrap-api-key
   labels:
-    app.kubernetes.io/name: headscale
+    # Deliberately NOT app.kubernetes.io/name: headscale. That label is the
+    # headscale Deployment's pod selector (base/kustomization.yaml sets it via
+    # labels.includeSelectors: true). A Job pod carrying it gets "adopted" by
+    # that selector, so `kubectl exec deploy/headscale` (run by job.sh to mint
+    # the API key) can resolve nondeterministically to THIS Job's own pod —
+    # which has no headscale container — and fail with
+    # "container headscale is not valid for pod headscale-bootstrap-api-key-*".
+    # The component label below carries no selector, so it is harmless and
+    # still identifies the pod's purpose. See memory: bootstrap-job-pattern.
     app.kubernetes.io/component: bootstrap-api-key
 spec:
   backoffLimit: 3
@@ -20,7 +28,9 @@ spec:
     metadata:
       name: headscale-bootstrap-api-key
       labels:
-        app.kubernetes.io/name: headscale
+        # NO app.kubernetes.io/name: headscale here either — see the comment on
+        # the Job's metadata.labels above. The pod template MUST stay off the
+        # headscale Deployment selector; this is the label that collides.
         app.kubernetes.io/component: bootstrap-api-key
     spec:
       restartPolicy: Never
