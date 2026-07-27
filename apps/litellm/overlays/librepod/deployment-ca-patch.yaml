@@ -6,9 +6,11 @@
 # an init container (alpine) fuses the system CA bundle with the LibrePod root
 # AND intermediate CA (from configMap/step-certificates-certs, Reflector-
 # replicated from step-ca), then the litellm container mounts the merged bundle
-# over the system bundle path (/etc/ssl/certs/ca-certificates.crt). litellm
-# (Python) reads the bundle at that default path, so no SSL_CERT_FILE env var is
-# needed here — the in-place overwrite is enough.
+# over the system bundle path (/etc/ssl/certs/ca-certificates.crt). The trust
+# env vars that point litellm's Python stack at it — SSL_CERT_FILE (for
+# ssl/httpx) + REQUESTS_CA_BUNDLE (for the `requests` lib) — live in the app's
+# envFrom ConfigMap (base/litellm.env), NOT in this patch. This patch only fuses
+# + mounts the bundle.
 #
 # This lives in the overlay (not base) so every SSO app carries its CA trust the
 # same way: a deployment-ca-patch.yaml strategic-merge patch. Mirrors
