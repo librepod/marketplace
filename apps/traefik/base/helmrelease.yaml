@@ -22,9 +22,17 @@ spec:
             entryPoint:
               to: websecure
               scheme: https
-      # WireGuard entrypoint removed — wg-easy now uses hostNetwork and
-      # binds port 51820 directly on the host, so Traefik no longer needs
-      # to proxy UDP traffic for WireGuard.
+      # WireGuard UDP 51820 entryPoint. Exposed via this Traefik LoadBalancer
+      # Service (host:51820 UDP — the same mechanism as 80/443) and routed by
+      # the wg-easy IngressRouteUDP to the wg-easy-wireguard Service, so on-LAN
+      # clients reach wg-easy at <device-ip>:51820 without hostNetwork/hostPort
+      # on the app pod. Remote clients use the FRP relay -> wg-easy-wireguard
+      # ClusterIP Service (no Traefik).
+      wireguard:
+        port: 51820
+        exposedPort: 51820
+        expose: true
+        protocol: udp
 
     providers:
       kubernetesCRD:
