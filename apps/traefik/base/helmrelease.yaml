@@ -31,8 +31,9 @@ spec:
       wireguard:
         port: 51820
         exposedPort: 51820
-        expose: true
-        protocol: udp
+        expose:
+          default: true
+        protocol: UDP
 
     providers:
       kubernetesCRD:
