@@ -63,9 +63,6 @@ spec:
           mountPath: /etc/wireguard
         - name: tun
           mountPath: /dev/net/tun
-        - name: lib-modules
-          mountPath: /lib/modules
-          readOnly: true
         livenessProbe:
           tcpSocket:
             port: 51821
@@ -102,7 +99,3 @@ spec:
         hostPath:
           path: /dev/net/tun
           type: CharDevice
-      - name: lib-modules
-        hostPath:
-          path: /lib/modules
-          type: Directory
