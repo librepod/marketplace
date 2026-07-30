@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-07-30T13:13:01Z"
+  generatedAt: "2026-07-30T13:54:16Z"
 apps:
     - name: baikal
       version: "0.11.1-nginx"
@@ -335,7 +335,7 @@ apps:
       version: "v0.7.0"
       displayName: "FRP Operator"
       description: "Kubernetes operator for managing FRP clients via CRDs"
-      category: "Networking"
+      category: "Network"
       icon: ""
       sourceType: oci-kustomize
       sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/frp-operator"
@@ -384,7 +384,7 @@ apps:
       version: "v0.65.0"
       displayName: "FRP Client"
       description: "Fast Reverse Proxy client for remote access to cluster services and host SSH"
-      category: "Networking"
+      category: "Network"
       icon: "https://raw.githubusercontent.com/fatedier/frp/main/doc/pic/frp.png"
       sourceType: oci-kustomize
       sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/frpc"
