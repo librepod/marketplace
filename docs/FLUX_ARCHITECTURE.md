@@ -304,7 +304,7 @@ spec:
     match: Host(`casdoor.${BASE_DOMAIN:=libre.pod}`)
     services:
     - name: casdoor
-      port: 8000
+      port: 80
 ```
 
 **Purpose:** Uses `${BASE_DOMAIN}` variable substitution (via Flux postBuild).

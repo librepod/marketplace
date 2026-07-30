@@ -9,7 +9,7 @@ spec:
   category: "Testing"
   website: "https://github.com/traefik/whoami"
 
-  version: "1.10.1"
+  version: "v1.11.0"
 
   source:
     type: oci-kustomize
@@ -42,7 +42,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/whoami
         ref:
-          tag: "1.10.1"
+          tag: "v1.11.0"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization

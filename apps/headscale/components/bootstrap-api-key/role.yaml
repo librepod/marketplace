@@ -1,0 +1,32 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: headscale-bootstrap-api-key
+  labels:
+    app.kubernetes.io/name: headscale
+    app.kubernetes.io/component: bootstrap-api-key
+rules:
+  # `kubectl wait deploy/headscale` + resolving the exec target Deployment.
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get"]
+    resourceNames: ["headscale"]
+  # Resolve the headscale pod that `kubectl exec deploy/headscale` targets.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  # Exec into the headscale pod to run `headscale apikeys create`.
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  # Mint Secret/headscale-api-key. `resourceNames` cannot scope `create` (the
+  # object does not exist yet at create time), so create is granted without a
+  # resourceName and get/update/patch are locked to the named Secret — the same
+  # tight scoping style as apps/tailscale/base/role.yaml.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "update", "patch"]
+    resourceNames: ["headscale-api-key"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]

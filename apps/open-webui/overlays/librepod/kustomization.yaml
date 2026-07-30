@@ -7,6 +7,7 @@ resources:
   - ../../base
   - ingressroute.yaml
   - helmrelease.yaml
+  - ssoclient.yaml
 
 configMapGenerator:
 - name: step-certificates-certs

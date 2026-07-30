@@ -9,7 +9,7 @@ spec:
   category: "Infrastructure"
   website: "https://smallstep.com/docs/step-ca/certmanager"
 
-  version: "0.2.1"
+  version: "0.9.11"
 
   source:
     type: oci-kustomize
@@ -42,7 +42,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/step-issuer
         ref:
-          tag: "0.2.1"
+          tag: "0.9.11"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization

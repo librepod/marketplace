@@ -15,8 +15,35 @@ spec:
       labels:
         app.kubernetes.io/name: wg-easy
     spec:
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
+      # No hostNetwork: the pod runs in its own netns where the primary
+      # interface is always eth0, so wg-easy's MASQUERADE rule matches
+      # deterministically regardless of which firewall backend it lands in.
+      # The pod is reached only via its ClusterIP Service — from Traefik's
+      # wireguard UDP entryPoint (on-LAN) and the FRP relay (remote).
+      initContainers:
+      # wg-easy expects the operator to enable kernel forwarding (its docs
+      # require net.ipv4.ip_forward=1 + src_valid_mark=1). Under hostNetwork
+      # these were inherited from the host; in a pod netns they default to 0,
+      # so set them here. The init container must be privileged: writing
+      # /proc/sys/net/* needs a read-write /proc, which the kubelet mounts
+      # read-only for non-privileged containers (NET_ADMIN governs netlink/
+      # iptables, not /proc/sys writes). The official wg-easy compose uses
+      # Docker `sysctls:`, which has no direct k8s equivalent for these
+      # "unsafe" sysctls without a kubelet allowed-unsafe-sysctls host change
+      # we avoid on principle. Reuses the app image so the overlay's images:
+      # transformer keeps it version-locked, no new dependency.
+      - name: sysctl
+        image: ghcr.io/wg-easy/wg-easy
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          sysctl -w net.ipv4.ip_forward=1
+          sysctl -w net.ipv4.conf.all.src_valid_mark=1
+        securityContext:
+          privileged: true
       containers:
       - name: wg-easy
         image: ghcr.io/wg-easy/wg-easy
@@ -72,7 +99,3 @@ spec:
         hostPath:
           path: /dev/net/tun
           type: CharDevice
-      - name: lib-modules
-        hostPath:
-          path: /lib/modules
-          type: Directory

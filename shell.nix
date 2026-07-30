@@ -5,5 +5,8 @@ pkgs.mkShell {
     pkgs.fluxcd
     pkgs.just
     pkgs.k3d
+    pkgs.go
+    pkgs.kustomize
+    pkgs.kubernetes-helm
   ];
 }

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: casdoor-sso-creds
+  namespace: casdoor-sso-controller
+spec:
+  # nfs-client => included in LibrePod's daily PVC backup, so the credential
+  # survives a restore (k8s Secrets are NOT backed up). See
+  # docs/superpowers/specs/2026-07-19-casdoor-sso-controller-credentials-bootstrap-design.md.
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 1Mi

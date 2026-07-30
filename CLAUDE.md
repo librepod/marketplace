@@ -48,6 +48,13 @@ kustomize build ./apps/<app-name>/overlays/librepod | kubectl --kubeconfig ./lib
 **Key conventions:**
 - Each app creates its own namespace (named after the app)
 
+### 1. TLS / IngressRoute Convention
+
+All apps expose HTTP via Traefik `IngressRoute` resources. TLS certificates are handled by
+Traefik's default certificate store — apps do **not** configure `tls:` blocks on their
+IngressRoutes unless they need a specific cert resolver or custom TLS options. The default
+certificate is provisioned by cert-manager and applied cluster-wide via Traefik's TLS store.
+
 ### 2. FluxCD Integration
 
 FluxCD is the central GitOps operator. Its configs are located under `clusters/` and
@@ -72,6 +79,7 @@ reconciliation — see @docs/FLUX_WORKFLOW.md
 - **Do not parse the entire `./apps/` folder** unless explicitly asked to. Each app is self-contained — only dive into the specific app you're working on.
 - **Do not create namespaces manually** - Apps are responsible for creating their own namespaces
 - **Testing**: Uses Kustomize build command
+- **Commit, PR & public-doc hygiene**: never reference specific device or cluster hostnames (e.g. `librepod-dev`, `librepod-beelink`) in commit messages, PR titles/descriptions, or public-facing docs (READMEs). Use abstract environment pointers instead — `dev`, `prod`, `staging`. (Internal dev workflow docs like `docs/FLUX_WORKFLOW.md` may keep the operational cluster name.)
 
 ### PVC/PV Deletion with NFS Storage
 

@@ -1,0 +1,63 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: frp-operator
+spec:
+  displayName: "FRP Operator"
+  description: "Kubernetes operator for managing FRP clients via CRDs"
+  category: "Networking"
+  website: "https://github.com/zufardhiyaulhaq/frp-operator"
+
+  version: "v0.7.0"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/frp-operator"
+    path: ./overlays/librepod
+
+  dependencies:
+    required:
+      - kind: Kubernetes
+        description: "Kubernetes cluster"
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: frp-operator
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "frp-operator"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/frp-operator
+        ref:
+          tag: "v0.7.0"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: frp-operator
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "frp-operator"
+      spec:
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: frp-operator
+        force: true
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml

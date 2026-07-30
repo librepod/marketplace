@@ -1,0 +1,31 @@
+# Two independent PVCs (one per server component). They are deliberately NOT
+# shared: hbbs and hbbr each maintain their own db_v2.sqlite3, and a single
+# RWX volume would let two processes write the same file at /root/db_v2.sqlite3.
+#
+# Only hbbs's keypair (id_ed25519 / id_ed25519.pub) matters to clients; the
+# relay (hbbr) does not decrypt traffic and its auto-generated keypair is
+# unused, so the keys do not need to be shared.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rustdesk-server-oss-hbbs
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  # storageClassName set in overlay
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rustdesk-server-oss-hbbr
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  # storageClassName set in overlay

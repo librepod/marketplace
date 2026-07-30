@@ -8,7 +8,7 @@ spec:
   - websecure
   routes:
   - kind: Rule
-    match: Host(`litellm.${BASE_DOMAIN}`)
+    match: Host(`litellm.${BASE_DOMAIN:=libre.pod}`)
     priority: 1
     services:
     - name: litellm

@@ -8,11 +8,11 @@ resources:
 - ingressroute.yaml
 
 configMapGenerator:
-- name: init-data
-  files:
-    - ./init_data.json
-  options:
-    disableNameSuffixHash: true
+  - name: casdoor-env
+    envs:
+      - casdoor.env
+    options:
+      disableNameSuffixHash: true
 
 patches:
 - path: ./patch-helmrelease.yaml

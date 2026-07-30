@@ -9,7 +9,7 @@ spec:
   category: "Network"
   website: "https://github.com/wg-easy/wg-easy"
 
-  version: "15.2"
+  version: "15.3.0"
 
   source:
     type: oci-kustomize
@@ -19,14 +19,33 @@ spec:
   params:
     required:
       - name: BASE_DOMAIN
-        description: "Base domain for cluster (WG Easy will be at wireguard.BASE_DOMAIN)"
+        description: "Base domain for cluster (WG Easy web UI will be at wg-easy.BASE_DOMAIN)"
         type: string
         example: "example.com"
+      - name: FRP_SERVER_ADDR
+        description: "FRP server public address (WireGuard clients connect to this host)"
+        type: string
+        example: "vla1.libreport.ru"
+    optional:
+      - name: TZ
+        description: "Timezone for the wg-easy server (IANA name, e.g. Europe/Moscow)"
+        type: string
+        default: "UTC"
+      - name: FRP_REMOTE_PORT
+        description: "Public port on the FRP relay. Default 51820. Set to 0 to let the relay auto-assign (discover the port in frpc logs / frps dashboard)."
+        type: string
+        default: "51820"
+      - name: WIREGUARD_PROXY_NAME
+        description: "FRP proxy name (the Upstream CR name). Must be unique per relay when devices share a relay. Default wg-easy-wireguard; set wg-easy-wireguard-<device> to share."
+        type: string
+        default: "wg-easy-wireguard"
 
   dependencies:
     required:
       - kind: IngressController
         description: "Traefik (provided by traefik app)"
+      - kind: StorageClass
+        description: "nfs-client (provided by nfs-provisioner app)"
 
   templates:
     source: |
@@ -42,7 +61,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/wg-easy
         ref:
-          tag: "15.2"
+          tag: "15.3.0"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization
@@ -53,6 +72,9 @@ spec:
           marketplace.io/managed: "true"
           marketplace.io/app: "wg-easy"
       spec:
+        dependsOn:
+          - name: traefik
+          - name: storage
         interval: 1h
         retryInterval: 2m
         timeout: 5m
@@ -65,6 +87,10 @@ spec:
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
+            FRP_SERVER_ADDR: "${FRP_SERVER_ADDR}"
+            FRP_REMOTE_PORT: "${FRP_REMOTE_PORT}"
+            WIREGUARD_PROXY_NAME: "${WIREGUARD_PROXY_NAME}"
+            TZ: "${TZ}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization

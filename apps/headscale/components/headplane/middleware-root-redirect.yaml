@@ -1,0 +1,28 @@
+# Redirect the bare host root (https://headplane.${BASE_DOMAIN}/) to /admin.
+#
+# headplane v0.6.x serves its ENTIRE UI under the /admin prefix — its built
+# frontend assets are at /admin/assets/... — so a request to the host root
+# matches no route and headplane returns a bare 404. To anyone landing on the
+# root URL that reads as "app is broken", so 302 the exact root to /admin
+# (which the app then chains to /admin/login). Every real route is untouched
+# because the regex is anchored to match ONLY a host with no path: /admin,
+# /admin/login, /admin/oidc/start, /admin/oidc/callback, /admin/assets/* all
+# fail the `/?$` anchor and pass straight through to the service.
+#
+# The host is captured dynamically ([^/]+), so this Middleware holds NO
+# ${BASE_DOMAIN} and needs no Flux variable substitution. The
+# `substitute: disabled` annotation is still set as insurance: it shields the
+# ${1} capture-group reference in `replacement` from being blanked by Flux's
+# postBuild.substitute, which treats any ${VAR} as its own substitution (see
+# memory: feedback_flux-substitute-gotcha).
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: headplane-root-redirect
+  annotations:
+    kustomize.toolkit.fluxcd.io/substitute: disabled
+spec:
+  redirectRegex:
+    regex: "^https?://([^/]+)/?$"
+    replacement: "https://${1}/admin"
+    permanent: false

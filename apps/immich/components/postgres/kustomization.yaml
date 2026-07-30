@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Labels are hardcoded on each resource below (gogs/components/postgres style),
+# not declared via a `labels` transformer. Reason: a Component's transformers are
+# merged into the overlay root and would also tag *unrelated* overlay resources
+# (the immich IngressRoute / SSOClient). Hardcoding keeps this component
+# self-contained and makes the rendered output identical to the pre-refactor base.
+# Namespace comes from the overlay (`namespace: immich`), not duplicated here.
+resources:
+- deployment.yaml
+- service.yaml
+- pvc.yaml

@@ -9,7 +9,7 @@ spec:
   category: "Security"
   website: "https://github.com/dani-garcia/vaultwarden"
 
-  version: "1.35.2-alpine"
+  version: "1.37.0"
 
   source:
     type: oci-kustomize
@@ -37,6 +37,8 @@ spec:
         description: "Traefik (provided by bootstrap)"
       - kind: StorageClass
         description: "nfs-client (provided by bootstrap)"
+      - kind: SSOProvider
+        description: "Casdoor SSO (provided by casdoor-sso-controller)"
 
   templates:
     source: |
@@ -52,7 +54,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/vaultwarden
         ref:
-          tag: "1.35.2-alpine"
+          tag: "1.37.0"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization
@@ -63,6 +65,8 @@ spec:
           marketplace.io/managed: "true"
           marketplace.io/app: "vaultwarden"
       spec:
+        dependsOn:
+          - name: casdoor-sso-controller
         interval: 10m
         targetNamespace: vaultwarden
         sourceRef:

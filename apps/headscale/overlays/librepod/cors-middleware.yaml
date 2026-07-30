@@ -1,0 +1,21 @@
+# CORS middleware — allows Headplane frontend at headplane.${BASE_DOMAIN} to call
+# the Headscale API from the browser. Required because Headplane runs on its own
+# subdomain (cross-origin) rather than as a subpath of the Headscale domain.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: headscale-cors
+  namespace: headscale
+spec:
+  headers:
+    accessControlAllowHeaders:
+      - "*"
+    accessControlAllowMethods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+    accessControlAllowOriginList:
+      - https://headplane.${BASE_DOMAIN:=libre.pod}
+    accessControlMaxAge: 100
+    addVaryHeader: true

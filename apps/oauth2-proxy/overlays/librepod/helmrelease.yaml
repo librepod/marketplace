@@ -16,25 +16,79 @@ spec:
         namespace: oauth2-proxy
       interval: 12h
   values:
-    # OIDC provider configuration (Casdoor)
+    # OIDC client id/secret come from Secret/oauth2-proxy-sso (written by
+    # casdoor-sso-controller from the SSOClient CR). The cookie-secret (a session
+    # AES/HMAC key, NOT an IdP credential) comes from Secret/oauth2-proxy-cookie.
+    # No OIDC client secret is committed to git.
+    config:
+      existingSecret: oauth2-proxy-sso
+      requiredSecretKeys: [client-id, client-secret]   # cookie-secret supplied via extraEnv
+
     extraArgs:
       provider: oidc
-      oidc-issuer-url: https://sso.${BASE_DOMAIN:=libre.pod}
+      oidc-issuer-url: https://id.${BASE_DOMAIN:=libre.pod}
       redirect-url: https://oauth2-proxy.${BASE_DOMAIN:=libre.pod}/oauth2/callback
+      # static:// is the v7.x idiom for "forward-auth only, no upstream".
+      # file:///dev/null works only by accident and 404s any real request.
+      upstream: static://
+      email-domain: "*"
+      # Scope the cookie across *.<domain> so the cookie set at the oauth2-proxy
+      # host is sent to every protected app subdomain.
       cookie-domain: .${BASE_DOMAIN:=libre.pod}
       whitelist-domain: .${BASE_DOMAIN:=libre.pod}
-      email-domain: "*"
-      upstream: file:///dev/null
-      pass-authorization-header: "true"
-      set-authorization-header: "true"
-      pass-user-headers: "true"
-      set-xauthrequest: "true"
-      reverse-proxy: "true"
-      ssl-insecure-skip-verify: "true"
-      skip-provider-button: "true"
-      insecure-oidc-allow-unverified-email: "true"
-    config:
-      # Cookie secret for session encryption
-      cookieSecret: "lWaxDZwT2kzBWfBN8kHi7KXficScqcnwHNRuLhhywzs="
-      clientID: "librepod"
-      clientSecret: "1cbc02ef6a9e7144f64e09385f0a21185c129819"
+      scope: "openid email profile"            # profile -> preferred_username claim
+      # Forward-auth (Traefik) essentials.
+      reverse-proxy: "true"                     # REQUIRED: honor X-Forwarded-{Proto,Host,Uri}
+      # NOTE: oauth2-proxy v7.x has NO per-source-IP gating of X-Forwarded headers. The
+      # only related flag (--trusted-ip) is an auth-BYPASS list — do NOT use it here.
+      # Spoofing is mitigated structurally: the oauth2-proxy Service is ClusterIP-only,
+      # so only in-cluster callers (Traefik) can reach /oauth2/auth.
+      set-xauthrequest: "true"                  # emit X-Auth-Request-* identity headers
+      pass-user-headers: "true"                 # emit X-Forwarded-{User,Email,Groups,Preferred-Username}
+      skip-provider-button: "true"              # seamless SSO (no interstitial button)
+      insecure-oidc-allow-unverified-email: "true"   # Casdoor id_token email_verified may be false
+
+    extraEnv:
+      - name: OAUTH2_PROXY_COOKIE_SECRET
+        valueFrom:
+          secretKeyRef:
+            name: oauth2-proxy-cookie
+            key: cookie-secret
+      - name: SSL_CERT_FILE                     # trust the private LibrePod CA for id.<domain> TLS
+        value: /etc/ssl/certs/ca-certificates.crt
+
+    # Private CA trust: merge the LibrePod root CA into the system bundle
+    # (same Reflector pattern as open-webui / seafile / vaultwarden). oauth2-proxy
+    # is Go; SSL_CERT_FILE overrides the system roots, and the init container
+    # merges root_ca.crt INTO the system bundle first so the override file
+    # contains both.
+    extraVolumes:
+      - name: root-ca-cert
+        configMap:
+          name: step-certificates-certs
+          items:
+            - key: root_ca.crt
+              path: root_ca.crt
+      - name: merged-ca-bundle
+        emptyDir: {}
+    extraVolumeMounts:
+      - name: merged-ca-bundle
+        mountPath: /etc/ssl/certs/ca-certificates.crt
+        subPath: ca-certificates.crt
+        readOnly: true
+    extraInitContainers:
+      - name: merge-ca-bundle
+        image: alpine:3.19
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            set -e
+            cat /etc/ssl/certs/ca-certificates.crt > /mnt/merged-ca/ca-certificates.crt
+            echo "" >> /mnt/merged-ca/ca-certificates.crt
+            cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+        volumeMounts:
+          - name: root-ca-cert
+            mountPath: /mnt/root-ca
+            readOnly: true
+          - name: merged-ca-bundle
+            mountPath: /mnt/merged-ca

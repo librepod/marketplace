@@ -9,7 +9,7 @@ spec:
   category: "AI"
   website: "https://github.com/BerriAI/litellm"
 
-  version: "v1.81.9-stable.patch.1"
+  version: "v1.93.0"
 
   source:
     type: oci-kustomize
@@ -22,11 +22,19 @@ spec:
         description: "Base domain (app will be at litellm.BASE_DOMAIN)"
         type: string
         example: "example.com"
-    optional:
-      - name: LITELLM_SALT_KEY
-        description: "Encryption salt key for LiteLLM"
-        type: string
-        default: ""
+  secrets:
+    - name: LITELLM_SALT_KEY
+      description: "Salt key LiteLLM uses to encrypt credentials stored in its DB (e.g. provider API keys). Generated once per install."
+      required: true
+      generate:
+        type: random
+        length: 64
+    - name: DB_PASSWORD
+      description: "PostgreSQL password (A-Za-z0-9 only — no special chars, since it is URL-embedded in DATABASE_URL). Shared by the bundled postgres and litellm."
+      required: true
+      generate:
+        type: random
+        length: 40
 
   dependencies:
     required:
@@ -34,6 +42,8 @@ spec:
         description: "Traefik (provided by bootstrap)"
       - kind: StorageClass
         description: "nfs-client (provided by bootstrap)"
+      - kind: SSOProvider
+        description: "Casdoor SSO (provided by casdoor-sso-controller)"
 
   templates:
     source: |
@@ -49,7 +59,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/litellm
         ref:
-          tag: "v1.81.9-stable.patch.1"
+          tag: "v1.93.0"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization
@@ -60,6 +70,8 @@ spec:
           marketplace.io/managed: "true"
           marketplace.io/app: "litellm"
       spec:
+        dependsOn:
+          - name: casdoor-sso-controller
         interval: 10m
         targetNamespace: litellm
         sourceRef:
@@ -71,7 +83,6 @@ spec:
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
-            LITELLM_SALT_KEY: "${LITELLM_SALT_KEY}"
           substituteFrom:
             - kind: Secret
               name: litellm-config
@@ -87,6 +98,7 @@ spec:
       type: Opaque
       stringData:
         LITELLM_SALT_KEY: "${LITELLM_SALT_KEY}"
+        DB_PASSWORD: "${DB_PASSWORD}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization

@@ -1,0 +1,12 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: immich-helm-charts
+spec:
+  interval: 24h
+  # Official community Helm chart (cosign-signed). OCI-only since the legacy
+  # https://immich-app.github.io/immich-charts/ repo was retired.
+  url: oci://ghcr.io/immich-app/immich-charts/immich
+  ref:
+    # Pin the chart minor (0.13.x) so patch updates flow in automatically.
+    semver: "0.13.*"

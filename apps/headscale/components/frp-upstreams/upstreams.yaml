@@ -1,0 +1,53 @@
+# FRP tunnel upstreams for Headscale — expose the control server and embedded
+# DERP STUN endpoint publicly so Tailscale clients can join the tailnet without
+# first being connected to the WireGuard VPN.
+#
+# These Upstream resources are reconciled by frp-operator into the running
+# FRP client configuration.  The FRP client (librepod-dev) connects to the
+# relay server and tunnels traffic back to these local endpoints.
+#
+# DNS: The FRP server has subDomainHost with wildcard DNS.
+# frp-operator auto-injects subdomain = "headscale" from the Upstream
+# name, so the proxy is reachable at headscale.<subDomainHost>.
+# headscale's server_url must point to the public FRP domain.
+#
+# TLS: A reverse proxy (Caddy/Nginx) on the FRP server terminates HTTPS on
+# port 443 and forwards to frps vhostHTTPPort (80). Since TLS is terminated
+# before reaching frps, we use type: http (not https) — frps routes by Host
+# header, not SNI. The domain cert must match headscale's server_url.
+
+---
+apiVersion: frp.zufardhiyaulhaq.com/v1alpha1
+kind: Upstream
+metadata:
+  name: headscale-http
+spec:
+  client: libreport
+  http:
+    host: headscale.headscale.svc.cluster.local
+    port: 80
+    subdomain: headscale
+    healthCheck:
+      type: http
+      path: /health
+      timeoutSeconds: 3
+      intervalSeconds: 10
+      maxFailed: 3
+    transport:
+      useEncryption: true
+      useCompression: true
+
+# ---
+# apiVersion: frp.zufardhiyaulhaq.com/v1alpha1
+# kind: Upstream
+# metadata:
+#   name: headscale-derp-stun
+# spec:
+#   client: librepod
+#   udp:
+#     # DERP STUN has no Kubernetes Service — reach it on the node's host network
+#     # where headscale binds 0.0.0.0:3478 via hostNetwork: true.
+#     host: 192.168.2.180
+#     port: 3478
+#     server:
+#       port: 8031

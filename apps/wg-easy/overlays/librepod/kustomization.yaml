@@ -4,16 +4,14 @@ kind: Kustomization
 resources:
 - ../../base
 - ingressroute-http.yaml
+- ingressroute-udp.yaml
 
 images:
 - name: ghcr.io/wg-easy/wg-easy
-  newTag: "15.2"
+  newTag: "15.3"
 
-configMapGenerator:
-- name: wg-easy
-  envs:
-  - wg-easy.env
-  behavior: merge
+components:
+  - ../../components/frp-upstreams
 
 patches:
 - path: patch-pvc.yaml

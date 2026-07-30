@@ -9,20 +9,28 @@ resources:
 - ../../components/mysql
 - ../../components/redis
 - ingressroute.yaml
+- ssoclient.yaml
 
-# Secret generator for seafile-secret
-# Note: disableNameSuffixHash is false by default, so hash suffix will be added
-secretGenerator:
-- name: seafile-secret
-  type: Opaque
-  literals:
-  - MYSQL_ROOT_PASSWORD=changeme_root_password
-  - INIT_SEAFILE_MYSQL_ROOT_PASSWORD=changeme_root_password
-  - SEAFILE_MYSQL_DB_PASSWORD=changeme_db_password
-  - REDIS_PASSWORD=changeme_redis_password
-  - JWT_PRIVATE_KEY=KezopZyJ0NDdB9zjUtbAjDAie6MF8rB0pfbGeRLD
-  - INIT_SEAFILE_ADMIN_PASSWORD=changeme_admin_password
+# Mirror the LibrePod root + intermediate CA (from step-ca) into this namespace
+# so the seafile pod can trust the *.libre.pod TLS cert (issued by the internal
+# StepClusterIssuer, not a public CA) for the server-side OAuth token/userinfo
+# exchange. Reflector fills .data from step-ca/step-certificates-certs.
+# disableNameSuffixHash keeps the name exact so the deployment's configMap volume
+# reference matches.
+configMapGenerator:
+- name: step-certificates-certs
+  options:
+    disableNameSuffixHash: true
+    annotations:
+      reflector.v1.k8s.emberstack.com/reflects: "step-ca/step-certificates-certs"
 
+# Patch storageClassName onto every PVC (base/components stay portable).
+patches:
+- path: ./patch-storage-class.yaml
+# Inject the LibrePod root-CA trust (init container + volumes) into the
+# Deployment. Separate from base so every SSO app carries CA trust the same way
+# (see deployment-ca-patch.yaml).
+- path: deployment-ca-patch.yaml
 
 # Image tag transformers
 images:

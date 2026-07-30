@@ -69,12 +69,30 @@ This skill covers creating LibrePod Marketplace applications using Kustomize. Ev
 
 ---
 
+## Authority — this skill is the source of truth
+
+This skill is the **canonical, authoritative specification** of LibrePod app conventions. The templates, naming, field placements, and rules documented here *are* the standard — not one option among several. Treat them as the reference when creating, auditing, or fixing any app.
+
+**Never use a sibling app as an example to repeat.** Do not mine `apps/<other-app>/` for patterns, and do not justify a choice with "app X does it this way" or "follow the same approach as app Y." Sibling apps are disqualified as templates for three reasons:
+
+- **App-specific exceptions** — legitimate, localized deviations documented inline within that app (e.g. non-HTTP exposure, a native-SSO quirk, a distroless image needing special handling). They belong to that app and do not generalize.
+- **Drift** — apps written before a convention was finalized may not yet reflect the current standard.
+- **Mistakes** — some apps carry outright bugs that pre-date the standard (wrong version tag, mis-scoped patch, mangled substitution).
+
+Copying from a sibling app propagates exceptions, drift, and mistakes instead of the standard.
+
+**Resolution rule:** when a live app's files contradict this skill, **this skill is correct** and the app is what gets fixed. Raise apps *toward* the standard; never lower the standard to match an app. If a deviation is genuinely required for a specific app, document *why* inline within that app alone — it is still never a pattern to repeat elsewhere.
+
+**Dependencies are not style examples.** References to system apps elsewhere in this skill — `traefik`, `storage`/`nfs-provisioner`, `oauth2-proxy`, `casdoor` — name real cluster *dependencies* an app must declare in `dependsOn`/`dependencies`. They describe infrastructure an app relies on, not a stylistic layout to imitate.
+
+---
+
 ## App Types
 
 | Type | Base contains | Use when |
 |------|--------------|----------|
 | **Kustomize** | `deployment.yaml`, `service.yaml`, `pvc.yaml`, `.env` | Direct container deployment |
-| **Helm** | `ocirepository.yaml`, `helmrelease.yaml`, `pvc.yaml` | App has an official Helm chart |
+| **Helm** | `ocirepository.yaml` (or `helmrepository.yaml`), `helmrelease.yaml`, `pvc.yaml` | App has an official Helm chart |
 
 ---
 
@@ -88,7 +106,7 @@ apps/<app-name>/
 │   ├── namespace.yaml
 │   ├── deployment.yaml                    # Kustomize type only (no image tag)
 │   ├── service.yaml                       # Kustomize type only
-│   ├── ocirepository.yaml                 # Helm type only
+│   ├── ocirepository.yaml                 # Helm type only (or helmrepository.yaml for HTTP Helm repos)
 │   ├── helmrelease.yaml                   # Helm type only
 │   ├── pvc.yaml                           # If persistent storage needed
 │   └── <app-name>.env                     # Environment variables
@@ -138,11 +156,18 @@ kind: Kustomization
 
 namespace: <app-name>
 
+labels:
+- includeSelectors: true
+  includeTemplates: true
+  pairs:
+    app.kubernetes.io/name: <app-name>
+
 resources:
 - namespace.yaml
 - ocirepository.yaml
+- helmrepository.yaml   # Only if OCI repository not provided by the vendor 
 - helmrelease.yaml
-- pvc.yaml          # Only if needed
+- pvc.yaml              # Only if needed
 ```
 
 ### `base/namespace.yaml`
@@ -165,13 +190,7 @@ spec:
   replicas: 1
   strategy:
     type: Recreate
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: <app-name>
   template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: <app-name>
     spec:
       containers:
         - name: <app-name>
@@ -219,7 +238,11 @@ spec:
   # No storageClassName here — patched in by overlay
 ```
 
-### `base/ocirepository.yaml` (Helm type)
+### `base/ocirepository.yaml` or `base/helmrepository.yaml` (Helm type)
+
+Helm charts can be sourced via **OCI** (preferred) or **HTTP Helm repo**. Use whichever the upstream publisher provides.
+
+**Option A — OCI registry** (preferred when available):
 
 ```yaml
 apiVersion: source.toolkit.fluxcd.io/v1
@@ -236,7 +259,22 @@ spec:
     semver: "~<major>.<minor>.0"
 ```
 
+**Option B — HTTP Helm repo** (when the chart is not published as OCI):
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: <app-name>-helm-charts
+spec:
+  interval: 24h
+  url: https://<helm-repo-url>/
+```
+
+When using Option B, the chart version is not pinned in the base `HelmRepository` (HTTP repos don't support semver ranges). Instead, pin it in the overlay via `patch-helmrelease.yaml` (see that section below).
+
 ### `base/helmrelease.yaml` (Helm type)
+
 
 ```yaml
 apiVersion: helm.toolkit.fluxcd.io/v2
@@ -253,9 +291,13 @@ spec:
     strategy:
       name: RetryOnFailure      # On failure: retry the upgrade after retryInterval
       retryInterval: 3m
-  chartRef:
-    kind: OCIRepository
-    name: <app-name>-helm-charts
+  chart:
+    spec:
+      chart: <chart-name>                              # The chart name in the Helm repository
+      sourceRef:
+        kind: HelmRepository                           # or OCIRepository (must match the source type above)
+        name: <app-name>-helm-charts
+      interval: 12h
   values:
     # Base/default Helm values go here
 ```
@@ -366,7 +408,7 @@ The `name` field must match the actual PVC name. Even though the `target:` selec
 
 ### `overlays/librepod/patch-helmrelease.yaml` (Helm type)
 
-Strategic merge patch to add LibrePod-specific Helm values:
+Strategic merge patch to add LibrePod-specific Helm values and optionally pin the chart version:
 
 ```yaml
 apiVersion: helm.toolkit.fluxcd.io/v2
@@ -374,6 +416,14 @@ kind: HelmRelease
 metadata:
   name: <app-name>
 spec:
+  chart:
+    spec:
+      chart: <chart-name>
+      version: "~<major>.<minor>.0"                     # Pin chart version (recommended for HTTP Helm repos)
+      sourceRef:
+        kind: HelmRepository                            # or OCIRepository — must match base source type
+        name: <app-name>-helm-charts
+      interval: 12h
   values:
     # LibrePod-specific overrides (PVC mounts, ingress config, etc.)
     extraVolumeMounts:
@@ -384,6 +434,8 @@ spec:
       persistentVolumeClaim:
         claimName: <app-name>-data
 ```
+
+**Chart version pinning:** For OCI-based charts, the base `OCIRepository` already pins the semver range. For HTTP Helm repos, add `chart.spec.version` in this patch to pin the chart minor version (e.g. `~1.5.0`). This lets patch updates flow in automatically while keeping control of minor/major upgrades.
 
 ---
 
@@ -403,7 +455,7 @@ spec:
   category: "<Category>"         # e.g. Security, Productivity, Development
   website: "<upstream URL>"
 
-  version: "<upstream app version>"   # e.g. "2.353.0" — must match the container image tag
+  version: "<upstream app version>"   # e.g. "2.353.0" — ALWAYS the application version (the container image tag), never the Helm chart version. The chart version is an internal detail that lives only in the overlay's patch-helmrelease.yaml.
 
   source:
     type: oci-kustomize
@@ -460,7 +512,7 @@ spec:
       spec:
         dependsOn:
           - name: traefik              # Add traefik if app exposes a service to access via browser i.e. ingressroute
-          - name: nfs-provisioner      # Add nfs-provisioner if app uses PVC
+          - name: storage              # Add if app uses PVC. "storage" is the Flux Kustomization name (the nfs-provisioner app), not the app dir name.
         force: true                    # Force instructs the controller to recreate resources when patching fails due to an immutable field change.
         interval: 1h
         retryInterval: 2m
@@ -559,30 +611,24 @@ Use the default `ingressroute.yaml` template with the oauth2-proxy middlewares (
 
 ## Secrets
 
-Apps that need user-supplied secrets (API keys, admin passwords, etc.) should use a `secretGenerator` in `base/kustomization.yaml`, not a `configMapGenerator`. The secret values themselves come from FluxCD's `postBuild.substituteFrom` at deploy time — the `.env` file in the repo holds only placeholder references.
+Apps that need user-supplied secrets (API keys, admin passwords, etc.) declare a **plain `Secret` with `stringData` `${VAR}` placeholders** in `base/secret.yaml`. The real values are generated by the marketplace and injected by FluxCD's `postBuild.substituteFrom` at deploy time (see the `metadata.yaml` wiring below). The committed file holds only `${VAR}` placeholders — never real values.
 
-### `base/kustomization.yaml` with a secret generator
+> **Do not use `secretGenerator` for substitutable secrets.** Kustomize's `secretGenerator` base64-encodes its `data:` fields during build, *before* Flux's `postBuild.substitute` text pass runs — so a `${VAR}` placeholder is encoded (e.g. `${ADMIN_PASSWORD}` → `JHtBRE1JTl9...`) and Flux never sees a literal `${VAR}` to replace. The placeholder survives unchanged and the pod receives the literal string. A plain `Secret` with `stringData` avoids this: `stringData` stays human-readable in the rendered manifest so Flux **can** substitute it, and Kubernetes converts `stringData` → base64 `data` at *apply* time — i.e. after substitution. (A `configMapGenerator` would also be substitutable, but it stores secrets as plaintext — do not use it for real secrets.)
+
+### `base/secret.yaml`
 
 ```yaml
-configMapGenerator:
-- name: <app-name>
-  envs:
-  - <app-name>.env
-
-secretGenerator:
-- name: <app-name>-secret
-  envs:
-  - <app-name>.secret.env
+apiVersion: v1
+kind: Secret
+metadata:
+  name: <app-name>-secret
+type: Opaque
+stringData:
+  ADMIN_PASSWORD: "${ADMIN_PASSWORD}"
+  API_KEY: "${API_KEY}"
 ```
 
-### `base/<app-name>.secret.env`
-
-This file is committed to the repo with placeholder values — the real values are injected by FluxCD at deploy time via `postBuild.substituteFrom`:
-
-```
-ADMIN_PASSWORD=${ADMIN_PASSWORD}
-API_KEY=${API_KEY}
-```
+List `secret.yaml` under `resources:` in `base/kustomization.yaml`. Because it is a plain resource (not a generator), there is **no hash suffix** — the deployment references the literal `<app-name>-secret` name.
 
 ### Referencing the secret in the deployment
 
@@ -595,6 +641,8 @@ containers:
       - secretRef:
           name: <app-name>-secret
 ```
+
+Use individual `env:` `secretKeyRef` entries instead of (or alongside) `secretRef` when an environment variable name must differ from the secret key, or only a subset of keys is needed.
 
 ### `metadata.yaml` wiring
 
@@ -622,7 +670,7 @@ postBuild:
       name: <app-name>-config
 ```
 
-Plus add `templates.secret` to hold the Secret resource (see the `metadata.yaml` template above for the full shape).
+Plus add `templates.secret`, whose `stringData` carries the same `${VAR}` placeholders — the marketplace fills it with the generated values, and Flux's `substituteFrom` reads them back to populate `base/secret.yaml` (see the `metadata.yaml` template above for the full shape).
 
 ---
 
@@ -749,6 +797,31 @@ configMapGenerator:
   - myapp.env
 ```
 
+### Environment variables — envFrom from a generated ConfigMap, never inline literals
+
+Non-secret app config MUST live in a `.env` file consumed by a `configMapGenerator`, and the Deployment loads it via `envFrom`. Inline `env:` with literal `value:`s is non-standard: it hides config from the generated ConfigMap, scatters values across the Deployment, and (for `${VAR}` placeholders) leans on Flux substitution reaching inline values rather than ConfigMap `data`, where it is guaranteed. Flux `postBuild.substitute` DOES reach ConfigMap data, so `${BASE_DOMAIN}` etc. belong in the `.env`.
+
+```yaml
+# ❌ WRONG — inline literal env in the Deployment
+env:
+  - name: DB_HOST
+    value: postgres
+  - name: APP_URL
+    value: "https://myapp.${BASE_DOMAIN}"
+
+# ✅ CORRECT — values in <app-name>.env, loaded via envFrom
+#   <app-name>.env:
+#     DB_HOST=postgres
+#     APP_URL=https://myapp.${BASE_DOMAIN}
+envFrom:
+  - configMapRef:
+      name: <app-name>   # kustomize rewrites this to the generated <app-name>-<hash>
+```
+
+Secrets use a **plain `Secret` with `stringData` `${VAR}`** (substituted by Flux `substituteFrom`), referenced via `secretRef`/`secretKeyRef` — never `secretGenerator` (Flux can't substitute its base64 output) and never a plain ConfigMap. A container MAY carry both: `envFrom` for the config ConfigMap plus individual `env:` entries for `secretKeyRef`s.
+
+**Audit rule:** when reviewing an app, check each Deployment container for `env:` entries with a literal `value:`. Any non-secret literal that is not a `secretKeyRef` / `valueFrom` must move to the `.env` → `configMapGenerator` → `envFrom` chain. (Init containers count too.)
+
 ### storageClassName — patch in overlay, not base
 
 Base PVC has no `storageClassName`. The `patch-storage-class.yaml` in the overlay adds `nfs-client`. This keeps the base portable.
@@ -867,7 +940,7 @@ Add any additional substitution variables from `metadata.yaml`'s `postBuild.subs
 
 ## Creation Checklist
 
-1. **Gather info**: if a URL was provided, fetch it and extract app details; otherwise ask the user for app name, image/chart, port, storage needs, env vars, secrets needed
+1. **Gather info**: source app details from the upstream URL/docs (or by asking the user) — app name, image/chart, port, storage needs, env vars, secrets needed. **Never gather conventions/structure from a sibling app under `apps/`; this skill is the only pattern source** (see the Authority section).
 2. **Research SSO**: check the app's docs for OIDC/OAuth2/SSO support — native SSO takes priority over oauth2-proxy (see [SSO Configuration](#sso-configuration))
 3. **Confirm with user**: present a summary of what will be created (name, image, port, storage, SSO approach, deployment type) and wait for approval before writing any files
 4. **Create base**: `namespace.yaml`, `deployment.yaml`+`service.yaml` (or `ocirepository.yaml`+`helmrelease.yaml`), optionally `pvc.yaml`, `.env`, `kustomization.yaml`

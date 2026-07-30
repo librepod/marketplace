@@ -1,0 +1,73 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: headscale-bootstrap-api-key
+  labels:
+    # Deliberately NOT app.kubernetes.io/name: headscale. That label is the
+    # headscale Deployment's pod selector (base/kustomization.yaml sets it via
+    # labels.includeSelectors: true). A Job pod carrying it gets "adopted" by
+    # that selector, so `kubectl exec deploy/headscale` (run by job.sh to mint
+    # the API key) can resolve nondeterministically to THIS Job's own pod —
+    # which has no headscale container — and fail with
+    # "container headscale is not valid for pod headscale-bootstrap-api-key-*".
+    # The component label below carries no selector, so it is harmless and
+    # still identifies the pod's purpose. See memory: bootstrap-job-pattern.
+    app.kubernetes.io/component: bootstrap-api-key
+spec:
+  backoffLimit: 3
+  parallelism: 1
+  completions: 1
+  # NOTE: deliberately NO ttlSecondsAfterFinished. Letting the Completed Job
+  # persist means Flux does NOT recreate it on later reconciles — a TTL-GC'd Job
+  # would be rebuilt by Flux and re-run on every reconcile. To re-provision
+  # (e.g. after a headscale DB reset invalidates the key), delete BOTH this Job
+  # and Secret/headscale-api-key, then `flux reconcile kustomization
+  # marketplace-headscale --with-source`: Flux recreates the Job and it mints a
+  # fresh key. The script is idempotent, so a stray re-run is a harmless no-op.
+  template:
+    metadata:
+      name: headscale-bootstrap-api-key
+      labels:
+        # NO app.kubernetes.io/name: headscale here either — see the comment on
+        # the Job's metadata.labels above. The pod template MUST stay off the
+        # headscale Deployment selector; this is the label that collides.
+        app.kubernetes.io/component: bootstrap-api-key
+    spec:
+      restartPolicy: Never
+      serviceAccountName: headscale-bootstrap-api-key
+      containers:
+        - name: bootstrap-api-key
+          # alpine:3.19 (already pulled cluster-wide for the CA-bundle init
+          # containers) + a runtime kubectl download — the repo's bootstrap
+          # convention (apps/step-certificates/.../job.sh). We avoid third-party
+          # kubectl images: bitnami/kubectl:1.34 is unpublished and the bitnami
+          # catalog has been churning. busybox wget handles dl.k8s.io fine
+          # (verified on the cluster). The script pins kubectl to the stable-1.34
+          # channel to match the server's minor version.
+          image: alpine:3.19
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/scripts/bootstrap-api-key.sh"]
+          envFrom:
+            - configMapRef:
+                name: cm-headscale-bootstrap-api-key
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: script
+          configMap:
+            name: cm-headscale-bootstrap-api-key-script
+            items:
+              - key: bootstrap-api-key.sh
+                path: bootstrap-api-key.sh
+        - name: tmp
+          emptyDir: {}

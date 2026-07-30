@@ -24,10 +24,9 @@ spec:
                 secretKeyRef:
                   name: seafile-secret
                   key: MYSQL_ROOT_PASSWORD
-            - name: MYSQL_LOG_CONSOLE
-              value: "true"
-            - name: MARIADB_AUTO_UPGRADE
-              value: "1"
+          envFrom:
+            - configMapRef:
+                name: mysql
           ports:
             - name: mysql
               containerPort: 3306

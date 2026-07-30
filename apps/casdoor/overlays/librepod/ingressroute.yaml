@@ -8,8 +8,8 @@ spec:
   - websecure
   routes:
   - kind: Rule
-    match: Host(`casdoor.${BASE_DOMAIN:=libre.pod}`) || Host(`sso.${BASE_DOMAIN:=libre.pod}`)
+    match: Host(`casdoor.${BASE_DOMAIN:=libre.pod}`) || Host(`id.${BASE_DOMAIN:=libre.pod}`)
     priority: 1
     services:
     - name: casdoor
-      port: 8000
+      port: 80

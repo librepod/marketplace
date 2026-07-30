@@ -73,14 +73,6 @@ spec:
           path: /spec/dependsOn
           value:
             - name: traefik
-    - target:
-        name: wg-easy
-        kind: Kustomization
-      patch: |
-        - op: replace
-          path: /spec/dependsOn
-          value:
-            - name: traefik
 
     # Faster retries for dev cluster (production keeps 2m)
     - target:

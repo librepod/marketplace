@@ -1,0 +1,33 @@
+# The casdoor-sso-controller reconciles this CR: it provisions the Casdoor
+# OIDC Application (clientId "vaultwarden") and writes the client id/secret +
+# issuer into Secret/vaultwarden-sso in this namespace. vaultwarden reads only
+# SSO_CLIENT_ID/SSO_CLIENT_SECRET from that Secret (Task 2); SSO_ISSUER is the
+# controller's discovery URL and is left unused — vaultwarden takes its issuer
+# from the literal SSO_AUTHORITY env var instead (see Global Constraints).
+apiVersion: marketplace.librepod.org/v1alpha1
+kind: SSOClient
+metadata:
+  name: vaultwarden-sso
+  namespace: vaultwarden
+spec:
+  clientId: vaultwarden
+  organization: librepod
+  redirectUris:
+    - "https://vaultwarden.${BASE_DOMAIN}/identity/connect/oidc-signin"
+  grantTypes: [authorization_code, refresh_token]
+  # JWT-Standard, NOT plain JWT. vaultwarden uses Rust's strict `openidconnect`
+  # crate, which fails to deserialize the `"address": []` claim that plain JWT
+  # emits (Casdoor's user `address` is a []string) -> the whole token parse
+  # aborts and SSO login fails. JWT-Standard emits spec-compliant OIDC claims
+  # and includes `address` only when the address scope is requested (it isn't),
+  # so the claim is omitted. It also avoids leaking password/passwordSalt.
+  # See docs/sso-app-author-guide.md "Token format".
+  tokenFormat: JWT-Standard
+  expireInHours: 168
+  output:
+    secretName: vaultwarden-sso
+    keys:
+      clientId: SSO_CLIENT_ID
+      clientSecret: SSO_CLIENT_SECRET
+      issuer: SSO_ISSUER
+  casdoorPolicy: retain

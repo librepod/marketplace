@@ -1,13 +1,13 @@
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
 metadata:
-  name: whoami
+  name: frp-operator
   namespace: flux-system
 spec:
   interval: 10m
-  url: oci://ghcr.io/librepod/marketplace/apps/whoami
+  url: oci://ghcr.io/librepod/marketplace/apps/frp-operator
   ref:
-    tag: "1.0.0"
+    tag: "v0.7.0"
   verify:
     provider: cosign
     secretRef:
@@ -16,21 +16,15 @@ spec:
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
-  name: whoami
+  name: frp-operator
   namespace: flux-system
 spec:
-  dependsOn:
-    - name: traefik
-    - name: oauth2-proxy
-  interval: 1m
+  interval: 1h
   retryInterval: 2m
   timeout: 5m
   sourceRef:
     kind: OCIRepository
-    name: whoami
+    name: frp-operator
   path: ./overlays/librepod
   prune: true
   wait: true
-  postBuild:
-    substitute:
-      BASE_DOMAIN: "${BASE_DOMAIN}"

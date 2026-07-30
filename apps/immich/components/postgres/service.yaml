@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    app.kubernetes.io/name: immich
+spec:
+  type: ClusterIP
+  # Selects by app name only — matches the pre-refactor rendering (the old base
+  # `labels` transformer synthesized exactly this selector). The single immich
+  # Deployment in this namespace carries the label, so endpoints resolve.
+  selector:
+    app.kubernetes.io/name: immich
+  ports:
+    - port: 5432
+      targetPort: postgres
+      protocol: TCP
+      name: postgres

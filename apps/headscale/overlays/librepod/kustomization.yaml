@@ -1,0 +1,48 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../../base
+- ingressroute.yaml
+- cors-middleware.yaml
+- ssoclient.yaml
+
+namespace: headscale
+
+configMapGenerator:
+  # Reflected copy of the cluster's step-CA root certificate. Reflector
+  # (emberstack) watches this empty stub and populates root_ca.crt from
+  # ConfigMap/step-certificates-certs in the step-ca namespace. The headscale
+  # pod merges the LibrePod root CA into its trust bundle (see
+  # deployment-ca-patch.yaml) so its startup OIDC discovery to id.<domain>
+  # passes TLS verification. Same pattern as vaultwarden/open-webui/seafile.
+  #
+  # disableNameSuffixHash is REQUIRED: the name MUST stay exactly
+  # step-certificates-certs so Reflector keeps re-populating the same object
+  # (it keys off the reflects annotation) and the CA-mount volume in
+  # deployment-ca-patch.yaml references it by this exact name.
+  - name: step-certificates-certs
+    options:
+      disableNameSuffixHash: true
+      annotations:
+        reflector.v1.k8s.emberstack.com/reflects: "step-ca/step-certificates-certs"
+
+images:
+  # The Headscale container image is based on a "distroless" image that does not
+  # contain a shell or any other debug tools. If you need to debug headscale running
+  # in the Docker container, you can use the -debug variant:
+  # docker.io/headscale/headscale:v0.28.0-debug
+- name: headscale/headscale
+  newTag: v0.28.0-debug
+- name: ghcr.io/tale/headplane
+  newTag: 0.6.3
+
+components:
+  - ../../components/frp-upstreams
+  - ../../components/headplane
+  - ../../components/bootstrap-api-key
+
+patches:
+- path: patch-storage-class.yaml
+- path: deployment-ca-patch.yaml
+- path: headplane-ca-patch.yaml

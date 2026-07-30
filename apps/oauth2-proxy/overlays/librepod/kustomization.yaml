@@ -9,3 +9,24 @@ resources:
 - ingressroute.yaml
 - middleware.yaml
 - middleware-errors.yaml
+- ssoclient.yaml
+- secret-cookie.yaml
+
+configMapGenerator:
+  # Reflected copy of the cluster's step-CA root cert. The Reflector controller
+  # (emberstack) watches this empty stub and populates root_ca.crt from
+  # ConfigMap/step-certificates-certs in the step-ca namespace. The oauth2-proxy
+  # pod merges the LibrePod root CA into its trust bundle (see helmrelease.yaml)
+  # so its server-side OIDC token exchange to id.<domain> passes TLS
+  # verification. Same pattern + PLATFORM DEPENDENCY as open-webui / seafile /
+  # vaultwarden.
+  #
+  # disableNameSuffixHash is REQUIRED: the name MUST stay exactly
+  # step-certificates-certs. The CA-mount volume in helmrelease.yaml references
+  # it by this exact name, and Reflector keys off the reflects annotation on this
+  # exact object. A hash suffix would break the volume mount.
+  - name: step-certificates-certs
+    options:
+      disableNameSuffixHash: true
+      annotations:
+        reflector.v1.k8s.emberstack.com/reflects: "step-ca/step-certificates-certs"

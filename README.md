@@ -54,6 +54,16 @@ flowchart TB
 
 ---
 
+### TLS / IngressRoute Convention
+
+All apps expose HTTP via Traefik `IngressRoute` resources. TLS certificates are
+handled by Traefik's default certificate store — apps do **not** configure `tls:`
+blocks on their IngressRoutes unless they need a specific cert resolver or custom
+TLS options. The default certificate is provisioned by cert-manager and applied
+cluster-wide via Traefik's TLS store.
+
+---
+
 ## 📂 Repository Structure
 
 ```

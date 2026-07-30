@@ -1,0 +1,107 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: immich
+spec:
+  displayName: "Immich"
+  description: "Self-hosted photo and video backup solution (Google Photos alternative)"
+  icon: "https://raw.githubusercontent.com/immich-app/immich/main/design/immich-logo.svg"
+  category: "Media"
+  website: "https://immich.app/"
+
+  # Application version (the immich-server container image tag), NOT the Helm
+  # chart version. Chart version is pinned internally in the OCIRepository.
+  version: "v3.0.3"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/immich"
+    path: ./overlays/librepod
+
+  params:
+    required:
+      - name: BASE_DOMAIN
+        description: "Base domain (Immich will be at immich.BASE_DOMAIN)"
+        type: string
+        example: "example.com"
+
+  secrets:
+    - name: DB_PASSWORD
+      description: "PostgreSQL password (A-Za-z0-9 only — no special chars, per Immich/postgres). Shared by the bundled postgres and immich-server."
+      required: true
+      generate:
+        type: random
+        length: 40
+
+  dependencies:
+    required:
+      - kind: IngressController
+        description: "Traefik (provided by traefik app)"
+      - kind: StorageClass
+        description: "nfs-client (provided by nfs-provisioner / storage). NOTE: a local/block storage class is strongly recommended for the postgres data volume."
+      - kind: SSOProvider
+        description: "Casdoor + casdoor-sso-controller (auto-provisions the immich OIDC client and credentials into Secret/immich-sso). Note: immich v3 can't be configured for OAuth at deploy time — after install, enable OAuth once in Immich → Administration → Settings → OAuth (issuer https://sso.BASE_DOMAIN, client id 'immich', secret from Secret/immich-sso)."
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-immich
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "immich"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/immich
+        ref:
+          tag: "v3.0.3"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-immich
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "immich"
+      spec:
+        dependsOn:
+          - name: storage
+          - name: traefik
+          - name: casdoor
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-immich
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+        postBuild:
+          substitute:
+            BASE_DOMAIN: "${BASE_DOMAIN}"
+          substituteFrom:
+            - kind: Secret
+              name: immich-config
+    secret: |
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: immich-config
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "immich"
+      type: Opaque
+      stringData:
+        DB_PASSWORD: "${DB_PASSWORD}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml
+        - secret.yaml
