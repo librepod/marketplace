@@ -13,11 +13,6 @@ on:
     paths:
       - 'clusters/**'
       - 'infrastructure/**'
-  push:
-    branches: [master]
-    paths:
-      - 'clusters/**'
-      - 'infrastructure/**'
 
 jobs:
   publish:
