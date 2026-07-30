@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
 import { ErrorBlock } from "@/components/ErrorBlock"
 import { StatusBadge } from "@/components/StatusBadge"
+import { NotFoundPage } from "./NotFoundPage"
 import { Loader2, ExternalLink } from "lucide-react"
 import { useInstallApp } from "@/hooks/useInstallApp"
 import { useUninstallApp } from "@/hooks/useUninstallApp"
@@ -36,20 +37,6 @@ function DetailSkeleton() {
   )
 }
 
-function NotFoundBlock() {
-  return (
-    <div className="mx-auto max-w-2xl text-center mt-12">
-      <h2 className="text-xl font-semibold">App not found</h2>
-      <p className="mt-2 text-sm text-muted-foreground">
-        This app doesn&apos;t exist in the catalog.
-      </p>
-      <Link to="/" className="mt-4 inline-block text-sm text-muted-foreground hover:underline">
-        ← Back to catalog
-      </Link>
-    </div>
-  )
-}
-
 function UninstallAction({
   displayName,
   uninstallMutation,
@@ -59,17 +46,16 @@ function UninstallAction({
 }) {
   return (
     <AlertDialog>
-      <AlertDialogTrigger className="inline-flex">
-        <Button
-          variant="destructive"
-          disabled={uninstallMutation.isPending}
-        >
-          {uninstallMutation.isPending && (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          )}
-          {uninstallMutation.isPending ? 'Uninstalling...' : 'Uninstall App'}
-        </Button>
-      </AlertDialogTrigger>
+      <AlertDialogTrigger
+        render={
+          <Button variant="destructive" disabled={uninstallMutation.isPending}>
+            {uninstallMutation.isPending && (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            )}
+            {uninstallMutation.isPending ? 'Uninstalling...' : 'Uninstall App'}
+          </Button>
+        }
+      />
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Uninstall {displayName}?</AlertDialogTitle>
@@ -104,6 +90,11 @@ export function AppDetailPage() {
     },
     retry: 0,
     enabled: !!name,
+    // Flux reconciles asynchronously — poll the detail while an install is in
+    // flight so the action flips installing → running on its own. Read-only GET,
+    // and self-limiting: it stops the moment status leaves 'installing'.
+    refetchInterval: (query) =>
+      query.state.data?.installedStatus === 'installing' ? 3000 : false,
   })
 
   const installMutation = useInstallApp(name ?? '', data?.displayName ?? '')
@@ -115,11 +106,11 @@ export function AppDetailPage() {
   const { data: config } = useConfig()
   const openUrl = config && name ? `https://${name}.${config.baseDomain}` : undefined
 
-  if (!name) return <NotFoundBlock />
+  if (!name) return <NotFoundPage title="App not found" description="This app doesn't exist in the catalog." />
   if (isPending) return <DetailSkeleton />
-  if (isError && (error as Error)?.message === "NOT_FOUND") return <NotFoundBlock />
+  if (isError && (error as Error)?.message === "NOT_FOUND") return <NotFoundPage title="App not found" description="This app doesn't exist in the catalog." />
   if (isError) return <ErrorBlock onRetry={() => void refetch()} />
-  if (!data) return <NotFoundBlock />
+  if (!data) return <NotFoundPage title="App not found" description="This app doesn't exist in the catalog." />
 
   return (
     <div className="mx-auto max-w-2xl">

@@ -42,4 +42,10 @@ describe('AppCard', () => {
     render(<MemoryRouter><AppCard app={mockApp} /></MemoryRouter>)
     expect(screen.queryByText('1.32.7')).not.toBeInTheDocument()
   })
+
+  it('is a keyboard-focusable link to app detail (a11y, WCAG 2.1.1)', () => {
+    render(<MemoryRouter><AppCard app={mockApp} /></MemoryRouter>)
+    const link = screen.getByRole('link', { name: 'Vaultwarden' })
+    expect(link).toHaveAttribute('href', '/apps/vaultwarden')
+  })
 })

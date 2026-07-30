@@ -22,6 +22,13 @@ export function CatalogPage() {
       return json.apps ?? json
     },
     retry: 0,
+    // Flux reconciles asynchronously — keep the grid live while any app is
+    // mid-install so cards flip installing → running on their own. Stops the
+    // instant nothing is installing.
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some((a) => a.installedStatus === 'installing')
+        ? 3000
+        : false,
   })
 
   return (

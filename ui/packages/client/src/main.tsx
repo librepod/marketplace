@@ -3,7 +3,6 @@ import ReactDOM from "react-dom/client"
 import { RouterProvider } from "react-router-dom"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { router } from "./router"
-import "@fontsource/inter"
 import "./index.css"
 
 // D-02: default dark mode — set BEFORE React mounts to prevent flash of unstyled content

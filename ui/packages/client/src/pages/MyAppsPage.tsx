@@ -21,6 +21,12 @@ export function MyAppsPage() {
       return res.json()
     },
     retry: 0,
+    // Mirror the catalog: poll while any installed app is still installing, so
+    // My Apps reflects the installing → running transition without a manual refresh.
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some((a) => a.installedStatus === 'installing')
+        ? 3000
+        : false,
   })
 
   return (

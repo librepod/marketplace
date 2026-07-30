@@ -13,7 +13,7 @@ export function AppIcon({ src, name, size }: AppIconProps) {
   if (failed) {
     return (
       <div
-        className="flex items-center justify-center rounded-md bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xl"
+        className="flex items-center justify-center rounded-md bg-muted text-muted-foreground font-semibold text-xl"
         style={{ width: size, height: size }}
       >
         {initial}
