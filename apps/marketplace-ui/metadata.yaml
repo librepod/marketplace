@@ -1,0 +1,16 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: marketplace-ui
+spec:
+  displayName: "Marketplace UI"
+  description: "Web-based app marketplace for discovering, installing, and managing self-hosted apps on LibrePod clusters"
+  icon: "https://raw.githubusercontent.com/nicehash/rest-clients-demo/master/img/app-store.png"
+  category: "System"
+  website: "https://github.com/librepod/marketplace"
+  version: "0.1.0"
+  appVersion: "0.1.0"
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/marketplace-ui"
+    path: ./overlays/librepod

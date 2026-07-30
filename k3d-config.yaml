@@ -50,7 +50,7 @@ hostAliases:
       - gogs.librepod.local
       - casdoor.librepod.local
       - oauth2-proxy.librepod.local
-      - marketplace-ui.librepod.local
+      - marketplace.librepod.local
 
 files:
   # Pre-deploy cosign public key before Flux starts reconciling

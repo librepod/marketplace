@@ -14,4 +14,5 @@ resources:
   - reflector.yaml
   - step-certificates.yaml
   - step-issuer.yaml
+  - marketplace-ui.yaml
   - traefik.yaml
