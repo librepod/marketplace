@@ -6,7 +6,7 @@ spec:
   displayName: "FRP Client"
   description: "Fast Reverse Proxy client for remote access to cluster services and host SSH"
   icon: "https://raw.githubusercontent.com/fatedier/frp/main/doc/pic/frp.png"
-  category: "Networking"
+  category: "Network"
   website: "https://github.com/fatedier/frp"
 
   version: "v0.65.0"
