@@ -61,7 +61,7 @@ describe('MyAppsPage (INST-03)', () => {
     } as Response)
     render(<MyAppsPage />, { wrapper: createWrapper() })
     await waitFor(() => {
-      expect(screen.getByText(/failed to/i)).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: "Couldn't reach your device" })).toBeInTheDocument()
     })
   })
 

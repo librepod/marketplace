@@ -8,9 +8,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
 import { ErrorBlock } from "@/components/ErrorBlock"
 import { StatusBadge } from "@/components/StatusBadge"
-import { Loader2 } from "lucide-react"
+import { Loader2, ExternalLink } from "lucide-react"
 import { useInstallApp } from "@/hooks/useInstallApp"
 import { useUninstallApp } from "@/hooks/useUninstallApp"
+import { useConfig } from "@/hooks/useConfig"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,6 +50,47 @@ function NotFoundBlock() {
   )
 }
 
+function UninstallAction({
+  displayName,
+  uninstallMutation,
+}: {
+  displayName: string
+  uninstallMutation: ReturnType<typeof useUninstallApp>
+}) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger className="inline-flex">
+        <Button
+          variant="destructive"
+          disabled={uninstallMutation.isPending}
+        >
+          {uninstallMutation.isPending && (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          )}
+          {uninstallMutation.isPending ? 'Uninstalling...' : 'Uninstall App'}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Uninstall {displayName}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will remove {displayName} and all its data from your server.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep App</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => uninstallMutation.mutate()}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            Uninstall App
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
 export function AppDetailPage() {
   const { name } = useParams<{ name: string }>()
 
@@ -66,6 +108,12 @@ export function AppDetailPage() {
 
   const installMutation = useInstallApp(name ?? '', data?.displayName ?? '')
   const uninstallMutation = useUninstallApp(name ?? '', data?.displayName ?? '')
+
+  // baseDomain is the same value substituted into app templates at install
+  // time, so this URL matches the Traefik IngressRoute host the app runs under.
+  // (HTTP apps only — non-HTTP apps are reached over the tailnet, not the web.)
+  const { data: config } = useConfig()
+  const openUrl = config && name ? `https://${name}.${config.baseDomain}` : undefined
 
   if (!name) return <NotFoundBlock />
   if (isPending) return <DetailSkeleton />
@@ -107,19 +155,21 @@ export function AppDetailPage() {
         <p className="text-sm leading-relaxed">{data.description}</p>
 
         <div className="mt-4">
-          {/^(?:https?|oci|git):\/\//.test(data.sourceUrl) && (
+          {/^https?:\/\//.test(data.sourceUrl) && (
             <a
               href={data.sourceUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm underline text-muted-foreground hover:text-foreground"
+              className="inline-flex items-center gap-1 text-sm underline text-muted-foreground hover:text-foreground"
             >
-              View source
+              View project
+              <ExternalLink className="size-3" />
+              <span className="sr-only"> (opens in a new tab)</span>
             </a>
           )}
         </div>
 
-        <div className="mt-8">
+        <div className="mt-8 flex flex-wrap items-center gap-3">
           {(!data.installedStatus || data.installedStatus === 'not_installed') && (
             <Button
               onClick={() => installMutation.mutate()}
@@ -139,39 +189,29 @@ export function AppDetailPage() {
             </Button>
           )}
 
-          {(data.installedStatus === 'running' || data.installedStatus === 'error') && (
-            <AlertDialog>
-              <AlertDialogTrigger
-                className="inline-flex"
-              >
+          {data.installedStatus === 'running' && (
+            <>
+              {openUrl && (
                 <Button
-                  variant="destructive"
-                  disabled={uninstallMutation.isPending}
+                  render={<a href={openUrl} target="_blank" rel="noopener noreferrer" />}
                 >
-                  {uninstallMutation.isPending && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  {uninstallMutation.isPending ? 'Uninstalling...' : 'Uninstall App'}
+                  Open {data.displayName}
+                  <ExternalLink />
+                  <span className="sr-only"> (opens in a new tab)</span>
                 </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Uninstall {data.displayName}?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will remove {data.displayName} and all its data from your server.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Keep App</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={() => uninstallMutation.mutate()}
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  >
-                    Uninstall App
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+              )}
+              <UninstallAction
+                displayName={data.displayName}
+                uninstallMutation={uninstallMutation}
+              />
+            </>
+          )}
+
+          {data.installedStatus === 'error' && (
+            <UninstallAction
+              displayName={data.displayName}
+              uninstallMutation={uninstallMutation}
+            />
           )}
         </div>
       </div>

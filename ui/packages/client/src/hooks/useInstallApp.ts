@@ -13,15 +13,15 @@ export function useInstallApp(appName: string, displayName: string) {
       return res.json()
     },
     onSuccess: () => {
-      toast.success('Installed', {
-        description: `${displayName} is being deployed`,
+      toast.success('Install started', {
+        description: `${displayName} is being deployed.`,
       })
       queryClient.invalidateQueries({ queryKey: ['apps'] })
       queryClient.invalidateQueries({ queryKey: ['apps', appName] })
       queryClient.invalidateQueries({ queryKey: ['installed'] })
     },
     onError: (error: Error) => {
-      toast.error('Error', {
+      toast.error(`Couldn't install ${displayName}`, {
         description: error.message,
         duration: Infinity,
       })

@@ -9,9 +9,11 @@ export function ErrorBlock({ onRetry }: ErrorBlockProps) {
   return (
     <div className="flex flex-col items-center gap-3 mt-12 text-center">
       <AlertCircle className="h-5 w-5 text-destructive" />
-      <h2 className="text-xl font-semibold">Failed to load apps</h2>
-      <p className="text-sm text-muted-foreground">Check your connection and try again.</p>
-      <Button variant="outline" size="sm" onClick={onRetry}>Retry Loading</Button>
+      <h2 className="text-xl font-semibold">Couldn't reach your device</h2>
+      <p className="text-sm text-muted-foreground">
+        We couldn't reach your device to load this. Check that it's online, then try again.
+      </p>
+      <Button variant="outline" size="sm" onClick={onRetry}>Try again</Button>
     </div>
   )
 }

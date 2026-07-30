@@ -13,15 +13,15 @@ export function useUninstallApp(appName: string, displayName: string) {
       return res.json()
     },
     onSuccess: () => {
-      toast.success('Uninstalled', {
-        description: `${displayName} has been removed`,
+      toast.success('Uninstall started', {
+        description: `${displayName} is being removed.`,
       })
       queryClient.invalidateQueries({ queryKey: ['apps'] })
       queryClient.invalidateQueries({ queryKey: ['apps', appName] })
       queryClient.invalidateQueries({ queryKey: ['installed'] })
     },
     onError: (error: Error) => {
-      toast.error('Error', {
+      toast.error(`Couldn't uninstall ${displayName}`, {
         description: error.message,
         duration: Infinity,
       })

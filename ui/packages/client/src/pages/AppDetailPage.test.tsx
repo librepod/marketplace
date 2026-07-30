@@ -21,6 +21,9 @@ function createWrapper(appName = 'vaultwarden') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: 0 } },
   })
+  // Pre-seed device config so useConfig doesn't issue a fetch, keeping the
+  // positional fetch mocks below (app data, install/uninstall POST) aligned.
+  queryClient.setQueryData(['config'], { baseDomain: 'libre.pod' })
   return ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[`/apps/${appName}`]}>
@@ -93,7 +96,20 @@ describe('AppDetailPage', () => {
     })
   })
 
-  it('renders "View source" link pointing to sourceUrl (D-08)', async () => {
+  it('renders "View project" link for a web (https) sourceUrl (D-08)', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ ...mockApp, sourceUrl: 'https://github.com/librepod/vaultwarden' }),
+    } as Response)
+    render(<AppDetailPage />, { wrapper: createWrapper() })
+    await waitFor(() => {
+      const link = screen.getByRole('link', { name: /View project/i })
+      expect(link).toHaveAttribute('href', 'https://github.com/librepod/vaultwarden')
+    })
+  })
+
+  it('hides the project link for a non-web (oci://) sourceUrl (D-08)', async () => {
     vi.spyOn(global, 'fetch').mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -101,9 +117,9 @@ describe('AppDetailPage', () => {
     } as Response)
     render(<AppDetailPage />, { wrapper: createWrapper() })
     await waitFor(() => {
-      const link = screen.getByRole('link', { name: 'View source' })
-      expect(link).toHaveAttribute('href', mockApp.sourceUrl)
+      expect(screen.getByText('Vaultwarden')).toBeInTheDocument()
     })
+    expect(screen.queryByRole('link', { name: /View project/i })).not.toBeInTheDocument()
   })
 
   it('shows "App not found" on 404 response', async () => {
@@ -141,6 +157,20 @@ describe('AppDetailPage', () => {
       render(<AppDetailPage />, { wrapper: createWrapper() })
       await waitFor(() => {
         expect(screen.getByText('Uninstall App')).toBeInTheDocument()
+      })
+    })
+
+    it('renders an Open link to the app when it is running (reachability)', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ...mockApp, installedStatus: 'running' }),
+      } as Response)
+      render(<AppDetailPage />, { wrapper: createWrapper() })
+      await waitFor(() => {
+        const link = screen.getByRole('link', { name: /Open Vaultwarden/i })
+        expect(link).toHaveAttribute('href', 'https://vaultwarden.libre.pod')
+        expect(link).toHaveAttribute('target', '_blank')
       })
     })
 

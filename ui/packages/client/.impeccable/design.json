@@ -1,0 +1,391 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-30T00:00:00.000Z",
+  "title": "Design System: LibrePod Marketplace",
+  "extensions": {
+    "colorMeta": {
+      "background": {
+        "role": "neutral",
+        "displayName": "Bare Workbench",
+        "canonical": "oklch(0.145 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.36 0 0)",
+          "oklch(0.48 0 0)",
+          "oklch(0.62 0 0)",
+          "oklch(0.74 0 0)",
+          "oklch(0.85 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "foreground": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "oklch(0.985 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.36 0 0)",
+          "oklch(0.48 0 0)",
+          "oklch(0.62 0 0)",
+          "oklch(0.74 0 0)",
+          "oklch(0.85 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "card": {
+        "role": "neutral",
+        "displayName": "Raised Surface",
+        "canonical": "oklch(0.205 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.36 0 0)",
+          "oklch(0.48 0 0)",
+          "oklch(0.62 0 0)",
+          "oklch(0.74 0 0)",
+          "oklch(0.85 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "popover": {
+        "role": "neutral",
+        "displayName": "Raised Surface",
+        "canonical": "oklch(0.205 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.36 0 0)",
+          "oklch(0.48 0 0)",
+          "oklch(0.62 0 0)",
+          "oklch(0.74 0 0)",
+          "oklch(0.85 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "primary": {
+        "role": "primary",
+        "displayName": "Workbench White",
+        "canonical": "oklch(0.922 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.36 0 0)",
+          "oklch(0.48 0 0)",
+          "oklch(0.62 0 0)",
+          "oklch(0.74 0 0)",
+          "oklch(0.85 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "secondary": {
+        "role": "neutral",
+        "displayName": "Trough",
+        "canonical": "oklch(0.269 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.36 0 0)",
+          "oklch(0.48 0 0)",
+          "oklch(0.62 0 0)",
+          "oklch(0.74 0 0)",
+          "oklch(0.85 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Trough",
+        "canonical": "oklch(0.269 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.36 0 0)",
+          "oklch(0.48 0 0)",
+          "oklch(0.62 0 0)",
+          "oklch(0.74 0 0)",
+          "oklch(0.85 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "muted-foreground": {
+        "role": "neutral",
+        "displayName": "Quiet Ink",
+        "canonical": "oklch(0.708 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.36 0 0)",
+          "oklch(0.48 0 0)",
+          "oklch(0.62 0 0)",
+          "oklch(0.74 0 0)",
+          "oklch(0.85 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "oklch(1 0 0 / 10%)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.36 0 0)",
+          "oklch(0.48 0 0)",
+          "oklch(0.62 0 0)",
+          "oklch(0.74 0 0)",
+          "oklch(0.85 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "ring": {
+        "role": "neutral",
+        "displayName": "Ring",
+        "canonical": "oklch(0.556 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.36 0 0)",
+          "oklch(0.48 0 0)",
+          "oklch(0.62 0 0)",
+          "oklch(0.74 0 0)",
+          "oklch(0.85 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
+      "destructive": {
+        "role": "primary",
+        "displayName": "Plain Danger",
+        "canonical": "oklch(0.704 0.191 22.216)",
+        "tonalRamp": [
+          "oklch(0.22 0.12 22)",
+          "oklch(0.34 0.15 22)",
+          "oklch(0.46 0.17 22)",
+          "oklch(0.58 0.19 22)",
+          "oklch(0.70 0.19 22)",
+          "oklch(0.80 0.15 22)",
+          "oklch(0.88 0.10 22)",
+          "oklch(0.94 0.05 22)"
+        ]
+      },
+      "status-running": {
+        "role": "tertiary",
+        "displayName": "Running",
+        "canonical": "#22c55e",
+        "tonalRamp": [
+          "oklch(0.24 0.10 149)",
+          "oklch(0.36 0.13 149)",
+          "oklch(0.48 0.15 149)",
+          "oklch(0.60 0.17 149)",
+          "oklch(0.72 0.19 149)",
+          "oklch(0.82 0.15 149)",
+          "oklch(0.89 0.10 149)",
+          "oklch(0.95 0.05 149)"
+        ]
+      },
+      "status-installing": {
+        "role": "tertiary",
+        "displayName": "Installing",
+        "canonical": "#facc15",
+        "tonalRamp": [
+          "oklch(0.30 0.10 99)",
+          "oklch(0.42 0.13 99)",
+          "oklch(0.55 0.15 99)",
+          "oklch(0.68 0.17 99)",
+          "oklch(0.80 0.18 99)",
+          "oklch(0.90 0.18 99)",
+          "oklch(0.93 0.12 99)",
+          "oklch(0.96 0.06 99)"
+        ]
+      },
+      "status-error": {
+        "role": "tertiary",
+        "displayName": "Error",
+        "canonical": "#ef4444",
+        "tonalRamp": [
+          "oklch(0.24 0.13 28)",
+          "oklch(0.36 0.17 28)",
+          "oklch(0.46 0.20 28)",
+          "oklch(0.55 0.22 28)",
+          "oklch(0.63 0.24 28)",
+          "oklch(0.74 0.19 28)",
+          "oklch(0.85 0.12 28)",
+          "oklch(0.94 0.05 28)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The wordmark and app-detail page title. The largest type in the product."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Catalog card titles. The CardTitle primitive is a smaller 16px variant."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Descriptions, nav, button labels, meta, dialog body — the workhorse."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Badges, status labels, and the smallest meta. Uppercase is not used."
+      }
+    },
+    "shadows": [
+      {
+        "name": "card-rest-ring",
+        "value": "0 0 0 1px color-mix(in oklch, var(--foreground) 10%, transparent)",
+        "purpose": "The hairline edge separating cards and dialogs from the canvas at rest. Not a border, not a shadow — a ring."
+      },
+      {
+        "name": "hover-lift",
+        "value": "0 4px 6px -1px rgba(0,0,0,0.10), 0 2px 4px -2px rgba(0,0,0,0.10)",
+        "purpose": "shadow-md, paired with a 2px lift. Only on a clickable catalog card the user is actively hovering."
+      },
+      {
+        "name": "status-float",
+        "value": "0 1px 2px 0 rgba(0,0,0,0.05)",
+        "purpose": "shadow-sm on the floating StatusBadge pill, so it reads as just above the card."
+      }
+    ],
+    "motion": [
+      {
+        "name": "card-hover",
+        "value": "transition: all 150ms ease; transform: translateY(-2px)",
+        "purpose": "The catalog card's lift-and-shadow on hover over 150ms."
+      },
+      {
+        "name": "color-fade",
+        "value": "transition: color 150ms ease",
+        "purpose": "Nav links and text shifting between muted and foreground."
+      },
+      {
+        "name": "dialog-in",
+        "value": "animation: ds-fade-zoom 100ms ease-out (fade-in-0 + zoom-in-95)",
+        "purpose": "AlertDialog open/close: 100ms fade plus a 95% zoom. The scrim fades over the same 100ms."
+      },
+      {
+        "name": "skeleton-pulse",
+        "value": "animation: ds-pulse 1.5s ease-in-out infinite",
+        "purpose": "Loading skeletons breathe to signal progress without noise."
+      },
+      {
+        "name": "spinner",
+        "value": "animation: ds-spin 0.6s linear infinite",
+        "purpose": "Loader2 spinner inside pending Install/Uninstall buttons."
+      },
+      {
+        "name": "button-press",
+        "value": "transform: translateY(1px) on :active",
+        "purpose": "Buttons give 1px of physical press feedback; they stay flat otherwise."
+      }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px", "purpose": "Container cap: max-w-screen-xl = 1280px." },
+      { "name": "2xl", "value": "1536px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The inverted near-white call to action — the single forward action on a screen ('Install App').",
+      "html": "<button class='ds-btn-primary'>Install App</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem; height: 2rem; padding: 0 0.625rem; border-radius: var(--radius); border: 1px solid transparent; background: var(--primary); color: var(--primary-foreground); font-family: 'Geist Variable', system-ui, sans-serif; font-size: 0.875rem; font-weight: 500; line-height: 1; transition: all 150ms ease; } .ds-btn-primary:hover { background: color-mix(in oklch, var(--primary) 80%, transparent); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent); } .ds-btn-primary:active { transform: translateY(1px); } .ds-btn-primary:disabled { pointer-events: none; opacity: 0.5; }"
+    },
+    {
+      "name": "Destructive Button",
+      "kind": "button",
+      "refersTo": "button-destructive",
+      "description": "Danger as a soft tint, not a shout — bg-destructive/10 with destructive text, deepening on hover.",
+      "html": "<button class='ds-btn-destructive'>Uninstall App</button>",
+      "css": ".ds-btn-destructive { display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem; height: 2rem; padding: 0 0.625rem; border-radius: var(--radius); border: 1px solid transparent; background: color-mix(in oklch, var(--destructive) 10%, transparent); color: var(--destructive); font-family: 'Geist Variable', system-ui, sans-serif; font-size: 0.875rem; font-weight: 500; line-height: 1; transition: all 150ms ease; } .ds-btn-destructive:hover { background: color-mix(in oklch, var(--destructive) 20%, transparent); } .ds-btn-destructive:focus-visible { outline: none; border-color: color-mix(in oklch, var(--destructive) 40%, transparent); box-shadow: 0 0 0 3px color-mix(in oklch, var(--destructive) 20%, transparent); } .ds-btn-destructive:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Secondary/cancel control — bordered background surface that washes to muted on hover ('Retry Loading', 'Keep App').",
+      "html": "<button class='ds-btn-outline'>Retry Loading</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 0.25rem; height: 1.75rem; padding: 0 0.625rem; border-radius: var(--radius); border: 1px solid var(--border); background: var(--background); color: var(--foreground); font-family: 'Geist Variable', system-ui, sans-serif; font-size: 0.8rem; font-weight: 500; line-height: 1; transition: all 150ms ease; } .ds-btn-outline:hover { background: var(--muted); color: var(--foreground); } .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent); } .ds-btn-outline:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Catalog Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The catalog unit: hairline ring at rest, lifts to a shadow on hover. 48px icon, title beside a category pill, two-line description.",
+      "html": "<article class='ds-card'><div class='ds-card-icon'>N</div><div class='ds-card-head'><h3 class='ds-card-title'>Nextcloud</h3><span class='ds-badge'>Files</span></div><p class='ds-card-desc'>A self-hosted productivity platform with file sync, calendar and contacts for everyone.</p></article>",
+      "css": ".ds-card { display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem; border-radius: calc(var(--radius) * 1.4); background: var(--card); color: var(--card-foreground); box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 10%, transparent); transition: all 150ms ease; cursor: pointer; } .ds-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.10), 0 2px 4px -2px rgba(0,0,0,0.10); } .ds-card-icon { width: 3rem; height: 3rem; border-radius: calc(var(--radius) * 0.8); background: color-mix(in oklch, var(--foreground) 8%, transparent); color: var(--foreground); display: flex; align-items: center; justify-content: center; font-weight: 600; } .ds-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; } .ds-card-title { margin: 0; font-family: 'Geist Variable', system-ui, sans-serif; font-size: 1.25rem; font-weight: 600; line-height: 1.3; } .ds-card-desc { margin: 0; font-size: 0.875rem; line-height: 1.625; color: var(--muted-foreground); }"
+    },
+    {
+      "name": "Category Badge",
+      "kind": "chip",
+      "refersTo": "badge-secondary",
+      "description": "The fully-rounded pill that labels an app's category. Secondary surface tint, small label type.",
+      "html": "<span class='ds-badge'>Files</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; justify-content: center; height: 1.25rem; padding: 0.125rem 0.5rem; border-radius: calc(var(--radius) * 2.6); background: var(--secondary); color: var(--secondary-foreground); font-family: 'Geist Variable', system-ui, sans-serif; font-size: 0.75rem; font-weight: 500; line-height: 1; white-space: nowrap; }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "status-badge",
+      "description": "Signature component — the only operational color in the UI. A floating pill with an 8px dot whose color is the signal: green = running, yellow = installing, red = error.",
+      "html": "<span class='ds-status'><span class='ds-status-dot ds-status-running'></span>Running</span>",
+      "css": ".ds-status { display: inline-flex; align-items: center; gap: 0.25rem; height: 1.25rem; padding: 0.125rem 0.5rem; border-radius: 9999px; background: color-mix(in oklch, var(--background) 80%, transparent); color: var(--foreground); font-family: 'Geist Variable', system-ui, sans-serif; font-size: 0.75rem; font-weight: 500; line-height: 1; box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05); } .ds-status-dot { width: 0.5rem; height: 0.5rem; border-radius: 9999px; } .ds-status-running { background: #22c55e; } .ds-status-installing { background: #facc15; } .ds-status-error { background: #ef4444; }"
+    },
+    {
+      "name": "Skeleton",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Loading placeholder. muted surface that breathes via pulse, shaped like the real card so the loading-to-loaded transition is calm.",
+      "html": "<div class='ds-skeleton'><div class='ds-skel-icon'></div><div class='ds-skel-line ds-skel-w75'></div><div class='ds-skel-line'></div></div>",
+      "css": ".ds-skeleton { padding: 1rem; border-radius: var(--radius); border: 1px solid var(--border); background: var(--card); } .ds-skel-icon { width: 3rem; height: 3rem; border-radius: calc(var(--radius) * 0.8); margin-bottom: 1rem; background: var(--muted); animation: ds-pulse 1.5s ease-in-out infinite; } .ds-skel-line { height: 0.625rem; border-radius: calc(var(--radius) * 0.5); margin-bottom: 0.5rem; background: var(--muted); animation: ds-pulse 1.5s ease-in-out infinite; } .ds-skel-w75 { width: 75%; } .ds-skel-line:last-child { width: 100%; height: 2.5rem; } @keyframes ds-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }"
+    },
+    {
+      "name": "Alert Dialog",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "The destructive-uninstall confirmation. Centered popover over a blurred scrim; muted footer holds an outline cancel and a solid red action.",
+      "html": "<div class='ds-dialog-scrim'><div class='ds-dialog'><div class='ds-dialog-body'><h2 class='ds-dialog-title'>Uninstall Nextcloud?</h2><p class='ds-dialog-desc'>This will remove Nextcloud and all its data from your server.</p></div><div class='ds-dialog-footer'><button class='ds-btn-outline'>Keep App</button><button class='ds-dialog-action'>Uninstall App</button></div></div></div>",
+      "css": ".ds-dialog-scrim { position: fixed; inset: 0; background: rgba(0,0,0,0.10); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; } .ds-dialog { width: 100%; max-width: 20rem; border-radius: calc(var(--radius) * 1.4); background: var(--popover); color: var(--popover-foreground); box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 10%, transparent), 0 10px 30px rgba(0,0,0,0.3); } .ds-dialog-body { padding: 1rem; text-align: center; } .ds-dialog-title { margin: 0 0 0.375rem; font-family: 'Geist Variable', system-ui, sans-serif; font-size: 1rem; font-weight: 500; } .ds-dialog-desc { margin: 0; font-size: 0.875rem; color: var(--muted-foreground); } .ds-dialog-footer { display: flex; flex-direction: column-reverse; gap: 0.5rem; padding: 1rem; border-top: 1px solid var(--border); background: color-mix(in oklch, var(--muted) 50%, transparent); border-bottom-left-radius: calc(var(--radius) * 1.4); border-bottom-right-radius: calc(var(--radius) * 1.4); } .ds-dialog-action { height: 2rem; border-radius: var(--radius); border: 1px solid transparent; background: var(--destructive); color: var(--foreground); font-family: 'Geist Variable', system-ui, sans-serif; font-size: 0.875rem; font-weight: 500; } @media (min-width: 640px) { .ds-dialog-footer { flex-direction: row; justify-content: flex-end; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Honest Workbench",
+    "overview": "This is a workbench, not a showroom. The LibrePod Marketplace is the surface a non-technical owner opens to install and remove apps on their own device, and every element here earns its place by doing work — nothing is here to impress. The result is a dark, flat, near-monochrome surface: plain surfaces, honest verbs (\"Install App\", \"Keep App\"), and a single red that states danger plainly. The mood is calm and restrained first, technical-but-gentle second, and honest in its voice throughout. Restraint is the design.\n\nDepth and color are both spendthrift here, and that is the point. Surfaces sit flat at rest, separated by hairline rings rather than dropped shadows; a card only lifts and casts a shadow in the moment it is being touched. Color is rarer still: the entire neutral palette is pure achromatic grayscale, and saturated color appears in exactly two roles — a muted red for danger, and the green/yellow/red dots that report whether an app is running, installing, or erroring. When color does appear, it is a signal the owner must read, never decoration.\n\nThe product ships dark (decision D-02 forces the .dark class before mount to avoid a flash), so the dark tokens are the operational defaults; the light-mode tokens are vestigial — new work must look right in dark first. Density is compact and app-tight (14px body, 32px default button height, a 280px-min card grid): this is a tool the owner uses, read at a glance, not a page they browse.",
+    "keyCharacteristics": [
+      "Dark-first, near-monochrome Operate surface; light mode is vestigial.",
+      "Pure achromatic neutrals; saturated color reserved for danger + live status only.",
+      "Flat at rest; rings, shadows, and lift appear only as a response to state.",
+      "Single typeface (Geist); weight and size carry hierarchy, not a second face.",
+      "Compact, honest controls; plain verbs; one red for consequence."
+    ],
+    "rules": [
+      { "name": "The Signal-Only Rule", "body": "Neutral surfaces are pure achromatic (oklch chroma 0). Saturated color appears in exactly two roles: destructive for danger or removal, and the status dots for live reconciliation state. Color is never used for branding, accent, or decoration. If a new surface wants color, ask what signal it carries — if none, it stays gray.", "section": "colors" },
+      { "name": "The Dark-First Rule", "body": "Design and evaluate every surface in dark mode first; the light tokens are vestigial and the product ships dark (D-02). A screen that only works in light is not done.", "section": "colors" },
+      { "name": "The One-Face Rule", "body": "One typeface (Geist) for everything. Hierarchy comes from size and weight alone — never from introducing a second family, a display serif, or a monospace accent.", "section": "typography" },
+      { "name": "The Depth-Is-State Rule", "body": "Surfaces are flat at rest. Rings, shadows, and lift may appear only as a response to state — hover, press, focus, or modal elevation. A resting shadow is a bug.", "section": "elevation" },
+      { "name": "The Honest-Corner Rule", "body": "Modest radii (8-14px) for working surfaces; reserve the fully-rounded pill (rounded-4xl / rounded-full) for tags and status — small, secondary labels that need to read as discrete chips, not containers.", "section": "shapes" }
+    ],
+    "dos": [
+      "Do design and evaluate every surface in dark mode first — the product ships dark (D-02); light tokens are vestigial.",
+      "Do keep neutral surfaces pure achromatic; let saturated color carry a signal only (destructive danger, or a status dot). See The Signal-Only Rule.",
+      "Do keep surfaces flat at rest; introduce rings, shadows, and lift only as a response to hover, press, focus, or modal elevation. See The Depth-Is-State Rule.",
+      "Do build hierarchy with size and weight within the single Geist face, not a second typeface. See The One-Face Rule.",
+      "Do use modest radii (8-14px) for working surfaces and reserve the full pill for tags and status. See The Honest-Corner Rule.",
+      "Do write plain, honest verbs that state consequence ('Install App', 'Uninstall App', 'Keep App') — the copy is part of the design."
+    ],
+    "donts": [
+      "Don't apply saturated brand or decorative color to general UI surfaces. Color is a signal medium, not an accent.",
+      "Don't use gradients, glassmorphism, or decorative blur. The only blur in the product is the dialog scrim (backdrop-blur-xs behind bg-black/10).",
+      "Don't design light-mode-first, or assume a light canvas. Evaluate in dark before anything else.",
+      "Don't introduce a second typeface, a display serif, or a monospace accent to 'add personality' — restraint is the personality."
+    ]
+  }
+}

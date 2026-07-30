@@ -56,3 +56,12 @@ export interface CatalogFile {
   };
   apps: CatalogApp[];
 }
+
+/**
+ * Public device configuration the SPA needs to build user-facing links.
+ * `baseDomain` mirrors the installer's BASE_DOMAIN env var (see InstalledService),
+ * so per-app `https://<name>.<baseDomain>` links match the deployed IngressRoute host.
+ */
+export interface MarketplaceConfig {
+  baseDomain: string;
+}

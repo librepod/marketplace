@@ -62,7 +62,7 @@ describe('CatalogPage', () => {
     } as Response)
     render(<CatalogPage />, { wrapper: createWrapper() })
     await waitFor(() => {
-      expect(screen.getByText('Failed to load apps')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: "Couldn't reach your device" })).toBeInTheDocument()
     })
   })
 

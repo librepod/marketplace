@@ -35,7 +35,7 @@ export function CatalogPage() {
         </div>
       )}
       {!isPending && isError && <ErrorBlock onRetry={refetch} />}
-      {!isPending && !isError && (!data || data.length === 0) && <EmptyState />}
+      {!isPending && !isError && (!data || data.length === 0) && <EmptyState onRetry={refetch} />}
       {!isPending && !isError && data && data.length > 0 && (
         <div style={GRID_STYLE}>
           {data.map((app) => (

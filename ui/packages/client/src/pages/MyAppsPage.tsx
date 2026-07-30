@@ -1,4 +1,5 @@
 import React from "react"
+import { Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import type { CatalogApp } from "@librepod/shared"
 import { AppCard } from "@/components/AppCard"
@@ -37,7 +38,7 @@ export function MyAppsPage() {
         <div className="py-16 text-center">
           <p className="text-muted-foreground">No apps installed yet.</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Browse the <a href="/" className="underline hover:text-foreground">Catalog</a> to install apps.
+            Browse the <Link to="/" className="underline hover:text-foreground">Catalog</Link> to install apps.
           </p>
         </div>
       )}
