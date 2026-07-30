@@ -26,13 +26,19 @@ import {
 } from "@/components/ui/alert-dialog"
 
 function DetailSkeleton() {
+  // Mirror the resolved card's box (rounded-xl + ring, same padding) so the
+  // layout doesn't shift when data arrives — only the placeholders fill in.
   return (
     <div className="mx-auto max-w-2xl">
       <Skeleton className="h-4 w-32 mb-6" />
-      <Skeleton className="h-20 w-20 rounded-md mb-4" />
-      <Skeleton className="h-8 w-1/2 mb-2" />
-      <Skeleton className="h-4 w-1/4 mb-6" />
-      <Skeleton className="h-24 w-full" />
+      <div className="mt-4 rounded-xl bg-card p-6 ring-1 ring-foreground/10 md:p-8">
+        <Skeleton className="h-20 w-20 rounded-md" />
+        <Skeleton className="mt-4 h-8 w-1/2" />
+        <Skeleton className="mt-2 h-4 w-1/4" />
+        <Skeleton className="my-6 h-px w-full bg-border" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="mt-2 h-4 w-5/6" />
+      </div>
     </div>
   )
 }
@@ -121,10 +127,10 @@ export function AppDetailPage() {
         ← Back to catalog
       </Link>
 
-      <div className="mt-4 rounded-lg border border-border bg-card p-8">
+      <div className="mt-4 rounded-xl bg-card p-6 ring-1 ring-foreground/10 md:p-8">
         <AppIcon src={data.icon} name={data.displayName} size={80} />
 
-        <h1 className="mt-4 text-[28px] font-semibold leading-[1.2]">
+        <h1 className="mt-4 text-3xl font-semibold tracking-tight">
           {data.displayName}
         </h1>
 

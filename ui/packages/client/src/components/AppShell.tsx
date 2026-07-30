@@ -3,37 +3,32 @@ import { Separator } from "@/components/ui/separator"
 import { Toaster } from "@/components/ui/sonner"
 import { cn } from "@/lib/utils"
 
+// Top-nav link styling. The active item carries a foreground underline so the
+// current section is unambiguous at a glance — color alone (foreground vs
+// muted-foreground) is too quiet for the primary navigation signal.
+function navLinkClassName({ isActive }: { isActive: boolean }) {
+  return cn(
+    "text-sm font-medium transition-colors hover:text-foreground",
+    isActive
+      ? "text-foreground underline decoration-2 underline-offset-4"
+      : "text-muted-foreground",
+  )
+}
+
 export function AppShell() {
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto max-w-screen-xl px-8">
-        <header className="pb-6 pt-10">
-          <h1 className="text-[28px] font-semibold leading-[1.2]">LibrePod</h1>
+      <div className="mx-auto max-w-screen-xl px-6 md:px-8">
+        <header className="pb-6 pt-8">
+          <h1 className="text-2xl font-semibold">LibrePod</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Self-hosted apps, one click away
           </p>
           <nav className="mt-5 flex items-center gap-6" aria-label="Main navigation">
-            <NavLink
-              to="/"
-              end
-              className={({ isActive }) =>
-                cn(
-                  "text-sm font-medium transition-colors hover:text-foreground",
-                  isActive ? "text-foreground" : "text-muted-foreground"
-                )
-              }
-            >
+            <NavLink to="/" end className={navLinkClassName}>
               Catalog
             </NavLink>
-            <NavLink
-              to="/my-apps"
-              className={({ isActive }) =>
-                cn(
-                  "text-sm font-medium transition-colors hover:text-foreground",
-                  isActive ? "text-foreground" : "text-muted-foreground"
-                )
-              }
-            >
+            <NavLink to="/my-apps" className={navLinkClassName}>
               My Apps
             </NavLink>
           </nav>

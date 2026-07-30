@@ -3,7 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 export function AppCardSkeleton() {
   return (
     <div
-      className="rounded-lg border border-border bg-card p-4"
+      className="rounded-xl bg-card p-4 ring-1 ring-foreground/10"
       style={{ height: 200 }}
       data-testid="app-card-skeleton"
     >
