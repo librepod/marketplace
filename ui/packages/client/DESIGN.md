@@ -20,15 +20,22 @@ colors:
   input: "oklch(1 0 0 / 15%)"
   ring: "oklch(0.556 0 0)"
   destructive: "oklch(0.704 0.191 22.216)"
+  destructive-foreground: "oklch(0.985 0 0)"
   status-running: "#22c55e"
   status-installing: "#facc15"
   status-error: "#ef4444"
 typography:
   display:
     fontFamily: "Geist Variable, system-ui, sans-serif"
-    fontSize: "1.75rem"
+    fontSize: "1.875rem"
     fontWeight: 600
     lineHeight: 1.2
+    letterSpacing: "-0.025em"
+  headline:
+    fontFamily: "Geist Variable, system-ui, sans-serif"
+    fontSize: "1.5rem"
+    fontWeight: 600
+    lineHeight: 1.33
   title:
     fontFamily: "Geist Variable, system-ui, sans-serif"
     fontSize: "1.25rem"
@@ -95,6 +102,24 @@ components:
     rounded: "{rounded.full}"
     height: "1.25rem"
     padding: "0.5rem"
+  filter-chip:
+    backgroundColor: "transparent"
+    textColor: "{colors.muted-foreground}"
+    rounded: "{rounded.full}"
+    height: "1.5rem"
+    padding: "0.25rem 0.75rem"
+  filter-chip-active:
+    backgroundColor: "{colors.foreground}"
+    textColor: "{colors.background}"
+    rounded: "{rounded.full}"
+    height: "1.5rem"
+    padding: "0.25rem 0.75rem"
+  search-input:
+    backgroundColor: "transparent"
+    textColor: "{colors.foreground}"
+    rounded: "{rounded.md}"
+    height: "2.25rem"
+    padding: "0.25rem 0.75rem"
 ---
 
 # Design System: LibrePod Marketplace
@@ -141,9 +166,10 @@ neutral everywhere, with red for danger and traffic-light dots for status.
 
 ### Primary
 - **Workbench White** (`oklch(0.922 0 0)`): The inverted primary — a near-white
-  fill with dark text. Used only for the primary call to action ("Install App"),
-  where maximum contrast against the dark canvas is the whole point. In dark mode
-  the primary button reads as a light switch: the brightest object on the screen.
+  fill with dark text. Used for the primary call to action ("Install App") and
+  the active state of a filter chip, where maximum contrast against the dark
+  canvas is the whole point. In dark mode the primary button reads as a light
+  switch: the brightest object on the screen.
 
 ### Secondary / Tertiary (omitted)
 The project has a single accent expressed through the primary above. There is no
@@ -169,6 +195,11 @@ committed secondary or tertiary brand hue — do not invent one.
 - **Plain Danger** (`oklch(0.704 0.191 22.216)`): `--destructive`. A muted,
   honest red — used for destructive buttons and the error state. Never bright,
   never decorative.
+- **Danger Ink** (`oklch(0.985 0 0)`): `--destructive-foreground`. Near-white text
+  on the solid-red uninstall action. It is defined in the theme, so the
+  destructive *button* variant (a soft tint) and the uninstall dialog's *action*
+  (solid) are two intentional treatments of the same red: the tint whispers the
+  available danger; the solid confirms the committed one.
 - **Running** (`#22c55e`), **Installing** (`#facc15`), **Error** (`#ef4444`): the
   status-dot triplet. Tailwind's green-500 / yellow-400 / red-500, used only as
   the small 8px dot inside `StatusBadge`. These are the sole saturated hues the
@@ -200,16 +231,24 @@ workbench temperament: no display flourish, no decorative pairing.
 > committed typeface is Geist alone.
 
 ### Hierarchy
-- **Display** (Geist, 600, `1.75rem` / 28px, line-height 1.2): The wordmark
-  ("LibrePod") and the app-detail page title. The largest type in the product.
-- **Title** (Geist, 600, `1.25rem` / 20px, line-height ~1.3): Catalog card titles
-  (`text-xl font-semibold`). The `CardTitle` primitive is a smaller variant at
-  `1rem` / 16px, 500, set in `font-heading`.
+- **Display** (Geist, 600, `1.875rem` / 30px, line-height 1.2, tracking
+  `-0.025em`): The app-detail page title. The largest type in the product; set
+  with `tracking-tight` so a long app name holds its line.
+- **Headline** (Geist, 600, `1.5rem` / 24px, line-height 1.33): The LibrePod
+  wordmark in the header — the identity, one step down from the detail title.
+- **Title** (Geist, 600, `1.25rem` / 20px, line-height 1.3): Catalog card titles
+  (`text-xl font-semibold`) and the centered section headings on the empty /
+  error / no-match / not-found surfaces — one weight and size for every
+  secondary heading.
 - **Body** (Geist, 400, `0.875rem` / 14px, line-height 1.625): The workhorse —
   descriptions, nav, button labels, meta, dialog body. Set `leading-relaxed`
   (1.625) for running description text.
-- **Label** (Geist, 500, `0.75rem` / 12px): Badges, status labels, and the
-  smallest meta. Uppercase is not used.
+- **Label** (Geist, 500, `0.75rem` / 12px): Badges, status labels, filter chips,
+  and the smallest meta. Uppercase is not used.
+
+The three heading steps (30 / 24 / 20) are deliberately spaced so the detail
+title outranks the wordmark outranks a card title — each is perceptibly larger
+than the one below it, and the whole ladder rests on the 14px body.
 
 ### Named Rules
 **The One-Face Rule.** One typeface (Geist) for everything. Hierarchy comes from
@@ -221,16 +260,17 @@ size or weight, not their face.
 
 A single centered column with a fixed page gutter and a self-filling card grid.
 
-- **Container:** `mx-auto max-w-screen-xl px-8` — capped at 1280px with a 32px
-  (`2rem`) horizontal gutter. Everything lives inside this rail.
-- **Header rhythm:** `pt-10 pb-6` (40px top, 24px bottom); nav sits `mt-5` with
+- **Container:** `mx-auto max-w-screen-xl px-6 md:px-8` — capped at 1280px with a
+  24px (`1.5rem`) horizontal gutter on small screens that opens to 32px (`2rem`)
+  from the `md` breakpoint up. Everything lives inside this rail.
+- **Header rhythm:** `pt-8 pb-6` (32px top, 24px bottom); nav sits `mt-5` with
   `gap-6` (24px) between links; a `Separator` sits `mb-6`; the main region gets
   `pb-12`.
 - **Catalog / My Apps grid:** `display: grid; grid-template-columns:
   repeat(auto-fill, minmax(280px, 1fr)); gap: 24px`. Cards are never narrower
   than 280px and fill the row; the grid is the only responsive mechanism and it
   has a single behavior (auto-fill).
-- **App detail:** a centered `max-w-2xl` panel with `p-8` (32px) internal padding.
+- **App detail:** a centered `max-w-2xl` panel with `p-6 md:p-8` internal padding.
 - **Card internals:** `p-4` (16px); vertical rhythm via `mt-2/3/4` steps.
 - **Density:** compact by design — 14px body, 32px default controls, 24px grid
   gaps. This is a control surface read at a glance.
@@ -254,7 +294,7 @@ appear only in the instant a surface is being interacted with or elevated.
 - `StatusBadge` carries a faint `shadow-sm` so the floating status pill reads as
   sitting just above the card.
 - Buttons stay flat; their depth cue is a 1px press (`active:translate-y-px`) and
-  a focus ring (`focus-visible:ring-3 ring-ring/50`).
+  a focus ring (`focus-visible:ring-3 ring-ring/70`).
 - The dialog scrim is `bg-black/10` with `backdrop-blur-xs` — the only use of
   blur in the product, and only to dim the page behind a modal.
 
@@ -269,45 +309,59 @@ appear only in the instant a surface is being interacted with or elevated.
 lift may appear only as a response to state — hover, press, focus, or modal
 elevation. A resting shadow is a bug.
 
+**The Visible-Focus Rule.** Every interactive surface shows a `ring-ring` focus
+ring on keyboard focus (`:focus-visible`) — catalog cards (`ring-2`), buttons and
+badges (`ring-3`), the search field, the clear-search button, and the filter
+chips (`ring-2`). Color and underline never carry the focus signal alone; the
+ring is the signal, and it is present on every focusable element.
+
 ## Shapes
 
 Modest, honest corners. The base radius is `--radius: 0.625rem` (10px), with a
 multiplier scale (`sm` 6px, `md` 8px, `lg` 10px, `xl` 14px, `2xl` 18px, `3xl`
 22px, `4xl` 26px). In practice the product uses a narrow band of that scale:
 
-- **Surfaces** use soft rectangles, not pills: cards and dialogs `rounded-xl`
-  (14px), buttons and the detail panel `rounded-lg` (10px), icons and skeletons
+- **Surfaces** use soft rectangles, not pills: cards, the detail panel, and
+  dialogs `rounded-xl` (14px); buttons `rounded-lg` (10px); icons and skeletons
   `rounded-md` (8px).
-- **Tags and status** go fully round: category `Badge` is `rounded-4xl` (26px —
-  effectively a pill), and `StatusBadge` is `rounded-full`.
+- **Tags and status** go fully round: the category `Badge` is `rounded-4xl`
+  (26px — effectively a pill), filter chips and `StatusBadge` are `rounded-full`.
 
 ### Named Rules
 **The Honest-Corner Rule.** Modest radii (8–14px) for working surfaces; reserve
-the fully-rounded pill (`rounded-4xl` / `rounded-full`) for tags and status —
-small, secondary labels that need to read as discrete chips, not containers.
+the fully-rounded pill (`rounded-4xl` / `rounded-full`) for tags, filter chips,
+and status — small, secondary labels that need to read as discrete chips, not
+containers.
 
 ## Components
 
 ### Buttons
 Compact, confident tools. `rounded-lg` (10px), `text-sm font-medium`, default
-height `h-8` (32px) with `px-2.5`; sizes run `xs` (24px) → `lg` (36px). Focus
-ring `focus-visible:ring-3 ring-ring/50`; press feedback `active:translate-y-px`.
+height `h-8` (32px) with `gap-1.5` and `px-2.5`; sizes run `xs` (24px) → `lg`
+(36px). Focus ring `focus-visible:ring-3 ring-ring/70`; press feedback
+`active:translate-y-px`. Any `<svg>` child without an explicit size class is
+auto-sized to `size-4` (16px) by the button's base styles, so icons sit at a
+consistent 16px without per-call sizing.
 - **Primary:** `bg-primary text-primary-foreground` — the inverted near-white
-  CTA. Use for the single forward action on a screen ("Install App").
+  CTA. Use for the single forward action on a screen ("Install App"). The
+  running-state **Open** button is this variant rendered as an anchor
+  (`render={<a href target="_blank">}`) linking to `https://{name}.{BASE_DOMAIN}`,
+  with an `ExternalLink` icon and an sr-only "opens in a new tab" note.
 - **Outline:** `border-border bg-background`, washes to `bg-muted` on
-  hover/expanded. The secondary/cancel button ("Retry Loading").
+  hover/expanded. The secondary/cancel/recovery control ("Try again", "Clear
+  filters", "Keep App").
 - **Secondary / Ghost:** muted-background tints for low-emphasis actions.
 - **Destructive:** a **soft tint** — `bg-destructive/10 text-destructive`,
-  deepening to `/20` on hover. Danger that whispers, not shouts.
+  deepening to `/20` on hover (and `/20 → /30` in dark). The uninstall
+  *trigger*. Danger that whispers, not shouts.
 - **Link:** `text-primary underline-offset-4 hover:underline`.
 
-> Tension to preserve (or resolve deliberately): the `destructive` *button
-> variant* is a soft tint, but the uninstall dialog's **action** button is
-> overridden to a **solid** red (`bg-destructive text-destructive-foreground`).
-> Note `--destructive-foreground` is **not defined** in the theme, so that solid
-> action's text color currently falls back to inherited foreground. A future
-> pass should either define `--destructive-foreground` or pick one destructive
-> treatment (tint vs. solid) and apply it consistently.
+> Two treatments of one red (intentional): the destructive *button* variant is a
+> soft tint; the uninstall dialog's **action** is a solid red
+> (`bg-destructive text-destructive-foreground`). `--destructive-foreground`
+> (`oklch(0.985 0 0)`, near-white) is defined, so the solid action's text is
+> correct. The tint signals available danger; the solid confirms the committed
+> one.
 
 ### Badges
 Small pill labels. `rounded-4xl` (26px), `h-5`, `text-xs font-medium`, `px-2`.
@@ -317,25 +371,59 @@ app category on every card and the detail page. Variants mirror the button set
 
 ### StatusBadge (signature component)
 The one place operational color enters the UI. A `rounded-full` pill
-(`bg-background/80`, `shadow-sm`, `text-xs`) containing an 8px (`h-2 w-2`)
-`rounded-full` dot whose color is the signal: **Running** → green-500,
+(`bg-background/80`, `shadow-sm`, `text-xs`, `role="status"`) containing an 8px
+(`h-2 w-2`) `rounded-full` dot whose color is the signal: **Running** → green-500,
 **Installing** → yellow-400, **Error** → red-500. It floats top-right on a card
 and inline on the detail page. Everything else around it stays gray so the dot
 can do its job.
 
 ### Cards / AppCard
-The catalog unit. `rounded-xl` (14px), `bg-card`, `text-sm`, separated from the
-canvas by `ring-1 ring-foreground/10` (a hairline ring, not a border). Internal
-padding `p-4`. The clickable `AppCard` adds `hover:-translate-y-0.5
-hover:shadow-md` over `transition-all duration-150` — the lift is the affordance.
-Layout: 48px `AppIcon`, then title (`text-xl font-semibold`) beside a secondary
-category `Badge`, then a two-line description in `text-muted-foreground`.
+The catalog unit, and a real `<Link>` (keyboard-operable: focusable, Enter
+activates, announced as a link). `rounded-xl` (14px), `bg-card`, `text-sm`,
+separated from the canvas by `ring-1 ring-foreground/10` (a hairline ring, not a
+border). Internal padding `p-4`. The clickable `AppCard` adds
+`hover:-translate-y-0.5 hover:shadow-md` over `transition-all duration-150` — the
+lift is the affordance — and `focus-visible:ring-2 ring-ring/70`. Layout: 48px
+`AppIcon`, then title (`text-xl font-semibold leading-tight`) beside a secondary
+category `Badge`, then a two-line description (`line-clamp-2`) in
+`text-muted-foreground`. When installed, a `StatusBadge` floats top-right.
 
 ### AppIcon
-`rounded-md` (8px), `object-contain`, fixed at 48px (card) or 80px (detail). On
-image error it falls back to a slate tile (`bg-slate-200 dark:bg-slate-700`,
-`text-slate-700 dark:text-slate-200`) bearing the app's initial — a cool-gray
-fallback that is the one small inconsistency with the warm-neutral theme.
+`rounded-md` (8px), `object-contain`, fixed at 48px (card) or 80px (detail); the
+`<img>` carries `alt={name}`. On image error it falls back to a neutral tile
+(`rounded-md bg-muted text-muted-foreground`, the app's initial) — on-system
+grayscale, not a foreign slate.
+
+### CatalogToolbar (filtering)
+The catalog's filter surface, rendered above the grid only when data is present.
+`mb-6 flex-col gap-3`. It carries two controls, both single-purpose:
+- **Search field:** the one text input in the product. `h-9`, `rounded-md`,
+  `border-input`, a leading `Search` icon (`pl-9`), and a trailing clear-`X`
+  button (`pr-9`) that appears only when there is a query. `type="text"` (not
+  `search`) so the app owns the clear affordance and avoids WebKit's native
+  button. Typing updates the `q` URL param with `replace` (no per-keystroke
+  history entries).
+- **Category chips:** single-select pills (`role="group"`) led by an **All** chip.
+  See Filter chips below. Selecting a category updates the `category` URL param
+  with `push` (shareable, back-button-friendly). Filtering is a pure client-side
+  view over the cached catalog.
+
+### Filter chips
+The category selector — `rounded-full border px-3 py-1 text-xs font-medium`,
+`aria-pressed` for state. **Active** = `border-transparent bg-foreground
+text-background` (it mirrors the primary button — the selected filter is the
+brightest object in the row). **Inactive** = `border-border text-muted-foreground`
+with `hover:border-foreground/30 hover:text-foreground`. Both states carry the
+system focus ring (`focus-visible:ring-2 ring-ring/70`).
+
+### App detail action row
+`mt-8 flex flex-wrap items-center gap-3`. The single forward action is decided by
+`installedStatus`: `not_installed` → primary **Install App**; `installing` →
+disabled **Installing…** with a spinner; `running` → primary **Open {app}**
+(anchor) + destructive **Uninstall App** (trigger); `error` → destructive
+**Uninstall App**. Above the row, a **View project** link (`text-sm underline
+text-muted-foreground`, `ExternalLink` at `size-3`) appears only when the app's
+`sourceUrl` is an `https?://` URL — `oci://` sources hide it.
 
 ### AlertDialog
 The destructive-uninstall confirmation. Centered (`fixed top-1/2 left-1/2`),
@@ -343,22 +431,36 @@ The destructive-uninstall confirmation. Centered (`fixed top-1/2 left-1/2`),
 `sm:max-w-sm`). Opens with a 100ms `fade-in-0 zoom-in-95`; the scrim is
 `bg-black/10 backdrop-blur-xs`. Header is centered; the footer is a
 `bg-muted/50` bar with a `border-top` holding a `Keep App` outline cancel and the
-solid-red `Uninstall App` action (see the Buttons tension note above).
+solid-red `Uninstall App` action (see the two-treatments note under Buttons).
 
 ### Skeleton
-`rounded-md bg-muted animate-pulse`. Card skeletons are `rounded-lg border
-border-border bg-card p-4` at a fixed 200px height, mimicking the real card's
-shape so loading→loaded is calm.
+`animate-pulse rounded-md bg-muted`. The catalog **AppCardSkeleton** mirrors the
+real card exactly — `rounded-xl bg-card p-4 ring-1 ring-foreground/10` at a fixed
+200px height — so loading→loaded is calm. The detail **DetailSkeleton** mirrors
+the resolved panel (same `rounded-xl` + ring + `p-6 md:p-8`), and uses a real
+static `Separator` for its divider so that line does not pulse while the
+placeholders do.
 
 ### Separator
-`bg-border`, horizontal `h-px`. The divider under the header and around detail
-sections.
+`bg-border`, horizontal `h-px`. The divider under the header, around detail
+sections, and (static) inside the detail skeleton.
 
-### Empty / Error / Not-found states
-Centered, quiet. `mt-12 text-center`, an `text-xl font-semibold` heading and a
+### Empty / Error / No-match / Not-found states
+A single quiet family. All share `mt-12 flex flex-col items-center gap-3
+text-center`, a `text-xl font-semibold` heading (the Title step), and a
 `text-sm text-muted-foreground` line. Errors lead with a `text-destructive`
-`AlertCircle` and an outline **Retry Loading** button. Copy is honest and plain
-("No apps available", "Failed to load apps", "App not found").
+`AlertCircle` and an outline **Try again**. Copy is honest and plain, and names
+the recovery:
+- **Error** (`ErrorBlock`): "Couldn't reach your device" — *We couldn't reach
+  your device to load this. Check that it's online, then try again.* — **Try again**.
+- **Empty catalog** (`EmptyState`): "No apps available" — *We couldn't find any
+  apps to install. If this is unexpected, your device may be offline.* — **Try again**.
+- **No filter matches** (`NoMatchesState`): "No apps found" — names the active
+  query or category — **Clear filters**.
+- **My Apps empty**: "No apps installed yet" — *Browse the Catalog to install
+  apps.* (Catalog is an in-app link).
+- **Not found** (`NotFoundPage`): "App not found" / "Page not found" — *This app
+  doesn't exist in the catalog.* — a **← Back to catalog** link.
 
 ## Do's and Don'ts
 
@@ -370,12 +472,18 @@ Centered, quiet. `mt-12 text-center`, an `text-xl font-semibold` heading and a
 - **Do** keep surfaces **flat at rest**; introduce rings, shadows, and lift only
   as a response to hover, press, focus, or modal elevation. See The
   Depth-Is-State Rule.
+- **Do** give **every interactive surface a visible focus ring** on keyboard
+  focus — cards, buttons, the search field, the clear button, and filter chips.
+  See The Visible-Focus Rule.
 - **Do** build hierarchy with **size and weight within the single Geist face**,
   not a second typeface. See The One-Face Rule.
 - **Do** use **modest radii (8–14px)** for working surfaces and reserve the full
-  pill for tags and status. See The Honest-Corner Rule.
+  pill for tags, filter chips, and status. See The Honest-Corner Rule.
 - **Do** write **plain, honest verbs** that state consequence ("Install App",
-  "Uninstall App", "Keep App") — the copy is part of the design.
+  "Uninstall App", "Keep App", "Try again") — the copy is part of the design.
+- **Do** keep the catalog's empty / error / no-match / not-found surfaces on one
+  shared rhythm (`mt-12 flex-col gap-3`, Title heading, muted body, one
+  recovery control) so the "nothing to show" moments read as one family.
 
 ### Don't:
 - **Don't** apply saturated brand or decorative color to general UI surfaces.
@@ -386,3 +494,5 @@ Centered, quiet. `mt-12 text-center`, an `text-xl font-semibold` heading and a
   before anything else.
 - **Don't** introduce a second typeface, a display serif, or a monospace accent
   to "add personality" — restraint is the personality.
+- **Don't** let an interactive element rely on color or underline alone to show
+  focus — the `ring-ring` focus ring is required everywhere.

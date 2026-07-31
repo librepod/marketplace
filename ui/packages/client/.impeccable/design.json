@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-07-30T00:00:00.000Z",
+  "generatedAt": "2026-07-31T00:00:00.000Z",
   "title": "Design System: LibrePod Marketplace",
   "extensions": {
     "colorMeta": {
@@ -169,6 +169,21 @@
           "oklch(0.94 0.05 22)"
         ]
       },
+      "destructive-foreground": {
+        "role": "neutral",
+        "displayName": "Danger Ink",
+        "canonical": "oklch(0.985 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.25 0 0)",
+          "oklch(0.36 0 0)",
+          "oklch(0.48 0 0)",
+          "oklch(0.62 0 0)",
+          "oklch(0.74 0 0)",
+          "oklch(0.85 0 0)",
+          "oklch(0.95 0 0)"
+        ]
+      },
       "status-running": {
         "role": "tertiary",
         "displayName": "Running",
@@ -218,11 +233,15 @@
     "typographyMeta": {
       "display": {
         "displayName": "Display",
-        "purpose": "The wordmark and app-detail page title. The largest type in the product."
+        "purpose": "The app-detail page title — the largest type in the product, set tracking-tight."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "The LibrePod wordmark in the header — the identity, one step below the detail title."
       },
       "title": {
         "displayName": "Title",
-        "purpose": "Catalog card titles. The CardTitle primitive is a smaller 16px variant."
+        "purpose": "Catalog card titles and the centered headings on the empty / error / no-match / not-found surfaces."
       },
       "body": {
         "displayName": "Body",
@@ -311,8 +330,8 @@
       "name": "Outline Button",
       "kind": "button",
       "refersTo": "button-outline",
-      "description": "Secondary/cancel control — bordered background surface that washes to muted on hover ('Retry Loading', 'Keep App').",
-      "html": "<button class='ds-btn-outline'>Retry Loading</button>",
+      "description": "Secondary/cancel/recovery control — bordered background surface that washes to muted on hover ('Try again', 'Clear filters', 'Keep App').",
+      "html": "<button class='ds-btn-outline'>Try again</button>",
       "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 0.25rem; height: 1.75rem; padding: 0 0.625rem; border-radius: var(--radius); border: 1px solid var(--border); background: var(--background); color: var(--foreground); font-family: 'Geist Variable', system-ui, sans-serif; font-size: 0.8rem; font-weight: 500; line-height: 1; transition: all 150ms ease; } .ds-btn-outline:hover { background: var(--muted); color: var(--foreground); } .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent); } .ds-btn-outline:active { transform: translateY(1px); }"
     },
     {
@@ -332,6 +351,22 @@
       "css": ".ds-badge { display: inline-flex; align-items: center; justify-content: center; height: 1.25rem; padding: 0.125rem 0.5rem; border-radius: calc(var(--radius) * 2.6); background: var(--secondary); color: var(--secondary-foreground); font-family: 'Geist Variable', system-ui, sans-serif; font-size: 0.75rem; font-weight: 500; line-height: 1; white-space: nowrap; }"
     },
     {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "search-input",
+      "description": "The catalog's single text field — leading search icon, transparent surface, input-hairline edge, and a trailing clear-X that appears only with a query. Typing replaces URL history; it never pushes per keystroke.",
+      "html": "<div class='ds-search'><svg class='ds-search-icon' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='8'></circle><path d='m21 21-4.3-4.3'></path></svg><input class='ds-search-input' type='text' placeholder='Search apps' aria-label='Search apps' /><button class='ds-search-clear' aria-label='Clear search'><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'><path d='M18 6 6 18M6 6l12 12'></path></svg></button></div>",
+      "css": ".ds-search { position: relative; display: flex; align-items: center; } .ds-search-input { height: 2.25rem; width: 100%; padding: 0.25rem 2.25rem; border-radius: calc(var(--radius) * 0.8); border: 1px solid color-mix(in oklch, var(--foreground) 15%, transparent); background: transparent; color: var(--foreground); font-family: 'Geist Variable', system-ui, sans-serif; font-size: 0.875rem; } .ds-search-input::placeholder { color: var(--muted-foreground); } .ds-search-input:focus-visible { outline: none; border-color: var(--ring); box-shadow: 0 0 0 2px color-mix(in oklch, var(--ring) 70%, transparent); } .ds-search-icon { position: absolute; left: 0.75rem; width: 1rem; height: 1rem; color: var(--muted-foreground); pointer-events: none; } .ds-search-clear { position: absolute; right: 0.625rem; display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; color: var(--muted-foreground); cursor: pointer; border-radius: calc(var(--radius) * 0.5); } .ds-search-clear svg { width: 1rem; height: 1rem; } .ds-search-clear:hover { color: var(--foreground); } .ds-search-clear:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in oklch, var(--ring) 70%, transparent); }"
+    },
+    {
+      "name": "Category Chip",
+      "kind": "chip",
+      "refersTo": "filter-chip",
+      "description": "Single-select catalog filter pill. Active mirrors the primary button (near-white fill, dark text); inactive is a hairline-bordered muted pill. Both carry the focus ring. State lives in the URL (category param).",
+      "html": "<button class='ds-chip' aria-pressed='false'>Security</button> <button class='ds-chip ds-chip-active' aria-pressed='true'>Network</button>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; height: 1.5rem; padding: 0.25rem 0.75rem; border-radius: 9999px; border: 1px solid var(--border); background: transparent; color: var(--muted-foreground); font-family: 'Geist Variable', system-ui, sans-serif; font-size: 0.75rem; font-weight: 500; line-height: 1; transition: color 150ms ease, border-color 150ms ease, background 150ms ease; cursor: pointer; } .ds-chip:hover { border-color: color-mix(in oklch, var(--foreground) 30%, transparent); color: var(--foreground); } .ds-chip:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in oklch, var(--ring) 70%, transparent); } .ds-chip-active { border-color: transparent; background: var(--foreground); color: var(--background); }"
+    },
+    {
       "name": "Status Badge",
       "kind": "chip",
       "refersTo": "status-badge",
@@ -343,9 +378,9 @@
       "name": "Skeleton",
       "kind": "custom",
       "refersTo": "card",
-      "description": "Loading placeholder. muted surface that breathes via pulse, shaped like the real card so the loading-to-loaded transition is calm.",
+      "description": "Loading placeholder. A muted surface that breathes via pulse, shaped and edged like the real card (rounded-xl + hairline ring) so the loading-to-loaded transition is calm.",
       "html": "<div class='ds-skeleton'><div class='ds-skel-icon'></div><div class='ds-skel-line ds-skel-w75'></div><div class='ds-skel-line'></div></div>",
-      "css": ".ds-skeleton { padding: 1rem; border-radius: var(--radius); border: 1px solid var(--border); background: var(--card); } .ds-skel-icon { width: 3rem; height: 3rem; border-radius: calc(var(--radius) * 0.8); margin-bottom: 1rem; background: var(--muted); animation: ds-pulse 1.5s ease-in-out infinite; } .ds-skel-line { height: 0.625rem; border-radius: calc(var(--radius) * 0.5); margin-bottom: 0.5rem; background: var(--muted); animation: ds-pulse 1.5s ease-in-out infinite; } .ds-skel-w75 { width: 75%; } .ds-skel-line:last-child { width: 100%; height: 2.5rem; } @keyframes ds-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }"
+      "css": ".ds-skeleton { padding: 1rem; border-radius: calc(var(--radius) * 1.4); background: var(--card); box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 10%, transparent); } .ds-skel-icon { width: 3rem; height: 3rem; border-radius: calc(var(--radius) * 0.8); margin-bottom: 1rem; background: var(--muted); animation: ds-pulse 1.5s ease-in-out infinite; } .ds-skel-line { height: 0.625rem; border-radius: calc(var(--radius) * 0.5); margin-bottom: 0.5rem; background: var(--muted); animation: ds-pulse 1.5s ease-in-out infinite; } .ds-skel-w75 { width: 75%; } .ds-skel-line:last-child { width: 100%; height: 2.5rem; } @keyframes ds-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }"
     },
     {
       "name": "Alert Dialog",
@@ -371,12 +406,14 @@
       { "name": "The Dark-First Rule", "body": "Design and evaluate every surface in dark mode first; the light tokens are vestigial and the product ships dark (D-02). A screen that only works in light is not done.", "section": "colors" },
       { "name": "The One-Face Rule", "body": "One typeface (Geist) for everything. Hierarchy comes from size and weight alone — never from introducing a second family, a display serif, or a monospace accent.", "section": "typography" },
       { "name": "The Depth-Is-State Rule", "body": "Surfaces are flat at rest. Rings, shadows, and lift may appear only as a response to state — hover, press, focus, or modal elevation. A resting shadow is a bug.", "section": "elevation" },
-      { "name": "The Honest-Corner Rule", "body": "Modest radii (8-14px) for working surfaces; reserve the fully-rounded pill (rounded-4xl / rounded-full) for tags and status — small, secondary labels that need to read as discrete chips, not containers.", "section": "shapes" }
+      { "name": "The Honest-Corner Rule", "body": "Modest radii (8-14px) for working surfaces; reserve the fully-rounded pill (rounded-4xl / rounded-full) for tags, filter chips, and status — small, secondary labels that need to read as discrete chips, not containers.", "section": "shapes" },
+      { "name": "The Visible-Focus Rule", "body": "Every interactive surface shows a ring-ring focus ring on keyboard focus — cards, buttons, the search field, the clear button, and filter chips. Color and underline never carry the focus signal alone; the ring is the signal, present on every focusable element.", "section": "elevation" }
     ],
     "dos": [
       "Do design and evaluate every surface in dark mode first — the product ships dark (D-02); light tokens are vestigial.",
       "Do keep neutral surfaces pure achromatic; let saturated color carry a signal only (destructive danger, or a status dot). See The Signal-Only Rule.",
       "Do keep surfaces flat at rest; introduce rings, shadows, and lift only as a response to hover, press, focus, or modal elevation. See The Depth-Is-State Rule.",
+      "Do give every interactive surface a visible focus ring on keyboard focus — cards, buttons, the search field, the clear button, and filter chips. See The Visible-Focus Rule.",
       "Do build hierarchy with size and weight within the single Geist face, not a second typeface. See The One-Face Rule.",
       "Do use modest radii (8-14px) for working surfaces and reserve the full pill for tags and status. See The Honest-Corner Rule.",
       "Do write plain, honest verbs that state consequence ('Install App', 'Uninstall App', 'Keep App') — the copy is part of the design."
