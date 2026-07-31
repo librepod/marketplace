@@ -35,7 +35,7 @@ function DetailSkeleton() {
         <Skeleton className="h-20 w-20 rounded-md" />
         <Skeleton className="mt-4 h-8 w-1/2" />
         <Skeleton className="mt-2 h-4 w-1/4" />
-        <Skeleton className="my-6 h-px w-full bg-border" />
+        <Separator className="my-6" />
         <Skeleton className="h-4 w-full" />
         <Skeleton className="mt-2 h-4 w-5/6" />
       </div>
@@ -56,7 +56,7 @@ function UninstallAction({
         render={
           <Button variant="destructive" disabled={uninstallMutation.isPending}>
             {uninstallMutation.isPending && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             )}
             {uninstallMutation.isPending ? 'Uninstalling...' : 'Uninstall App'}
           </Button>
@@ -173,7 +173,7 @@ export function AppDetailPage() {
               disabled={installMutation.isPending}
             >
               {installMutation.isPending && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               )}
               {installMutation.isPending ? 'Installing...' : 'Install App'}
             </Button>
@@ -181,7 +181,7 @@ export function AppDetailPage() {
 
           {data.installedStatus === 'installing' && (
             <Button disabled>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
               Installing...
             </Button>
           )}

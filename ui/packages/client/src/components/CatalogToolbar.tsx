@@ -36,7 +36,7 @@ export function CatalogToolbar({
             type="button"
             onClick={() => onQueryChange("")}
             aria-label="Clear search"
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
           >
             <X className="size-4" />
           </button>
@@ -82,7 +82,7 @@ function CategoryChip({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+        "rounded-full border px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70",
         active
           ? "border-transparent bg-foreground text-background"
           : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground",

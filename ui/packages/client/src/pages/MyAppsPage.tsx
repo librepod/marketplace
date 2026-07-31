@@ -41,9 +41,9 @@ export function MyAppsPage() {
       )}
       {!isPending && isError && <ErrorBlock onRetry={refetch} />}
       {!isPending && !isError && (!data || data.length === 0) && (
-        <div className="py-16 text-center">
-          <p className="text-muted-foreground">No apps installed yet.</p>
-          <p className="mt-1 text-sm text-muted-foreground">
+        <div className="mt-12 flex flex-col items-center gap-3 text-center">
+          <h2 className="text-xl font-semibold">No apps installed yet</h2>
+          <p className="text-sm text-muted-foreground">
             Browse the <Link to="/" className="underline hover:text-foreground">Catalog</Link> to install apps.
           </p>
         </div>
