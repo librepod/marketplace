@@ -10,6 +10,7 @@ spec:
   commonName: "*.${BASE_DOMAIN:-libre.pod}"
   dnsNames:
     - "*.${BASE_DOMAIN:-libre.pod}"
+    - "${BASE_DOMAIN:-libre.pod}"  # bare apex (e.g. libre.pod); the wildcard above does not cover it
   issuerRef:
     group: certmanager.step.sm
     kind: StepClusterIssuer

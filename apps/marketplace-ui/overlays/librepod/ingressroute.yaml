@@ -7,6 +7,16 @@ spec:
   - web
   - websecure
   routes:
+  # Bare apex — the device's front door: https://libre.pod lands on the
+  # marketplace. Requires the shared default cert to also list this host
+  # (the *.libre.pod wildcard does not cover the apex); see
+  # infrastructure/system-configs/certificate.yaml.
+  - kind: Rule
+    match: Host(`${BASE_DOMAIN:=libre.pod}`)
+    services:
+    - name: marketplace-ui
+      port: 80
+  # Subdomain kept for backward compatibility / direct links.
   - kind: Rule
     match: Host(`marketplace.${BASE_DOMAIN:=libre.pod}`)
     priority: 1
