@@ -10,6 +10,12 @@
 #
 # No hardcoded IPs — works on any k3s cluster regardless of Traefik's ClusterIP.
 # 10.43.0.10 is the k3s kube-dns service IP (stable, always the same).
+#
+# The rewrite regex uses `(.*\.)?` (prefix is OPTIONAL) so it matches BOTH
+# subdomains (app.libre.pod) AND the bare apex (libre.pod). If the apex did not
+# match, the query would fall through to `forward . 10.43.0.10:53` — which is
+# CoreDNS itself — creating an infinite forwarding loop that wedges CoreDNS and
+# trips CrashLoopBackOff. Every name in the zone must be consumed by the rewrite.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -21,7 +27,7 @@ data:
         errors
         cache 30
         rewrite stop {
-            name regex (.*)\.libre\.pod\. traefik.traefik.svc.cluster.local
+            name regex (.*\.)?libre\.pod\. traefik.traefik.svc.cluster.local
             answer auto
         }
         forward . 10.43.0.10:53
@@ -30,7 +36,7 @@ data:
         errors
         cache 30
         rewrite stop {
-            name regex (.*)\.librepod\.dev\. traefik.traefik.svc.cluster.local
+            name regex (.*\.)?librepod\.dev\. traefik.traefik.svc.cluster.local
             answer auto
         }
         forward . 10.43.0.10:53
@@ -39,7 +45,7 @@ data:
         errors
         cache 30
         rewrite stop {
-            name regex (.*)\.librepod\.local\. traefik.traefik.svc.cluster.local
+            name regex (.*\.)?librepod\.local\. traefik.traefik.svc.cluster.local
             answer auto
         }
         forward . 10.43.0.10:53
