@@ -149,17 +149,18 @@ Gotchas / deviations from the original plan:
 - **`confirmUninstall()` self-opens the dialog** (trigger `.first()` → confirm action `.nth(1)`);
   the reconcile spec must NOT pre-open before calling it, or the trigger toggle closes the dialog.
 
-⚠️ **Known blocker (the suite is RED until this is fixed):** the k3d bootstrap currently does NOT
-reach `marketplace-ui`. The flux-operator fails to assemble the Flux CRDs — `FluxInstance/flux`
-reports `build failed: add operation does not apply: doc is missing path:
-…/eventSources/items/properties/kind/enum/-`. The operator's internal CRD patch appends to an
-`eventSources.kind.enum` array that its bundled notification CRD doesn't have — an in-image
-distribution skew, independent of k3s version (reproduced on v1.32.5 and v1.34.3) and flux-instance
-chart version (0.45.1 and 0.48.0). The dev `k3d-config.yaml` shares this bootstrap, so it is
-latently affected too. Fix = a flux-operator version whose patches match its bundled CRDs (or pin a
-Flux `distribution.version` whose notification CRD has the enum). Tracked separately; the Tier 2
-code itself is complete and statically validated (configs valid, orchestrator `bash -n` clean,
-Playwright lists all 4 tests, selectors verified against the client source).
+✅ **Previously blocked, now FIXED:** the k3d bootstrap used to never reach `marketplace-ui`
+because flux-operator ≤0.48.0 couldn't assemble the Flux CRDs — `FluxInstance/flux` reported
+`build failed: …eventSources/items/properties/kind/enum/-`, an in-image operator/CRD patch skew,
+so no Flux controllers started. Bumping
+`clusters/librepod-k3d/bootstrap/{flux-operator,flux-instance}.yaml` to **0.57.0** fixes it
+(operator + instance move in lockstep as a matched pair). Verified by an isolated k3d boot: the
+CRD server-side-apply completes (all notification CRDs created, Flux `v2.9.3`) and all four
+controllers come up `Running`. The focused test never reached a literal `Ready=True` only because
+it deliberately omitted `cosign-pub`; the real `k3d-config.yaml` supplies it. Tracked in
+[#48](https://github.com/librepod/marketplace/issues/48). The Tier 2 suite itself is complete and
+statically validated (configs valid, orchestrator `bash -n` clean, Playwright lists all 4 tests,
+selectors verified against the client source).
 
 ## Architecture
 
