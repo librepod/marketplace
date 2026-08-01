@@ -52,7 +52,7 @@ export class CatalogPage {
     return this.page.getByRole("heading", { name: "No apps found" });
   }
 
-  clearFilters(): Locator {
-    return this.page.getByRole("button", { name: "Clear filters" });
+  clearFilters(): Promise<void> {
+    return this.page.getByRole("button", { name: "Clear filters" }).click();
   }
 }
