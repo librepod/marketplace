@@ -49,6 +49,7 @@ npm run build               # nest build → packages/server/dist
 npm test                    # server unit tests (vitest run, src/**/*.spec.ts)
 npm run test:e2e            # server e2e (vitest run --config vitest.e2e-config.ts, test/**/*.e2e-spec.ts)
 npm run test:client         # client tests (vitest run, jsdom)
+npm run test:e2e:ui         # browser e2e (Playwright, Tier 1) — see "E2E" section below
 
 # Single test — pass a path filter as a positional arg to the workspace's vitest:
 npm test --workspace=packages/server -- src/catalog/catalog.service.spec.ts
@@ -63,6 +64,52 @@ Server unit vs e2e are split by **separate vitest config files** (`vitest.config
 `src/**/*.spec.ts`; `vitest.e2e-config.ts` includes `test/**/*.e2e-spec.ts`). Both use
 `unplugin-swc` because Nest decorators need SWC. There is no standalone `tsc --noEmit`
 typecheck script — `nest build` is the compile gate.
+
+## E2E (browser, Playwright — Tier 1)
+
+Browser-driven e2e lives in `packages/e2e`. It builds the client+server, brings up a **real
+`gogs/gogs` container** seeded from the repo's `gogs-init.zip` backup-restore (the same
+mechanism as `apps/gogs/components/repo-init`), and drives the prod-like Nest server with
+Chromium. No cluster, no real GHCR — fully hermetic.
+
+```bash
+npm run test:e2e:ui                                       # full run (build → Gogs → Playwright → teardown)
+npm run test:e2e:ui -- tests/app-level/catalog.spec.ts    # one spec file
+```
+
+Conventions and gotchas:
+
+- **Hermetic Gogs:** the orchestrator (`packages/e2e/support/run-tier1.sh`) does
+  `compose up → readiness check → playwright → compose down -v`, so each run starts from a
+  clean seed. The catalog is `packages/e2e/fixtures/catalog.fixture.yaml` (3 user-facing apps
+  + 3 Infrastructure; `vaultwarden`/`litellm` have install `templates`).
+- **`GOGS_TOKEN` is the Gogs user's *password*** (Basic auth during token bootstrap), not a
+  bearer token. Seeded creds: `GOGS_USERNAME=flux` / `GOGS_TOKEN=pass@w0rd`
+  (from `apps/gogs/components/repo-init/secret.env`).
+- **`KUBECONFIG` is pinned to a closed-port fixture** (`packages/e2e/support/kubeconfig.closed.yaml`)
+  in `projects/tier1.config.ts`. With no cluster, `FluxStatusService.loadFromDefault()` would
+  otherwise read the host's `~/.kube/config` and query a real cluster; the closed port makes
+  the k8s call `ECONNREFUSE` → `getStatusFor` degrades to `installing` deterministically. This
+  is **also required for the server to boot on CI**, where there is no `~/.kube/config` at all
+  (`loadFromDefault` would throw in `onModuleInit`).
+- **Serial execution** (`workers: 1`, `fullyParallel: false`): specs share one Gogs instance,
+  so an install in one spec mutates state another reads. Specs that assert a clean slate
+  (e.g. `my-apps`, `resilience`) uninstall leftovers first.
+- **Port 3100** (not 3000) so the gate doesn't collide with a developer's running server;
+  `reuseExistingServer: false` makes Playwright refuse to test a server it didn't start.
+- **Selectors target roles/text** (`getByRole`/`getByText`); the only `data-testid` is
+  `app-card-skeleton`. Page objects live in `packages/e2e/support/pages`.
+- **`/api/apps` and `/api/installed` return bare `CatalogApp[]` arrays**, not `{ apps: [...] }`
+  (the client defends with `json.apps ?? json`).
+- **CI:** `.github/workflows/ui-e2e.yaml` runs Tier 1 on every PR touching `ui/**`. Roll it
+  out non-required first, then flip to a required status check once green.
+- **Bug found by this suite:** `GogsService.getInstalledAppNames` only stripped a trailing
+  slash, leaving the `apps/` prefix from root-kustomization entries — so installs were never
+  detected. Fixed (with a regression test in `gogs.service.spec.ts`).
+- **SPA fallback already works:** `@nestjs/serve-static` v5 serves `index.html` for unmatched
+  non-API routes, so deep-link reload does not 404 and no `connect-history-api-fallback` is
+  needed.
+- **Tier 2** (k3d cluster, full Flux reconciliation → `running`) is a separate follow-up plan.
 
 ## Architecture
 
