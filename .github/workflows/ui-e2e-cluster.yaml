@@ -1,0 +1,60 @@
+name: ui-e2e-cluster
+
+on:
+  schedule:
+    - cron: "37 3 * * *" # nightly ~03:37 UTC (off the hour)
+  push:
+    branches: [master]
+    paths:
+      - "ui/**"
+      - "apps/marketplace-ui/**"
+      - "clusters/librepod-k3d/**"
+      - ".github/workflows/ui-e2e-cluster.yaml"
+  workflow_dispatch:
+
+jobs:
+  tier2:
+    name: Tier 2 (k3d cluster, realistic)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install k3d and flux
+        run: |
+          curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+          curl -sSfL https://fluxcd.io/install.sh | sh
+          # kubectl is preinstalled on ubuntu-latest
+
+      - name: Install dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Install Playwright browser
+        working-directory: ui
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Tier 2 e2e
+        working-directory: ui
+        run: npm run test:e2e:ui:cluster
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-cluster
+          path: ui/packages/e2e/playwright-report
+          retention-days: 14
+
+      - name: Upload test results (traces/screenshots)
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results-cluster
+          path: ui/packages/e2e/test-results
+          retention-days: 7
