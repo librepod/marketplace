@@ -64,9 +64,12 @@ export class GogsService implements OnModuleInit {
         headers: { Authorization: `token ${this.apiToken}` },
       });
       if (!res.ok) return [];
-      const text = await res.text();
-      const parsed = yaml.load(text) as { resources?: string[] } | null;
-      return (parsed?.resources ?? []).map((r: string) => r.replace(/\/$/, ''));
+      const parsed = yaml.load(await res.text()) as { resources?: string[] } | null;
+      // Root kustomization entries are paths like "apps/<name>" (and may carry a
+      // trailing slash); strip to the bare app name callers compare against.
+      return (parsed?.resources ?? [])
+        .map((r: string) => r.replace(/^apps\//, '').replace(/\/$/, ''))
+        .filter(Boolean);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(
