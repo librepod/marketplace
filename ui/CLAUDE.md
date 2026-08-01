@@ -109,7 +109,57 @@ Conventions and gotchas:
 - **SPA fallback already works:** `@nestjs/serve-static` v5 serves `index.html` for unmatched
   non-API routes, so deep-link reload does not 404 and no `connect-history-api-fallback` is
   needed.
-- **Tier 2** (k3d cluster, full Flux reconciliation → `running`) is a separate follow-up plan.
+- **Tier 2** (k3d cluster, full Flux reconcile → `running`) — see the dedicated section below.
+
+## E2E Tier 2 (browser, in a local k3d cluster — nightly/advisory)
+
+```bash
+npm run test:e2e:ui:cluster          # k3d create → Flux bootstrap → port-forward → Playwright → delete
+npm run test:e2e:ui:cluster -- tests/cluster-level/cluster-smoke.spec.ts   # one spec
+```
+
+- Boots a dedicated `librepod-k3d-e2e` cluster (`packages/e2e/support/k3d-e2e.config.yaml`) that
+  syncs `clusters/librepod-k3d` via Flux — the full system-apps chain + the published
+  `marketplace-ui` image. Reached via `kubectl port-forward` (HTTP, no ingress).
+- Asserts the **full GitOps lifecycle** Tier 1 can't: install → Flux reconcile → `running`; the
+  Uninstall `AlertDialog`; the "Open {app}" link. These need `running`/`error` status, reachable
+  only with a cluster.
+- Tests the **published** image (`:latest`), not a source build — Tier 2 runs on master/nightly
+  (never PRs), so `:latest` IS master's code.
+- Advisory CI: `.github/workflows/ui-e2e-cluster.yaml` (nightly + push to master + dispatch).
+  **Never** a required check.
+- Needs `k3d`, `flux`, `kubectl`, `curl` on PATH (`shell.nix` provides them; CI installs them).
+- Override the app used for the `running` assertion with `LIBREPOD_E2E_APP=<name>`.
+
+Gotchas / deviations from the original plan:
+
+- **API shape:** specs hit the same bare-`CatalogApp[]` APIs as Tier 1 — `/api/apps` is an array
+  (not `{apps:[...]}`), and `/api/apps/:name` returns a single object (read `.installedStatus`
+  directly, not `body.apps[0].installedStatus`). `/api/config` returns `{ baseDomain }`.
+- **Serial execution:** `tier2.config.ts` sets `workers:1, fullyParallel:false` — the reconcile
+  tests share one cluster (the install test creates the `running` app the Open/Uninstall tests
+  act on), mirroring Tier 1's reason for serializing on a shared Gogs.
+- **k3d config `files.source` paths are relative to the CONFIG FILE** (`…/e2e/support/`), not the
+  CWD (verified on k3d v5.9.0) — hence `../../../../clusters/...` in `k3d-e2e.config.yaml`. The
+  repo-root `k3d-config.yaml` uses bare `clusters/...` only because it sits at the repo root.
+- **The orchestrator isolates `KUBECONFIG`** (`run-tier2.sh`) to a temp file and asserts the
+  active context is `librepod-k3d-e2e` before any kubectl call — so a failed `k3d create` can
+  never fall through to whatever real cluster was current and mutate it.
+- **Port-forward on 3101** (not 3000) to avoid colliding with a developer's running server.
+- **`confirmUninstall()` self-opens the dialog** (trigger `.first()` → confirm action `.nth(1)`);
+  the reconcile spec must NOT pre-open before calling it, or the trigger toggle closes the dialog.
+
+⚠️ **Known blocker (the suite is RED until this is fixed):** the k3d bootstrap currently does NOT
+reach `marketplace-ui`. The flux-operator fails to assemble the Flux CRDs — `FluxInstance/flux`
+reports `build failed: add operation does not apply: doc is missing path:
+…/eventSources/items/properties/kind/enum/-`. The operator's internal CRD patch appends to an
+`eventSources.kind.enum` array that its bundled notification CRD doesn't have — an in-image
+distribution skew, independent of k3s version (reproduced on v1.32.5 and v1.34.3) and flux-instance
+chart version (0.45.1 and 0.48.0). The dev `k3d-config.yaml` shares this bootstrap, so it is
+latently affected too. Fix = a flux-operator version whose patches match its bundled CRDs (or pin a
+Flux `distribution.version` whose notification CRD has the enum). Tracked separately; the Tier 2
+code itself is complete and statically validated (configs valid, orchestrator `bash -n` clean,
+Playwright lists all 4 tests, selectors verified against the client source).
 
 ## Architecture
 
