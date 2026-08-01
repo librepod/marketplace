@@ -1,0 +1,11 @@
+{
+  "name": "@librepod/e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:e2e:ui": "bash support/run-tier1.sh"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}
