@@ -40,6 +40,10 @@ export default defineConfig({
       GOGS_TOKEN: "pass@w0rd", // NB: used as the Basic-auth PASSWORD by GogsService
       BASE_DOMAIN: "libre.pod",
       ALLOWED_ORIGINS: ORIGIN,
+      // Force FluxStatusService to degrade to "installing" deterministically:
+      // point KUBECONFIG at a closed port (see support/kubeconfig.closed.yaml)
+      // so the k8s call ECONNREFUSES instead of querying the host's real cluster.
+      KUBECONFIG: `${process.cwd()}/packages/e2e/support/kubeconfig.closed.yaml`,
     },
     url: `${ORIGIN}/api/health`,
     reuseExistingServer: false, // always start a server matching the fresh build
