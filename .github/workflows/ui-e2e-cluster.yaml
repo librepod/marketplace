@@ -25,10 +25,13 @@ jobs:
           cache: npm
           cache-dependency-path: ui/package-lock.json
 
-      - name: Install k3d and flux
+      - name: Install k3d and flux (pinned)
         run: |
-          curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
-          curl -sSfL https://fluxcd.io/install.sh | sh
+          # Pin to specific release tags/versions instead of the mutable :main branch —
+          # bounds the supply-chain surface. k3d has no canonical setup-action; flux's
+          # action exists but curl keeps this workflow self-contained. Advisory CI only.
+          curl -s https://raw.githubusercontent.com/k3d-io/k3d/v5.9.0/install.sh | TAG=v5.9.0 bash
+          curl -sSfL https://fluxcd.io/install.sh | sh -s -- --version=2.9.2
           # kubectl is preinstalled on ubuntu-latest
 
       - name: Install dependencies
