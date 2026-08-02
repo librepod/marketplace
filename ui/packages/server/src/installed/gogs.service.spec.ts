@@ -204,6 +204,23 @@ describe('GogsService', () => {
       expect(names[0]).not.toContain('/');
     });
 
+    it('strips the apps/ path prefix from resources entries (regression)', async () => {
+      // addToRootKustomization writes entries as "apps/<name>"; getInstalledAppNames
+      // must return bare names so enrich can match them against app.name. A bare
+      // .replace(/\/$/) leaves the apps/ prefix and every install reads as
+      // not_installed — the Tier 1 e2e install spec catches this end-to-end.
+      const mockYaml = `resources:\n  - apps/vaultwarden\n  - apps/litellm/\n`;
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        text: async () => mockYaml,
+      } as Response);
+
+      const names = await service.getInstalledAppNames();
+
+      expect(names).toEqual(['vaultwarden', 'litellm']);
+      expect(names.every((n) => !n.includes('/'))).toBe(true);
+    });
+
     it('returns [] when Gogs responds with non-OK status (BACK-02)', async () => {
       vi.spyOn(global, 'fetch').mockResolvedValueOnce({
         ok: false,

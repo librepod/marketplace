@@ -1,0 +1,128 @@
+apiVersion: marketplace/v1
+kind: Catalog
+metadata:
+  generatedAt: "2026-01-01T00:00:00Z"
+apps:
+  - name: vaultwarden
+    version: "1.35.2"
+    displayName: Vaultwarden
+    description: Lightweight Bitwarden-compatible password manager server
+    category: Security
+    icon: https://example.com/vaultwarden.png
+    sourceType: oci-kustomize
+    sourceUrl: https://github.com/dani-garcia/vaultwarden
+    secrets:
+      - name: ADMIN_TOKEN
+        generate:
+          length: 32
+    templates:
+      source: |
+        apiVersion: source.toolkit.fluxcd.io/v1beta2
+        kind: OCIRepository
+        metadata:
+          name: vaultwarden
+          namespace: flux-system
+        spec:
+          url: oci://ghcr.io/librepod/marketplace/apps/vaultwarden
+      release: |
+        apiVersion: helm.toolkit.fluxcd.io/v2
+        kind: HelmRelease
+        metadata:
+          name: vaultwarden
+          namespace: vaultwarden
+        spec:
+          chart:
+            spec:
+              sourceRef:
+                kind: OCIRepository
+                name: vaultwarden
+          values:
+            domain: ${BASE_DOMAIN}
+      secret: |
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: vaultwarden-admin
+          namespace: vaultwarden
+        stringData:
+          ADMIN_TOKEN: ${ADMIN_TOKEN}
+      kustomization: |
+        apiVersion: kustomize.config.k8s.io/v1beta1
+        kind: Kustomization
+        resources:
+          - source.yaml
+          - release.yaml
+          - secret.yaml
+
+  - name: gogs
+    version: "1.1.0"
+    displayName: Gogs
+    description: Lightweight self-hosted Git service
+    category: Development
+    icon: https://example.com/gogs.png
+    sourceType: oci-kustomize
+    sourceUrl: oci://ghcr.io/librepod/marketplace/apps/gogs
+
+  - name: litellm
+    version: "1.81.9"
+    displayName: LiteLLM
+    description: Open-source API gateway for 100+ LLM providers
+    category: AI
+    icon: https://example.com/litellm.png
+    sourceType: oci-kustomize
+    sourceUrl: oci://ghcr.io/librepod/marketplace/apps/litellm
+    templates:
+      source: |
+        apiVersion: source.toolkit.fluxcd.io/v1beta2
+        kind: OCIRepository
+        metadata:
+          name: litellm
+          namespace: flux-system
+        spec:
+          url: oci://ghcr.io/librepod/marketplace/apps/litellm
+      release: |
+        apiVersion: helm.toolkit.fluxcd.io/v2
+        kind: HelmRelease
+        metadata:
+          name: litellm
+          namespace: litellm
+        spec:
+          chart:
+            spec:
+              sourceRef:
+                kind: OCIRepository
+                name: litellm
+          values:
+            ingress:
+              host: litellm.${BASE_DOMAIN}
+      kustomization: |
+        apiVersion: kustomize.config.k8s.io/v1beta1
+        kind: Kustomization
+        resources:
+          - source.yaml
+          - release.yaml
+
+  - name: traefik
+    version: "1.0.0"
+    displayName: Traefik
+    description: Cloud-native edge router and load balancer
+    category: Infrastructure
+    icon: https://example.com/traefik.png
+    sourceType: oci-kustomize
+    sourceUrl: oci://ghcr.io/librepod/marketplace/apps/traefik
+  - name: cert-manager
+    version: "1.0.0"
+    displayName: Cert-Manager
+    description: Cloud-native certificate management
+    category: Infrastructure
+    icon: https://example.com/cert-manager.png
+    sourceType: oci-kustomize
+    sourceUrl: oci://ghcr.io/librepod/marketplace/apps/cert-manager
+  - name: nfs-provisioner
+    version: "1.0.0"
+    displayName: NFS Provisioner
+    description: Kubernetes dynamic provisioner for NFS storage
+    category: Infrastructure
+    icon: https://example.com/nfs.png
+    sourceType: oci-kustomize
+    sourceUrl: oci://ghcr.io/librepod/marketplace/apps/nfs-provisioner

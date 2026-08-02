@@ -1,0 +1,44 @@
+# Tier 1 hermetic Gogs. Mirrors prod's repo-init initContainer: a one-shot
+# restore service unpacks the repo's gogs-init.zip into a shared named volume,
+# then the gogs service starts only after the restore completes.
+services:
+  gogs-restore:
+    image: gogs/gogs:0.14.2
+    volumes:
+      - gogs-data:/data
+      # Compose resolves relative paths from this file's dir (ui/packages/e2e/);
+      # apps/ is a sibling of ui/ at the repo root, so it's three levels up.
+      - ../../../apps/gogs/components/repo-init/gogs-init.zip:/data/gogs-init.zip:ro
+      - ./support/gogs:/gogs-config:ro
+    # Gogs refuses to start as root (its config pins the runtime user to "git"),
+    # but the named volume is root-owned, so uid 1000 can't write to it either.
+    # Resolve the chicken-and-egg as root: chown /data to git, then gosu git
+    # for the restore itself.
+    entrypoint: ["sh", "-c"]
+    command:
+      - >
+        set -e &&
+        mkdir -p /data/gogs/conf /data/gogs/log /data/tmp &&
+        cp /gogs-config/app.ini /data/gogs/conf/app.ini &&
+        chown git:git /data &&
+        chown -R git:git /data/gogs /data/tmp &&
+        export TMPDIR=/data/tmp &&
+        cd /app/gogs &&
+        gosu git ./gogs restore --from /data/gogs-init.zip --config /data/gogs/conf/app.ini
+    restart: "no"
+
+  gogs:
+    image: gogs/gogs:0.14.2
+    depends_on:
+      gogs-restore:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:43000:3000"
+    volumes:
+      - gogs-data:/data
+    # No entrypoint/user override: the image's start.sh chowns /data and drops
+    # to the git user via gosu, then runs gogs web reading our restored
+    # /data/gogs/conf/app.ini.
+
+volumes:
+  gogs-data:

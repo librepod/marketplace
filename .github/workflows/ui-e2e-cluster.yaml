@@ -1,0 +1,64 @@
+name: ui-e2e-cluster
+
+on:
+  schedule:
+    - cron: "37 3 * * *" # nightly ~03:37 UTC (off the hour)
+  push:
+    branches: [master]
+    paths:
+      - "ui/**"
+      - "apps/marketplace-ui/**"
+      - "clusters/librepod-k3d/**"
+      - ".github/workflows/ui-e2e-cluster.yaml"
+  workflow_dispatch:
+
+jobs:
+  tier2:
+    name: Tier 2 (k3d cluster, realistic)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install k3d and flux (pinned)
+        working-directory: . # global tool install; not scoped to ui/
+        run: |
+          # Pin to specific release tags/versions instead of the mutable :main branch —
+          # bounds the supply-chain surface. k3d has no canonical setup-action; flux's
+          # action exists but curl keeps this workflow self-contained. Advisory CI only.
+          curl -sSfL https://raw.githubusercontent.com/k3d-io/k3d/v5.9.0/install.sh | TAG=v5.9.0 bash
+          curl -sSfL https://fluxcd.io/install.sh | sh -s -- --version=2.9.2
+          # kubectl is preinstalled on ubuntu-latest
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Tier 2 e2e
+        run: npm run test:e2e:ui:cluster
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-report-cluster
+          path: ui/packages/e2e/playwright-report
+          retention-days: 14
+
+      - name: Upload test results (traces/screenshots)
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-test-results-cluster
+          path: ui/packages/e2e/test-results
+          retention-days: 7
