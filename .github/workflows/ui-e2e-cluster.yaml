@@ -16,6 +16,9 @@ jobs:
   tier2:
     name: Tier 2 (k3d cluster, realistic)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
     steps:
       - uses: actions/checkout@v4
 
@@ -26,24 +29,22 @@ jobs:
           cache-dependency-path: ui/package-lock.json
 
       - name: Install k3d and flux (pinned)
+        working-directory: . # global tool install; not scoped to ui/
         run: |
           # Pin to specific release tags/versions instead of the mutable :main branch —
           # bounds the supply-chain surface. k3d has no canonical setup-action; flux's
           # action exists but curl keeps this workflow self-contained. Advisory CI only.
-          curl -s https://raw.githubusercontent.com/k3d-io/k3d/v5.9.0/install.sh | TAG=v5.9.0 bash
+          curl -sSfL https://raw.githubusercontent.com/k3d-io/k3d/v5.9.0/install.sh | TAG=v5.9.0 bash
           curl -sSfL https://fluxcd.io/install.sh | sh -s -- --version=2.9.2
           # kubectl is preinstalled on ubuntu-latest
 
       - name: Install dependencies
-        working-directory: ui
         run: npm ci
 
       - name: Install Playwright browser
-        working-directory: ui
         run: npx playwright install --with-deps chromium
 
       - name: Run Tier 2 e2e
-        working-directory: ui
         run: npm run test:e2e:ui:cluster
 
       - name: Upload Playwright report

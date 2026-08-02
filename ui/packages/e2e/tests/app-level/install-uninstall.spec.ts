@@ -14,6 +14,23 @@ async function installedNames(request: APIRequestContext): Promise<string[]> {
 // With no cluster, post-install status is stuck at "installing", so the UI
 // never offers the Uninstall action — hence the API call instead.
 test.describe("install / uninstall against real Gogs", () => {
+  // Self-contained clean slate. This file has a deliberate sequential flow
+  // (test 1 installs litellm → test 2 asserts 409 → test 3 uninstalls), so it
+  // must start from not_installed regardless of which spec files ran before it
+  // or whether workers/file-order ever change. Mirrors the inline cleanup in
+  // my-apps/resilience; done once here because every test in the file depends
+  // on the starting state. POST /uninstall returns only after the root
+  // kustomization edit lands, so no extra wait is needed.
+  test.beforeAll(async ({ request }) => {
+    for (const name of ["litellm", "vaultwarden"]) {
+      const r = await request.get(`/api/apps/${name}`);
+      // /api/apps/:name returns a single object with installedStatus.
+      if (r.ok() && (await r.json()).installedStatus !== "not_installed") {
+        await request.post(`/api/apps/${name}/uninstall`);
+      }
+    }
+  });
+
   test("install commits to Gogs and transitions the UI to installing", async ({
     page,
     request,
