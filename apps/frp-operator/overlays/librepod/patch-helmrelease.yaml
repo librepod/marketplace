@@ -1,19 +1,19 @@
-# Patch to apply once upstream PR #17 is merged and released.
-# This restores the standard spec.chart + HelmRepository pattern by overriding
-# the base HelmRelease's chart version to one that includes the subdomain fix.
-#
-# Usage: uncomment the `patches` section in kustomization.yaml, then update
-# the version below to the upstream release that includes PR #17.
+# LibrePod-specific Helm values. Strategic-merge patch on top of the base
+# HelmRelease — only the deployment-specific overrides live here; the chart
+# source (OCIRepository) and structural fields come from base/helmrelease.yaml.
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: frp-operator
 spec:
-  chart:
-    spec:
-      chart: frp-operator
-      version: "1.5.0"  # TODO: bump to version with PR #17
-      sourceRef:
-        kind: HelmRepository
-        name: frp-operator-charts
-      interval: 12h
+  values:
+    operator:
+      # Fork image — the published chart's values.yaml still references the
+      # upstream image, so override to our registry build.
+      image: ghcr.io/librepod/frp-operator
+      tag: v0.9.0
+    frpc:
+      # Pin frpc to v0.66.0: frpc/frps version skew silently breaks UDP relay
+      # (0.65 client vs 0.66 server drops all UDP traffic). Keep aligned with
+      # the frps servers users relay through.
+      defaultImage: "fatedier/frpc:v0.66.0"

@@ -14,13 +14,14 @@ spec:
     strategy:
       name: RetryOnFailure
       retryInterval: 3m
-  chart:
-    spec:
-      chart: frp-operator
-      sourceRef:
-        kind: HelmRepository
-        name: frp-operator-charts
-      interval: 12h
+  # The fork chart is an OCI artifact, so reference the OCIRepository via
+  # chartRef. spec.chart.spec.sourceRef only accepts HelmRepository/
+  # GitRepository/Bucket (per the HelmRelease CRD enum) — NOT OCIRepository — so
+  # chartRef is the only way to consume an OCIRepository-sourced chart. The
+  # chart version is pinned in the OCIRepository's ref.semver (~1.7.0).
+  chartRef:
+    kind: OCIRepository
+    name: frp-operator-charts
   values:
     operator:
       replica: 1
