@@ -8,7 +8,7 @@ spec:
   category: "Network"
   website: "https://github.com/zufardhiyaulhaq/frp-operator"
 
-  version: "v0.7.0"
+  version: "v0.9.0"
 
   source:
     type: oci-kustomize
@@ -34,7 +34,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/frp-operator
         ref:
-          tag: "v0.7.0"
+          tag: "v0.9.0"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization

@@ -29,4 +29,7 @@ spec:
   values:
     operator:
       image: ghcr.io/librepod/frp-operator
-      tag: v0.0.0-pr.2
+      tag: v0.9.0
+    frpc:
+      defaultImage: "fatedier/frpc:v0.66.0"
+
