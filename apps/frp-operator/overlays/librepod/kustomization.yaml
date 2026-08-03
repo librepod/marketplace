@@ -14,8 +14,8 @@
 # WHAT THE FORK CHANGES:
 #   1. Adds `subdomain` field to UpstreamSpec_HTTPS (and UpstreamSpec_HTTP)
 #   2. Makes `customDomains` optional (removed from CRD `required` list)
-#   3. Published as OCI chart: ghcr.io/librepod/charts/frp-operator:0.0.0-pr.3
-#   4. Docker image: ghcr.io/librepod/frp-operator:v0.7.0-librepod1
+#   3. Published as OCI chart: ghcr.io/librepod/charts/frp-operator:1.7.0
+#   4. Docker image: ghcr.io/librepod/frp-operator:v0.9.0
 #
 # HOW IT WORKS:
 #   - base/ provides namespace + upstream HelmRepository (but NO HelmRelease —

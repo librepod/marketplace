@@ -1,5 +1,6 @@
 # Fork chart from https://github.com/librepod/frp-operator
-# Provides HTTPS Upstream `subdomain` field support (upstream PR #17).
+# Provides HTTPS Upstream `subdomain` field support (upstream PR #17) and the
+# configurable frpc image (--frpc-default-image / spec.podTemplate.image).
 # TODO: Delete this file once upstream PR #17 is merged and released.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
@@ -9,4 +10,7 @@ spec:
   interval: 24h
   url: oci://ghcr.io/librepod/charts/frp-operator
   ref:
-    tag: "0.0.0-pr.3"
+    # Chart 1.7.0 (appVersion 0.9.0) is the first release with the configurable
+    # frpc image. Older tags (e.g. 0.0.0-pr.3) predate it and omit
+    # --frpc-default-image, which fails every Client with ImageUnresolved.
+    tag: "1.7.0"
