@@ -5,24 +5,32 @@
 # an operator can pre-create the Secret to point Flux at an external git provider
 # (GitHub/GitLab), in which case this Job is a no-op.
 #
-# Flow: apk add openssh-client -> download kubectl -> wait until the Gogs API
-# accepts flux basic auth -> skip if Secret exists (idempotent + override hook) ->
-# generate keypair -> register pubkey to the flux Gogs user -> ssh-keyscan Gogs ->
-# create the Secret with Reflector annotations.
+# Flow: apk add openssh-client curl jq -> download kubectl -> wait until the Gogs
+# API accepts flux basic auth -> skip if Secret exists (idempotent + override hook)
+# -> bootstrap (or reuse) a Gogs API token -> generate keypair -> register pubkey
+# to the flux user (replacing any stale key under the same title) -> ssh-keyscan
+# Gogs -> create the Secret with Reflector annotations.
+#
+# AUTH NOTE: Gogs's self endpoints (/api/v1/user/*) reject HTTP Basic auth in this
+# version (401) — they require a token. The /api/v1/users/<name>/* endpoints DO
+# accept Basic auth, so we bootstrap a token via /api/v1/users/flux/tokens (same
+# trick the Marketplace UI uses) and then use that token for /api/v1/user/keys.
 #
 # Runs as root (runAsUser: 0) ONLY because alpine's apk needs root to install
-# openssh-client (ssh-keygen + ssh-keyscan). One-shot bootstrap pod, not a
-# long-running service. allowPrivilegeEscalation=false + ALL caps dropped.
+# openssh-client/curl/jq. One-shot bootstrap pod, not a long-running service.
+# allowPrivilegeEscalation=false + ALL caps dropped.
 set -eu
 
 NS="${GOGS_NAMESPACE:-gogs}"
 GOGS_API="http://gogs.${NS}.svc.cluster.local:80"
 SECRET_NAME="user-apps-ssh-key"
 KEY_TITLE="librepod-flux"
+TOKEN_NAME="librepod-ssh-bootstrap"
 
-# openssh-client provides ssh-keygen + ssh-keyscan (not in base alpine).
-echo "Installing openssh-client..."
-apk add --no-cache openssh-client >/dev/null
+# openssh-client: ssh-keygen + ssh-keyscan. curl: Gogs API incl. DELETE (busybox
+# wget can't DELETE). jq: robust JSON parsing (Gogs pretty-prints with spaces).
+echo "Installing openssh-client curl jq..."
+apk add --no-cache openssh-client curl jq >/dev/null
 
 # Download kubectl matching the cluster's actual minor version (repo bootstrap
 # convention; see apps/headscale/components/bootstrap-api-key/job.sh).
@@ -44,13 +52,16 @@ if ! command -v kubectl >/dev/null 2>&1; then
   export PATH=/tmp:$PATH
 fi
 
-# Wait until Gogs accepts flux basic auth — proves gogs is up AND the flux user
-# (restored from gogs-init.zip) exists with the expected password.
+# Basic-auth header for the /api/v1/users/<flux>/* endpoints (token bootstrap).
 B64="$(printf '%s:%s' "$FLUX_USER" "$FLUX_PASS" | base64 | tr -d '\n')"
+
+# Wait until Gogs accepts flux basic auth on /api/v1/users/<flux>/tokens — proves
+# gogs is up AND the flux user (restored from gogs-init.zip) exists with the
+# expected password. (We cannot use /api/v1/user/keys here: it 401s on basic auth.)
 echo "Waiting for Gogs API to accept flux credentials..."
 READY=0
 for i in $(seq 1 60); do
-  if wget -q -O /dev/null --header="Authorization: Basic $B64" "${GOGS_API}/api/v1/user/keys"; then
+  if curl -fsS -o /dev/null -H "Authorization: Basic $B64" "${GOGS_API}/api/v1/users/${FLUX_USER}/tokens"; then
     READY=1
     break
   fi
@@ -68,26 +79,46 @@ if kubectl get secret "$SECRET_NAME" -n "$NS" >/dev/null 2>&1; then
   exit 0
 fi
 
+# Bootstrap or reuse a Gogs API token (reused by name so re-runs don't accumulate
+# tokens). /api/v1/users/<flux>/tokens accepts basic auth; the token then
+# authenticates the /api/v1/user/* self endpoints.
+echo "Ensuring Gogs API token '${TOKEN_NAME}'..."
+TOK="$(curl -fsS -H "Authorization: Basic $B64" "${GOGS_API}/api/v1/users/${FLUX_USER}/tokens" | jq -r ".[] | select(.name==\"${TOKEN_NAME}\") | .sha1" | head -n1 || true)"
+if [ -z "$TOK" ] || [ "$TOK" = "null" ]; then
+  echo "Token not found; creating..."
+  TOK="$(curl -fsS -H "Authorization: Basic $B64" -H "Content-Type: application/json" -X POST --data "{\"name\":\"${TOKEN_NAME}\"}" "${GOGS_API}/api/v1/users/${FLUX_USER}/tokens" | jq -r .sha1)"
+fi
+if [ -z "$TOK" ] || [ "$TOK" = "null" ]; then
+  echo "ERROR: could not obtain a Gogs API token" >&2
+  exit 1
+fi
+echo "Gogs API token obtained."
+
 # Generate the keypair.
 echo "Generating ed25519 keypair..."
 ssh-keygen -t ed25519 -N "" -C "$KEY_TITLE" -f /tmp/id >/dev/null
 PUB="$(cat /tmp/id.pub)"
 
-# Register the pubkey to the flux user (idempotent: skip if a key with this title
-# already exists, e.g. after this Job was deleted and recreated by Flux).
-echo "Checking for existing key titled ${KEY_TITLE}..."
-EXISTING="$(wget -q -O - --header="Authorization: Basic $B64" "${GOGS_API}/api/v1/user/keys" 2>/dev/null || true)"
-if echo "$EXISTING" | grep -Eq "\"title\"[[:space:]]*:[[:space:]]*\"${KEY_TITLE}\""; then
-  echo "Key ${KEY_TITLE} already registered with Gogs; skipping registration."
+# Register the pubkey to the flux user. If a key with this title already exists
+# with a DIFFERENT pubkey (e.g. rotation after the Secret was deleted), delete it
+# first so the new private key in the Secret matches what Gogs has. Key DELETE is
+# supported (DELETE /api/v1/user/keys/<id>); token DELETE is not, which is why we
+# reuse the token by name above instead of recreating it.
+echo "Checking for existing key titled '${KEY_TITLE}'..."
+KEYS="$(curl -fsS -H "Authorization: token ${TOK}" "${GOGS_API}/api/v1/user/keys" || true)"
+EXIST_ID="$(printf '%s' "$KEYS" | jq -r ".[] | select(.title==\"${KEY_TITLE}\") | .id" | head -n1)"
+EXIST_PUB="$(printf '%s' "$KEYS" | jq -r ".[] | select(.title==\"${KEY_TITLE}\") | .key" | head -n1)"
+if [ -n "$EXIST_ID" ] && [ "$EXIST_PUB" = "$PUB" ]; then
+  echo "Key '${KEY_TITLE}' already registered with this pubkey; nothing to register."
 else
-  echo "Registering pubkey with Gogs as ${KEY_TITLE}..."
-  if ! wget --header="Authorization: Basic $B64" \
-            --header="Content-Type: application/json" \
-            --post-data="{\"title\":\"${KEY_TITLE}\",\"key\":\"${PUB}\"}" \
-            -O - "${GOGS_API}/api/v1/user/keys"; then
-    echo "ERROR: pubkey registration request to Gogs failed (response above)" >&2
-    exit 1
+  if [ -n "$EXIST_ID" ]; then
+    echo "Replacing stale key '${KEY_TITLE}' (id=${EXIST_ID})..."
+    curl -fsS -o /dev/null -X DELETE -H "Authorization: token ${TOK}" "${GOGS_API}/api/v1/user/keys/${EXIST_ID}"
   fi
+  echo "Registering pubkey with Gogs as '${KEY_TITLE}'..."
+  curl -fsS -o /dev/null -X POST -H "Authorization: token ${TOK}" -H "Content-Type: application/json" \
+    --data "{\"title\":\"${KEY_TITLE}\",\"key\":\"${PUB}\"}" "${GOGS_API}/api/v1/user/keys"
+  echo "Registered."
 fi
 
 # Discover Gogs's SSH host key.
