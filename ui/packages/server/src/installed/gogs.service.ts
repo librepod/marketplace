@@ -1,12 +1,10 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as crypto from 'node:crypto';
 import * as yaml from 'js-yaml';
 
 @Injectable()
-export class GogsService implements OnModuleInit {
+export class GogsService {
   private readonly logger = new Logger(GogsService.name);
-  private apiToken = '';
 
   constructor(private readonly config: ConfigService) {}
 
@@ -36,38 +34,11 @@ export class GogsService implements OnModuleInit {
     return `Basic ${credentials}`;
   }
 
-  async onModuleInit(): Promise<void> {
-    const tokensUrl = `${this.gogsUrl}/api/v1/users/${this.gogsUsername}/tokens`;
-
-    try {
-      const tokenName = `marketplace-ui-${crypto.randomUUID().slice(0, 8)}`;
-      const res = await fetch(tokensUrl, {
-        method: 'POST',
-        headers: {
-          Authorization: this.basicAuth,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name: tokenName }),
-      });
-
-      if (res.ok) {
-        const data = (await res.json()) as { sha1: string };
-        this.apiToken = data.sha1;
-        this.logger.log('Created Gogs API token for write operations');
-      } else {
-        this.logger.error(`Failed to create Gogs API token: ${res.status}`);
-      }
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Gogs API token init failed: ${message}`);
-    }
-  }
-
   async getInstalledAppNames(): Promise<string[]> {
     const url = `${this.gogsUrl}/api/v1/repos/flux/user-apps/raw/master/kustomization.yaml`;
     try {
       const res = await fetch(url, {
-        headers: { Authorization: `token ${this.apiToken}` },
+        headers: { Authorization: this.basicAuth },
       });
       if (!res.ok) return [];
       const parsed = yaml.load(await res.text()) as { resources?: string[] } | null;
@@ -90,7 +61,7 @@ export class GogsService implements OnModuleInit {
     const res = await fetch(url, {
       method: 'PUT',
       headers: {
-        Authorization: `token ${this.apiToken}`,
+        Authorization: this.basicAuth,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -106,7 +77,7 @@ export class GogsService implements OnModuleInit {
   async getFileContents(path: string): Promise<{ content: string; sha: string } | null> {
     const url = `${this.gogsUrl}/api/v1/repos/flux/user-apps/contents/${path}`;
     const res = await fetch(url, {
-      headers: { Authorization: `token ${this.apiToken}` },
+      headers: { Authorization: this.basicAuth },
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { content: string; sha: string };

@@ -83,8 +83,9 @@ Conventions and gotchas:
   `compose up → readiness check → playwright → compose down -v`, so each run starts from a
   clean seed. The catalog is `packages/e2e/fixtures/catalog.fixture.yaml` (3 user-facing apps
   + 3 Infrastructure; `vaultwarden`/`litellm` have install `templates`).
-- **`GOGS_TOKEN` is the Gogs user's *password*** (Basic auth during token bootstrap), not a
-  bearer token. Seeded creds: `GOGS_USERNAME=flux` / `GOGS_TOKEN=pass@w0rd`
+- **`GOGS_TOKEN` is the Gogs user's *password*** (Basic auth on every repo call — there is
+  no token bootstrap; token auth is broken on gogs 0.14.3), not a bearer token. Seeded creds:
+  `GOGS_USERNAME=flux` / `GOGS_TOKEN=pass@w0rd`
   (from `apps/gogs/components/repo-init/secret.env`).
 - **`KUBECONFIG` is pinned to a closed-port fixture** (`packages/e2e/support/kubeconfig.closed.yaml`)
   in `projects/tier1.config.ts`. With no cluster, `FluxStatusService.loadFromDefault()` would
@@ -206,11 +207,15 @@ apps** — those are system apps, not user-installable. The catalog file itself 
 CI from `apps/*/metadata.yaml` (do not hand-edit; see parent CLAUDE.md).
 
 ### Gogs auth (`GogsService`)
-On module init it **bootstraps an API token**: POSTs to `/api/v1/users/<user>/tokens` with
-HTTP Basic auth (username + password), stores the returned `sha1`, then uses
-`token <sha1>` for all repo writes. Writes go through the Gogs **contents API** (base64-encoded,
-PUT per file). Root-kustomization edits are read-modify-write (fetch `sha`, dump YAML,
-re-PUT).
+Every repo call uses **HTTP Basic auth** (`Authorization: Basic base64(user:pass)`), with
+`GOGS_USERNAME` + `GOGS_TOKEN` (the latter is the user's *password*, despite the name). It
+does **not** bootstrap or use an API token: on the pinned image (`gogs/gogs:next-0.14` =
+0.14.3, the CVE-2026-25119 fix release) token auth is broken — every
+`Authorization: token <sha1>` call 403s with "Only authenticated user is allowed to call
+APIs." on `/api/v1/*`, so the UI mirrors the bootstrap Job's Basic-auth approach (#56/#57).
+Reads use `GET /repos/flux/user-apps/raw/...` and `/contents/...`; writes go through the
+**contents API** (base64-encoded, PUT per file). Root-kustomization edits are read-modify-write
+(fetch, dump YAML, re-PUT).
 
 ### Flux status (`FluxStatusService`)
 Reads Flux CRDs via `@kubernetes/client-node` `CustomObjectsApi`: lists
@@ -234,8 +239,8 @@ Dark mode is forced on mount (`main.tsx`, decision D-02).
 | `ALLOWED_ORIGINS` | `http://localhost:5173` | comma-separated CORS origins |
 | `CATALOG_PATH` | `cwd/../../../catalog.yaml` | default assumes cwd = `packages/server` |
 | `GOGS_URL` | `http://gogs.gogs.svc.cluster.local:80` | on-cluster Gogs |
-| `GOGS_USERNAME` | (empty) | user whose token is bootstrapped |
-| `GOGS_TOKEN` | (empty) | ⚠ used as the **password** for Basic auth during token bootstrap (name is misleading — it is not used as a bearer token) |
+| `GOGS_USERNAME` | (empty) | Gogs user for Basic auth (the `flux` service account) |
+| `GOGS_TOKEN` | (empty) | ⚠ that user's **password** — used for Basic auth on every repo call (name is misleading: it is NOT a bearer/API token; token auth is broken on gogs 0.14.3, see #58) |
 | `BASE_DOMAIN` | `libre.pod` | `${BASE_DOMAIN}` substituted into templates |
 | `KUBERNETES_SERVICE_HOST` | — | presence switches FluxStatusService to in-cluster config |
 
