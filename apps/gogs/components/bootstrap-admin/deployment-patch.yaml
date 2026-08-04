@@ -6,7 +6,7 @@ spec:
   template:
     spec:
       initContainers:
-        - name: restore-from-backup
+        - name: bootstrap-admin
           image: gogs/gogs
           imagePullPolicy: IfNotPresent
           securityContext:
@@ -19,60 +19,52 @@ spec:
             capabilities:
               drop:
                 - ALL
+          env:
+            - name: GOGS_USER
+              valueFrom:
+                secretKeyRef:
+                  name: user-apps-source-auth
+                  key: username
+            - name: GOGS_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: user-apps-source-auth
+                  key: password
           command:
             - /bin/sh
             - -c
             - |
               set -e
 
-              MARKER_FILE="/data/.restore-complete"
-              BACKUP_FILE="/data/gogs-init.zip"
+              MARKER_FILE="/data/.bootstrap-admin-complete"
 
-              # Idempotency check - if marker exists, skip restore
+              # Idempotency: once we've bootstrapped (or adopted an existing
+              # install), never touch users again.
               if [ -f "$MARKER_FILE" ]; then
-                echo "Restore already completed (marker found), skipping."
+                echo "Admin bootstrap already completed (marker found), skipping."
                 exit 0
               fi
 
-              # Wait for postgres to be ready
-              # echo "Waiting for postgres at gogs-postgres:5432..."
-              # until nc -z gogs-postgres 5432; do
-              #   echo "Postgres not ready, waiting..."
-              #   sleep 2
-              # done
-              # echo "Postgres is ready."
-
-              # Check if this is a fresh instance (no existing repositories)
-              # Skip restore if data already exists to avoid overwriting
-              if [ -d "/data/git/gogs-repositories" ] && [ "$(ls -A /data/git/gogs-repositories 2>/dev/null)" ]; then
-                echo "Existing repositories found, skipping restore."
-                touch "$MARKER_FILE"
-                exit 0
-              fi
-
-              # Set TMPDIR to same filesystem to avoid cross-device link errors
-              mkdir -p /data/tmp
-              export TMPDIR=/data/tmp
-
-              # Run restore
-              echo "Restoring Gogs from backup..."
+              # Create the flux admin directly against the DB (no auth exists on
+              # a fresh install; INSTALL_LOCK=true skips the wizard). On an
+              # already-provisioned cluster (old zip-restored, or a prior run
+              # whose marker was lost) create-user errors because the user
+              # exists — swallow it and rely on the marker for idempotency.
+              echo "Ensuring Gogs admin user '${GOGS_USER}'..."
               cd /app/gogs
-              ./gogs restore --from "$BACKUP_FILE" --config /data/gogs/conf/app.ini
+              ./gogs admin create-user \
+                --name "$GOGS_USER" \
+                --password "$GOGS_PASS" \
+                --email "flux@libre.pod" \
+                --admin \
+                --config /data/gogs/conf/app.ini || \
+                echo "create-user returned non-zero (user likely already exists); continuing."
 
-              # Create marker file to indicate restore completed
               touch "$MARKER_FILE"
-              echo "Restore completed successfully."
+              echo "Admin bootstrap complete."
           volumeMounts:
             - name: data
               mountPath: /data
             - name: config
               mountPath: /data/gogs/conf/app.ini
               subPath: app.ini
-            - name: backup
-              mountPath: /data/gogs-init.zip
-              subPath: gogs-init.zip
-              readOnly: true
-      volumes:
-        - name: backup
-          configMap:
-            name: gogs-init-backup
