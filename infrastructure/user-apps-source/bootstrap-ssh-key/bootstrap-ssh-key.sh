@@ -125,26 +125,42 @@ PUB="$(cat /tmp/id.pub)"
 
 # Register the freshly generated pubkey to the flux user via the admin endpoint
 # (Basic auth). We reach this block only when Secret/user-apps-ssh-key does NOT
-# exist (early-exit above), i.e. a fresh install or a deliberate key rotation
+# exist (early-exit above), i.e. a fresh install or a deliberate rotation
 # (operator deleted the Secret) — so a brand-new keypair is always registered.
 #
-# Note on rotation/idempotency: on this gogs build we cannot list keys by title
-# via Basic auth (the key-list endpoint returns nothing usable) and the admin
-# key-add endpoint has no DELETE-by-title, so we do NOT pre-delete a stale key.
-# Adding a genuinely NEW pubkey always succeeds; only re-adding the exact same
-# pubkey errors ("Key content has been used"). If a rotation ever hits a stale key
-# left in Gogs, the operator removes it from the flux user in the Gogs UI, then
-# re-runs — mirrors the "delete the Secret to rotate" convention already in place.
+# Rotation/idempotency on this gogs build: we cannot list or delete keys by title
+# via Basic auth (both the self and admin key-list endpoints 401/404), so we can't
+# pre-delete a stale key. Gogs enforces UNIQUE key titles, so a leftover
+# '${KEY_TITLE}' from a previously-failed run makes the add 422 ("Key title has
+# been used"). To stay self-healing without manual cleanup, fall back to a
+# unique-suffixed title on a title collision. The suffix is cosmetic (the title is
+# just a label); the private key still lands in the Secret and authenticates the
+# push. Orphaned keys from failed runs are harmless unused pubkeys; the Secret
+# early-exit stops any accumulation once a run succeeds.
+register_key() {
+  # $1 = title. Echoes the HTTP code; body (on error) goes to stderr.
+  _out="$(curl -sS -w '\n%{http_code}' -X POST -H "Authorization: Basic $B64" \
+    -H "Content-Type: application/json" \
+    --data "{\"title\":\"$1\",\"key\":\"${PUB}\"}" \
+    "${GOGS_API}/api/v1/admin/users/${FLUX_USER}/keys")"
+  _code="$(printf '%s' "$_out" | tail -n1)"
+  if [ "$_code" != "201" ]; then
+    printf '%s\n' "$_out" | sed '$d' >&2
+  fi
+  printf '%s' "$_code"
+}
+
 echo "Registering pubkey with Gogs as '${KEY_TITLE}'..."
-REG_OUT="$(curl -sS -w '\n%{http_code}' -X POST -H "Authorization: Basic $B64" -H "Content-Type: application/json" \
-  --data "{\"title\":\"${KEY_TITLE}\",\"key\":\"${PUB}\"}" "${GOGS_API}/api/v1/admin/users/${FLUX_USER}/keys")"
-REG_CODE="$(printf '%s' "$REG_OUT" | tail -n1)"
+REG_CODE="$(register_key "${KEY_TITLE}")"
+if [ "$REG_CODE" = "422" ]; then
+  ALT_TITLE="${KEY_TITLE}-$(date +%s)"
+  echo "Title '${KEY_TITLE}' already in use (stale key from a prior run); retrying as '${ALT_TITLE}'..."
+  REG_CODE="$(register_key "${ALT_TITLE}")"
+fi
 if [ "$REG_CODE" = "201" ]; then
   echo "Registered."
 else
-  echo "ERROR: key registration failed (HTTP ${REG_CODE}):" >&2
-  printf '%s\n' "$REG_OUT" | sed '$d' >&2
-  echo "If a stale '${KEY_TITLE}' key exists on the flux user, remove it in Gogs and re-run." >&2
+  echo "ERROR: key registration failed (HTTP ${REG_CODE})." >&2
   exit 1
 fi
 
