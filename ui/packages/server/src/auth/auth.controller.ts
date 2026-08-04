@@ -56,6 +56,9 @@ export class AuthController {
 
   @Get('logout')
   logout(@Res({ passthrough: true }) res: Response) {
+    // Clears the browser's session cookie. Sessions are stateless HMAC tokens
+    // with no revocation list, so a previously stolen cookie stays valid until
+    // its TTL — accepted for the login-only scope; revisit in user management.
     res.clearCookie(this.session.cookieName);
     return res.redirect(302, '/api/auth/login');
   }
@@ -64,7 +67,9 @@ export class AuthController {
 function cookieOpts(maxAgeSec: number) {
   return {
     httpOnly: true,
-    secure: true,
+    // Secure by default (HTTPS only). Opt out with SESSION_COOKIE_SECURE=false
+    // for local dev over plain HTTP (npm run dev on :3000/:5173).
+    secure: process.env.SESSION_COOKIE_SECURE !== 'false',
     sameSite: 'lax' as const,
     path: '/',
     maxAge: maxAgeSec * 1000,

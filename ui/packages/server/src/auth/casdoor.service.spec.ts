@@ -34,4 +34,50 @@ describe('CasdoorService', () => {
     const identity = await svc.exchangeCode('the-code', 'marketplace.example.com');
     expect(identity).toEqual({ sub: 'sub-1', name: 'alice', email: 'alice@librepod' });
   });
+
+  it('falls back to a direct token POST when the SDK exchange fails', async () => {
+    const svc = new CasdoorService();
+    vi.spyOn((svc as any).sdk, 'getAuthToken').mockRejectedValue(new Error('boom'));
+    const fetchMock = vi
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ access_token: 'tok-123' }), { status: 200 }));
+    const token = await (svc as any).getAccessToken('code-x', 'https://host/cb');
+    expect(token).toBe('tok-123');
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain('/api/login/oauth/access_token');
+    expect((init as RequestInit).method).toBe('POST');
+    fetchMock.mockRestore();
+  });
+
+  it('directTokenPost throws on a non-OK token response', async () => {
+    const svc = new CasdoorService();
+    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(new Response('nope', { status: 400 }));
+    await expect((svc as any).directTokenPost('code-x', 'https://host/cb')).rejects.toThrow(
+      'token exchange failed: 400',
+    );
+    fetchMock.mockRestore();
+  });
+
+  it('directTokenPost throws when access_token is missing', async () => {
+    const svc = new CasdoorService();
+    const fetchMock = vi
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
+    await expect((svc as any).directTokenPost('code-x', 'https://host/cb')).rejects.toThrow(
+      'missing access_token',
+    );
+    fetchMock.mockRestore();
+  });
+
+  it('fetchUserInfo throws on a non-OK userinfo response', async () => {
+    const svc = new CasdoorService();
+    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(new Response('', { status: 401 }));
+    await expect((svc as any).fetchUserInfo('tok')).rejects.toThrow('userinfo failed: 401');
+    fetchMock.mockRestore();
+  });
+
+  it('throws if any required Casdoor env is missing', () => {
+    delete process.env.CASDOOR_CLIENT_SECRET;
+    expect(() => new CasdoorService()).toThrow(/CASDOOR_CLIENT_SECRET/);
+  });
 });

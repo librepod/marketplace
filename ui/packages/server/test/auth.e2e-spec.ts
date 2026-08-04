@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import { AppModule } from '../src/app.module';
+import { CasdoorService } from '../src/auth/casdoor.service';
 import { SessionService } from '../src/auth/session.service';
 
 // Auth e2e does not hit real Casdoor: it verifies the session-cookie contract
@@ -61,6 +62,58 @@ describe('Auth (e2e)', () => {
     await request(app.getHttpServer())
       .get('/api/auth/callback?code=x&state=bad')
       .expect(400);
+  });
+
+  it('GET /api/auth/callback with a valid state mints a session cookie (happy path)', async () => {
+    const casdoor = app.get(CasdoorService);
+    // Force the SDK exchange to fail so the real fallback (directTokenPost via
+    // fetch) + userinfo run — exercising the production HTTP path end to end.
+    const sdkSpy = vi
+      .spyOn((casdoor as any).sdk, 'getAuthToken')
+      .mockRejectedValue(new Error('sdk down'));
+    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation(async (input: any) => {
+      const url = typeof input === 'string' ? input : (input as { url?: string }).url ?? String(input);
+      if (url.includes('/api/login/oauth/access_token')) {
+        return new Response(JSON.stringify({ access_token: 'fake-access-token' }), { status: 200 });
+      }
+      if (url.includes('/api/userinfo')) {
+        return new Response(
+          JSON.stringify({ sub: 'sub-1', preferred_username: 'alice', name: 'Alice', email: 'alice@librepod' }),
+          { status: 200 },
+        );
+      }
+      return new Response('', { status: 404 });
+    });
+
+    // 1) login stashes the state + return-path cookies.
+    const login = await request(app.getHttpServer())
+      .get('/api/auth/login?rd=/my-apps')
+      .set('X-Forwarded-Host', 'marketplace.example.com')
+      .expect(302);
+    const setCookie = login.headers['set-cookie'] as unknown as string[];
+    const cookieJar = setCookie.map((c) => c.split(';')[0]).join('; ');
+    const state = (cookieJar.match(/mp_oauth_state=([^;]+)/) ?? [])[1];
+    expect(state).toBeTruthy();
+
+    // 2) callback with the matching state exchanges the code and redirects to rd.
+    const cb = await request(app.getHttpServer())
+      .get(`/api/auth/callback?code=fake-code&state=${state}`)
+      .set('Cookie', cookieJar)
+      .set('X-Forwarded-Host', 'marketplace.example.com')
+      .expect(302);
+    expect(cb.headers.location).toBe('/my-apps');
+    const cbCookies = (cb.headers['set-cookie'] as unknown as string[]).join(';');
+    expect(cbCookies).toContain('mp_session=');
+
+    // 3) the minted cookie unlocks the API.
+    const session = (cbCookies.match(/mp_session=([^;]+)/) ?? [])[1]!;
+    await request(app.getHttpServer())
+      .get('/api/me')
+      .set('Cookie', `mp_session=${session}`)
+      .expect(200);
+
+    sdkSpy.mockRestore();
+    fetchMock.mockRestore();
   });
 
   it('GET /api/me with a valid session cookie → 200 and returns identity', async () => {

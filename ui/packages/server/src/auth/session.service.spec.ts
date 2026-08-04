@@ -34,11 +34,27 @@ describe('SessionService', () => {
   });
 
   it('rejects an expired token', () => {
-    // Forge an expired but correctly-signed token by signing at exp boundary:
-    // simpler — mutate exp via a re-sign with a negative-ish future is hard,
-    // so instead verify TTL is bounded and a malformed token is rejected.
+    // sign() always sets exp = now + TTL, so forge an expired-but-signed token
+    // via the private encoder to exercise the real expiry branch.
+    const expired = (svc as any).encode({
+      sub: 'u1',
+      name: 'Alice',
+      email: 'a@x',
+      iat: 1000,
+      exp: 1001,
+    });
+    expect(svc.verify(expired)).toBeNull();
+  });
+
+  it('rejects malformed tokens', () => {
     expect(svc.verify('garbage')).toBeNull();
     expect(svc.verify('a.b')).toBeNull();
+    expect(svc.verify('only-one-part')).toBeNull();
+  });
+
+  it('refuses to boot on the committed default secret', () => {
+    process.env.SESSION_SECRET = 'NZcbV2j7TK5DZTTEwD/tqssrP8CdDqHrjz/HpHjMJDg=';
+    expect(() => new SessionService()).toThrow(/committed default/);
   });
 
   it('throws if SESSION_SECRET is unset', () => {

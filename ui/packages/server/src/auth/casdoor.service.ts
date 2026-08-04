@@ -24,8 +24,25 @@ export class CasdoorService {
     this.clientSecret = process.env.CASDOOR_CLIENT_SECRET ?? '';
     this.orgName = process.env.CASDOOR_ORG_NAME ?? '';
     this.appName = process.env.CASDOOR_APP_NAME ?? '';
+    // Fail fast: an empty value here would otherwise surface as an opaque 500
+    // at the first login attempt (Casdoor rejecting the request).
+    const missing = (
+      [
+        ['CASDOOR_ENDPOINT', this.endpoint],
+        ['CASDOOR_CLIENT_ID', this.clientId],
+        ['CASDOOR_CLIENT_SECRET', this.clientSecret],
+        ['CASDOOR_ORG_NAME', this.orgName],
+        ['CASDOOR_APP_NAME', this.appName],
+      ] as [string, string][]
+    )
+      .filter(([, v]) => !v)
+      .map(([k]) => k);
+    if (missing.length) {
+      throw new Error(`CasdoorService misconfigured — missing env: ${missing.join(', ')}`);
+    }
     // certificate left empty: we do not locally verify the JWT (spec §5.1).
-    // NODE_EXTRA_CA_CERTS (set in the deployment) makes axios trust id.<domain>.
+    // NODE_EXTRA_CA_CERTS (set in the deployment) lets the token/userinfo calls
+    // trust the private CA on id.<domain>.
     this.sdk = new SDK({
       endpoint: this.endpoint,
       clientId: this.clientId,
