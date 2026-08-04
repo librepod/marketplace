@@ -5,19 +5,29 @@
 # an operator can pre-create the Secret to point Flux at an external git provider
 # (GitHub/GitLab), in which case this Job is a no-op.
 #
-# Flow: apk add openssh-client curl jq -> download kubectl -> wait until the Gogs
-# API accepts flux basic auth -> skip if Secret exists (idempotent + override hook)
-# -> bootstrap (or reuse) a Gogs API token -> generate keypair -> register pubkey
-# to the flux user (replacing any stale key under the same title) -> ssh-keyscan
-# Gogs -> create the Secret with Reflector annotations.
+# Flow: apk add openssh-client curl jq git -> download kubectl -> wait until the
+# Gogs API accepts flux basic auth -> skip if Secret exists (idempotent + override
+# hook) -> ensure the user-apps repo -> generate keypair -> register pubkey to the
+# flux user -> ssh-keyscan Gogs -> seed the initial commit over SSH -> create the
+# Secret with Reflector annotations.
 #
-# AUTH NOTE: Gogs's self endpoints (/api/v1/user/*) reject HTTP Basic auth in this
-# version (401) — they require a token. The /api/v1/users/<name>/* endpoints DO
-# accept Basic auth, so we bootstrap a token via /api/v1/users/flux/tokens (same
-# trick the Marketplace UI uses) and then use that token for /api/v1/user/keys.
+# AUTH NOTE: this Job authenticates every Gogs API call with HTTP Basic auth
+# (flux:password) against the /api/v1/admin/* and /api/v1/repos/* endpoints. It
+# does NOT use API tokens: on the pinned image (gogs 0.14.3, the CVE-2026-25119
+# fix release) token-based API auth is broken — every "Authorization: token
+# <sha1>" call returns 403 "Only authenticated user is allowed to call APIs",
+# even for a freshly minted, valid token and even from loopback. Basic auth on
+# the admin/repos endpoints still works, so we use that throughout:
+#   - repo create : POST /api/v1/admin/users/<flux>/repos
+#   - key register: POST /api/v1/admin/users/<flux>/keys
+#   - repo exists : GET  /api/v1/repos/<flux>/user-apps (also yields "empty")
+# The /api/v1/user/* SELF endpoints reject Basic auth (401), which is why we use
+# the admin-scoped equivalents. Idempotency comes from the Secret early-exit
+# (below) plus the repo GET-guard — not from key-list-by-title, since key listing
+# also returns nothing usable on this build.
 #
 # Runs as root (runAsUser: 0) ONLY because alpine's apk needs root to install
-# openssh-client/curl/jq. One-shot bootstrap pod, not a long-running service.
+# openssh-client/curl/jq/git. One-shot bootstrap pod, not a long-running service.
 # allowPrivilegeEscalation=false + ALL caps dropped.
 set -eu
 
@@ -25,11 +35,10 @@ NS="${GOGS_NAMESPACE:-gogs}"
 GOGS_API="http://gogs.${NS}.svc.cluster.local:80"
 SECRET_NAME="user-apps-ssh-key"
 KEY_TITLE="librepod-flux"
-TOKEN_NAME="librepod-ssh-bootstrap"
 
-# openssh-client: ssh-keygen + ssh-keyscan. curl: Gogs API incl. DELETE (busybox
-# wget can't DELETE). jq: robust JSON parsing (Gogs pretty-prints with spaces).
-# git: seed the initial commit over SSH.
+# openssh-client: ssh-keygen + ssh-keyscan. curl: Gogs API (captures HTTP status
+# on key registration). jq: branch-count JSON parsing. git: seed the initial
+# commit over SSH.
 echo "Installing openssh-client curl jq git..."
 apk add --no-cache openssh-client curl jq git >/dev/null
 
@@ -56,14 +65,14 @@ fi
 # Basic-auth header for the /api/v1/users/<flux>/* endpoints (token bootstrap).
 B64="$(printf '%s:%s' "$FLUX_USER" "$FLUX_PASS" | base64 | tr -d '\n')"
 
-# Wait until Gogs accepts flux basic auth on /api/v1/users/<flux>/tokens — proves
-# gogs is up AND the flux user (created by the gogs bootstrap-admin initContainer)
-# exists with the expected password. (We cannot use /api/v1/user/keys here: it
-# 401s on basic auth.)
+# Wait until Gogs accepts flux basic auth on /api/v1/users/<flux> — proves gogs is
+# up AND the flux user (created by the gogs bootstrap-admin initContainer) exists
+# with the expected password. This public endpoint accepts Basic auth; we use it
+# (not a /api/v1/user/* self endpoint, which 401s on Basic) as the readiness probe.
 echo "Waiting for Gogs API to accept flux credentials..."
 READY=0
 for i in $(seq 1 60); do
-  if curl -fsS -o /dev/null -H "Authorization: Basic $B64" "${GOGS_API}/api/v1/users/${FLUX_USER}/tokens"; then
+  if curl -fsS -o /dev/null -H "Authorization: Basic $B64" "${GOGS_API}/api/v1/users/${FLUX_USER}"; then
     READY=1
     break
   fi
@@ -81,35 +90,31 @@ if kubectl get secret "$SECRET_NAME" -n "$NS" >/dev/null 2>&1; then
   exit 0
 fi
 
-# Bootstrap or reuse a Gogs API token (reused by name so re-runs don't accumulate
-# tokens). /api/v1/users/<flux>/tokens accepts basic auth; the token then
-# authenticates the /api/v1/user/* self endpoints.
-echo "Ensuring Gogs API token '${TOKEN_NAME}'..."
-TOK="$(curl -fsS -H "Authorization: Basic $B64" "${GOGS_API}/api/v1/users/${FLUX_USER}/tokens" | jq -r ".[] | select(.name==\"${TOKEN_NAME}\") | .sha1" | head -n1 || true)"
-if [ -z "$TOK" ] || [ "$TOK" = "null" ]; then
-  echo "Token not found; creating..."
-  TOK="$(curl -fsS -H "Authorization: Basic $B64" -H "Content-Type: application/json" -X POST --data "{\"name\":\"${TOKEN_NAME}\"}" "${GOGS_API}/api/v1/users/${FLUX_USER}/tokens" | jq -r .sha1)"
-fi
-if [ -z "$TOK" ] || [ "$TOK" = "null" ]; then
-  echo "ERROR: could not obtain a Gogs API token" >&2
-  exit 1
-fi
-echo "Gogs API token obtained."
-
-# Ensure the user-apps repo exists. auto_init:false so WE control the first
-# commit and its branch name (master, to match the GitRepository ref). Idempotent:
-# if the repo already exists (old zip-restored cluster or a prior run) we skip
-# creation and remember that so the seed step below leaves existing history alone.
+# Ensure the user-apps repo exists. auto_init:false so WE control the first commit
+# and its branch name (master, to match the GitRepository ref). Idempotent: GET
+# first (200 = exists, 404 = missing) and only create on 404 — POSTing to an
+# existing repo 500s. Create via the admin endpoint with Basic auth (the
+# /api/v1/user/repos self endpoint requires a token, which is broken — see the
+# AUTH NOTE).
+#
+# REPO_EMPTY drives the seed step below. We read it from the repo object's
+# "empty" field (GET /repos/<flux>/user-apps returns "empty":true/false) rather
+# than /branches, because the branches endpoint 401s on Basic auth for a private
+# repo. A freshly created repo is empty by definition.
 echo "Ensuring repo ${FLUX_USER}/user-apps..."
-REPO_EXISTED=0
-if curl -fsS -o /dev/null -H "Authorization: token ${TOK}" "${GOGS_API}/api/v1/repos/${FLUX_USER}/user-apps"; then
-  REPO_EXISTED=1
+REPO_EMPTY=1
+REPO_JSON="$(curl -fsS -H "Authorization: Basic $B64" "${GOGS_API}/api/v1/repos/${FLUX_USER}/user-apps" 2>/dev/null || true)"
+if [ -n "$REPO_JSON" ]; then
   echo "Repo ${FLUX_USER}/user-apps already exists."
+  # "empty":true when the repo has no commits; anything else means it has history.
+  if [ "$(printf '%s' "$REPO_JSON" | jq -r '.empty')" = "false" ]; then
+    REPO_EMPTY=0
+  fi
 else
   echo "Repo not found; creating..."
-  curl -fsS -o /dev/null -H "Authorization: token ${TOK}" -H "Content-Type: application/json" \
+  curl -fsS -o /dev/null -H "Authorization: Basic $B64" -H "Content-Type: application/json" \
     -X POST --data '{"name":"user-apps","private":true,"auto_init":false}' \
-    "${GOGS_API}/api/v1/user/repos"
+    "${GOGS_API}/api/v1/admin/users/${FLUX_USER}/repos"
   echo "Repo created."
 fi
 
@@ -118,26 +123,29 @@ echo "Generating ed25519 keypair..."
 ssh-keygen -t ed25519 -N "" -C "$KEY_TITLE" -f /tmp/id >/dev/null
 PUB="$(cat /tmp/id.pub)"
 
-# Register the pubkey to the flux user. If a key with this title already exists
-# with a DIFFERENT pubkey (e.g. rotation after the Secret was deleted), delete it
-# first so the new private key in the Secret matches what Gogs has. Key DELETE is
-# supported (DELETE /api/v1/user/keys/<id>); token DELETE is not, which is why we
-# reuse the token by name above instead of recreating it.
-echo "Checking for existing key titled '${KEY_TITLE}'..."
-KEYS="$(curl -fsS -H "Authorization: token ${TOK}" "${GOGS_API}/api/v1/user/keys" || true)"
-EXIST_ID="$(printf '%s' "$KEYS" | jq -r ".[] | select(.title==\"${KEY_TITLE}\") | .id" | head -n1)"
-EXIST_PUB="$(printf '%s' "$KEYS" | jq -r ".[] | select(.title==\"${KEY_TITLE}\") | .key" | head -n1)"
-if [ -n "$EXIST_ID" ] && [ "$EXIST_PUB" = "$PUB" ]; then
-  echo "Key '${KEY_TITLE}' already registered with this pubkey; nothing to register."
-else
-  if [ -n "$EXIST_ID" ]; then
-    echo "Replacing stale key '${KEY_TITLE}' (id=${EXIST_ID})..."
-    curl -fsS -o /dev/null -X DELETE -H "Authorization: token ${TOK}" "${GOGS_API}/api/v1/user/keys/${EXIST_ID}"
-  fi
-  echo "Registering pubkey with Gogs as '${KEY_TITLE}'..."
-  curl -fsS -o /dev/null -X POST -H "Authorization: token ${TOK}" -H "Content-Type: application/json" \
-    --data "{\"title\":\"${KEY_TITLE}\",\"key\":\"${PUB}\"}" "${GOGS_API}/api/v1/user/keys"
+# Register the freshly generated pubkey to the flux user via the admin endpoint
+# (Basic auth). We reach this block only when Secret/user-apps-ssh-key does NOT
+# exist (early-exit above), i.e. a fresh install or a deliberate key rotation
+# (operator deleted the Secret) — so a brand-new keypair is always registered.
+#
+# Note on rotation/idempotency: on this gogs build we cannot list keys by title
+# via Basic auth (the key-list endpoint returns nothing usable) and the admin
+# key-add endpoint has no DELETE-by-title, so we do NOT pre-delete a stale key.
+# Adding a genuinely NEW pubkey always succeeds; only re-adding the exact same
+# pubkey errors ("Key content has been used"). If a rotation ever hits a stale key
+# left in Gogs, the operator removes it from the flux user in the Gogs UI, then
+# re-runs — mirrors the "delete the Secret to rotate" convention already in place.
+echo "Registering pubkey with Gogs as '${KEY_TITLE}'..."
+REG_OUT="$(curl -sS -w '\n%{http_code}' -X POST -H "Authorization: Basic $B64" -H "Content-Type: application/json" \
+  --data "{\"title\":\"${KEY_TITLE}\",\"key\":\"${PUB}\"}" "${GOGS_API}/api/v1/admin/users/${FLUX_USER}/keys")"
+REG_CODE="$(printf '%s' "$REG_OUT" | tail -n1)"
+if [ "$REG_CODE" = "201" ]; then
   echo "Registered."
+else
+  echo "ERROR: key registration failed (HTTP ${REG_CODE}):" >&2
+  printf '%s\n' "$REG_OUT" | sed '$d' >&2
+  echo "If a stale '${KEY_TITLE}' key exists on the flux user, remove it in Gogs and re-run." >&2
+  exit 1
 fi
 
 # Discover Gogs's SSH host key.
@@ -150,20 +158,10 @@ fi
 
 # Seed the initial commit so Flux's user-apps Kustomization (path ./, branch
 # master, prune+wait) has a valid empty target from day one. Only when the repo
-# is truly empty (no branches) — never rewrite existing history on an adopted
-# cluster. Authenticates with the key registered above, so a short retry absorbs
-# Gogs' key-propagation lag.
-NEEDS_SEED=0
-if [ "$REPO_EXISTED" = "0" ]; then
-  NEEDS_SEED=1
-else
-  BRANCHES="$(curl -fsS -H "Authorization: token ${TOK}" "${GOGS_API}/api/v1/repos/${FLUX_USER}/user-apps/branches" || echo '[]')"
-  if [ "$(printf '%s' "$BRANCHES" | jq 'length')" = "0" ]; then
-    NEEDS_SEED=1
-  fi
-fi
-
-if [ "$NEEDS_SEED" = "1" ]; then
+# is truly empty (REPO_EMPTY from the "empty" field above) — never rewrite
+# existing history on an adopted cluster. Authenticates with the key registered
+# above, so a short retry absorbs Gogs' key-propagation lag.
+if [ "$REPO_EMPTY" = "1" ]; then
   echo "Seeding initial commit on master..."
   export GIT_SSH_COMMAND="ssh -i /tmp/id -o UserKnownHostsFile=/tmp/known_hosts -o IdentitiesOnly=yes"
   SEED_DIR=/tmp/user-apps-seed
