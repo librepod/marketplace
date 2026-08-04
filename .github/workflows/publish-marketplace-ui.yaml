@@ -30,6 +30,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Get app version
+        id: version
+        run: |
+          VERSION=$(grep 'version:' apps/marketplace-ui/metadata.yaml \
+            | head -1 | sed 's/.*version: *//' | tr -d '"')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Build and push Docker image
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -40,6 +47,7 @@ jobs:
           else
             docker buildx build --push \
               -t ghcr.io/librepod/marketplace-ui:latest \
+              -t ghcr.io/librepod/marketplace-ui:${{ steps.version.outputs.version }} \
               -t ghcr.io/librepod/marketplace-ui:${{ github.sha }} \
               ./ui
           fi
