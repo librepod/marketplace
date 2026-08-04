@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
+import { apiFetch } from "@/lib/api"
 import type { MarketplaceConfig } from "@librepod/shared"
 
 /**
@@ -10,7 +11,7 @@ export function useConfig() {
   return useQuery<MarketplaceConfig>({
     queryKey: ["config"],
     queryFn: async () => {
-      const res = await fetch("/api/config")
+      const res = await apiFetch("/api/config")
       if (!res.ok) throw new Error("Failed to fetch config")
       return res.json()
     },

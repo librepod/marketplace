@@ -84,7 +84,11 @@ describe('MyAppsPage (INST-03)', () => {
     } as Response)
     render(<MyAppsPage />, { wrapper: createWrapper() })
     await waitFor(() => {
-      expect(fetchSpy).toHaveBeenCalledWith('/api/installed')
+      // apiFetch wraps fetch and always sends credentials: 'include' so the
+      // session cookie travels with every request.
+      expect(fetchSpy).toHaveBeenCalledWith('/api/installed', {
+        credentials: 'include',
+      })
     })
   })
 
