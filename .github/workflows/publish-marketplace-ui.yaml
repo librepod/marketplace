@@ -54,17 +54,33 @@ jobs:
           COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
         run: |
+          retry() {
+            # Retry through transient GHCR secondary rate-limits (HTTP 403)
+            # during cosign signature blob uploads.
+            local max=5 delay=15 i=0
+            until "$@"; do
+              i=$((i + 1))
+              if [ "$i" -ge "$max" ]; then
+                echo "::error::Failed after $i attempts: $*" >&2
+                return 1
+              fi
+              echo "Attempt $i failed; retrying in ${delay}s..." >&2
+              sleep "$delay"
+              delay=$((delay + 15))
+            done
+          }
+
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             TAG="pr-${{ github.event.pull_request.number }}"
             DIGEST=$(docker buildx imagetools inspect \
               ghcr.io/librepod/marketplace-ui:${TAG} \
               --format '{{.Manifest.Digest}}')
-            cosign sign --yes "ghcr.io/librepod/marketplace-ui@${DIGEST}"
+            retry cosign sign --yes "ghcr.io/librepod/marketplace-ui@${DIGEST}"
           else
             DIGEST=$(docker buildx imagetools inspect \
               ghcr.io/librepod/marketplace-ui:latest \
               --format '{{.Manifest.Digest}}')
-            cosign sign --key env://COSIGN_PRIVATE_KEY --yes \
+            retry cosign sign --key env://COSIGN_PRIVATE_KEY --yes \
               "ghcr.io/librepod/marketplace-ui@${DIGEST}"
           fi
 
@@ -102,6 +118,22 @@ jobs:
           COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
         run: |
+          retry() {
+            # Retry through transient GHCR secondary rate-limits (HTTP 403)
+            # during cosign signature blob uploads.
+            local max=5 delay=15 i=0
+            until "$@"; do
+              i=$((i + 1))
+              if [ "$i" -ge "$max" ]; then
+                echo "::error::Failed after $i attempts: $*" >&2
+                return 1
+              fi
+              echo "Attempt $i failed; retrying in ${delay}s..." >&2
+              sleep "$delay"
+              delay=$((delay + 15))
+            done
+          }
+
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             TAG="pr-${{ github.event.pull_request.number }}"
             echo "Pushing PR artifact..."
@@ -114,7 +146,7 @@ jobs:
               --output json | jq -r '.repository + "@" + .digest')
 
             echo "Signing PR artifact (keyless): $DIGEST"
-            cosign sign --yes "$DIGEST"
+            retry cosign sign --yes "$DIGEST"
           else
             echo "Pushing versioned artifact..."
             DIGEST_V=$(flux push artifact \
@@ -126,7 +158,7 @@ jobs:
               --output json | jq -r '.repository + "@" + .digest')
 
             echo "Signing versioned artifact: $DIGEST_V"
-            cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST_V"
+            retry cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST_V"
 
             echo "Pushing latest artifact..."
             DIGEST_L=$(flux push artifact \
@@ -138,7 +170,7 @@ jobs:
               --output json | jq -r '.repository + "@" + .digest')
 
             echo "Signing latest artifact: $DIGEST_L"
-            cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST_L"
+            retry cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST_L"
           fi
 
   comment:

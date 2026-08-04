@@ -54,6 +54,22 @@ jobs:
           COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
         run: |
+          retry() {
+            # Retry through transient GHCR secondary rate-limits (HTTP 403)
+            # during cosign signature blob uploads.
+            local max=5 delay=15 i=0
+            until "$@"; do
+              i=$((i + 1))
+              if [ "$i" -ge "$max" ]; then
+                echo "::error::Failed after $i attempts: $*" >&2
+                return 1
+              fi
+              echo "Attempt $i failed; retrying in ${delay}s..." >&2
+              sleep "$delay"
+              delay=$((delay + 15))
+            done
+          }
+
           DATE=$(date -u +%Y%m%d)
 
           echo "Pushing dated artifact and capture its digest..."
@@ -65,7 +81,7 @@ jobs:
             --output json | jq -r '.repository + "@" + .digest')
 
           echo "Signing dated artifact by digest: $DIGEST_D"
-          cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST_D"
+          retry cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST_D"
 
           echo "Pushing latest artifact and capture its digest..."
           DIGEST_L=$(flux push artifact \
@@ -76,4 +92,4 @@ jobs:
             --output json | jq -r '.repository + "@" + .digest')
 
           echo "Signing latest artifact by digest: $DIGEST_L"
-          cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST_L"
+          retry cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST_L"
