@@ -2,6 +2,13 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: gogs
+  annotations:
+    # The bootstrap-admin initContainer script uses shell ${VAR} expansion
+    # (e.g. ${GOGS_USER}). Flux's postBuild.substitute (BASE_DOMAIN on the gogs
+    # Kustomization) would otherwise blank any ${VAR} it doesn't recognize.
+    # BASE_DOMAIN is consumed in app.ini + the IngressRoute, not this Deployment,
+    # so disabling substitution here is safe. See docs/FLUX_WORKFLOW.md.
+    kustomize.toolkit.fluxcd.io/substitute: disabled
 spec:
   template:
     spec:
