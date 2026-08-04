@@ -4,5 +4,26 @@ kind: Kustomization
 resources:
 - ../../base
 - ingressroute.yaml
+- ssoclient.yaml
+- secret-session.yaml
 
 namespace: marketplace-ui
+
+# Reflected copy of the cluster's step-CA root certificate. The Reflector
+# controller (emberstack) watches this empty stub and populates root_ca.crt
+# from ConfigMap/step-certificates-certs in the step-ca namespace. The pod
+# merges the root CA into its trust bundle (deployment-auth-patch.yaml) so the
+# server-side OIDC exchange to id.<domain> passes TLS verification. Same
+# pattern as vaultwarden / open-webui / seafile.
+#
+# disableNameSuffixHash is REQUIRED: the name MUST stay exactly
+# step-certificates-certs (see docs/sso-app-author-guide.md §4).
+configMapGenerator:
+  - name: step-certificates-certs
+    options:
+      disableNameSuffixHash: true
+      annotations:
+        reflector.v1.k8s.emberstack.com/reflects: "step-ca/step-certificates-certs"
+
+patches:
+  - path: deployment-auth-patch.yaml

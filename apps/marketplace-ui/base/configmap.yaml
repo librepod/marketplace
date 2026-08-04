@@ -7,3 +7,6 @@ data:
   CATALOG_PATH: "/data/catalog.yaml"
   GOGS_URL: "http://gogs.gogs.svc.cluster.local:80"
   ALLOWED_ORIGINS: "https://marketplace.${BASE_DOMAIN:=libre.pod}"
+  CASDOOR_ENDPOINT: "https://id.${BASE_DOMAIN:=libre.pod}"
+  CASDOOR_ORG_NAME: "librepod"
+  CASDOOR_APP_NAME: "marketplace-ui"
