@@ -1,0 +1,30 @@
+# Declares the marketplace-ui OIDC client. The casdoor-sso-controller
+# reconciles this into a Casdoor Application (owner/name = admin/marketplace-ui)
+# and writes clientId / clientSecret / issuer into Secret/marketplace-ui-sso in
+# THIS namespace. The Deployment reads CASDOOR_CLIENT_ID / _SECRET from it
+# (deployment-auth-patch.yaml). ${BASE_DOMAIN} is expanded by Flux
+# postBuild.substitute, so the on-cluster CR carries a concrete redirect URI.
+# Two redirect URIs: the app is served at both the bare apex and the
+# marketplace. subdomain; the backend computes redirect_uri dynamically from
+# the request Host (AuthController.hostOf).
+apiVersion: marketplace.librepod.org/v1alpha1
+kind: SSOClient
+metadata:
+  name: marketplace-ui-sso
+  namespace: marketplace-ui
+spec:
+  clientId: marketplace-ui              # Casdoor app name (id=admin/marketplace-ui) AND OIDC client_id
+  organization: librepod                # platform org (created at bootstrap); login users must live here
+  redirectUris:
+    - "https://${BASE_DOMAIN}/api/auth/callback"
+    - "https://marketplace.${BASE_DOMAIN}/api/auth/callback"
+  grantTypes: [authorization_code]      # login only — the stateless session cookie has its own TTL, no refresh needed
+  tokenFormat: JWT-Standard             # plain JWT embeds the whole user object; JWT-Standard avoids the leak
+  expireInHours: 168                    # 7 days (Casdoor token lifetime; touched once at login)
+  output:
+    secretName: marketplace-ui-sso
+    keys:
+      clientId: CASDOOR_CLIENT_ID       # deployment-auth-patch reads these via secretKeyRef
+      clientSecret: CASDOOR_CLIENT_SECRET
+      issuer: CASDOOR_ISSUER            # written for parity; not read at runtime (issuer is host-derived)
+  casdoorPolicy: retain                 # keep the Casdoor app if this CR is deleted

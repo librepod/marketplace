@@ -1,5 +1,6 @@
 import { useParams, Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
+import { apiFetch } from "@/lib/api"
 import type { CatalogApp } from "@librepod/shared"
 import { AppIcon } from "@/components/AppIcon"
 import { Badge } from "@/components/ui/badge"
@@ -89,7 +90,7 @@ export function AppDetailPage() {
   const { isPending, isError, error, data, refetch } = useQuery<CatalogApp>({
     queryKey: ["apps", name],
     queryFn: async () => {
-      const res = await fetch(`/api/apps/${name}`)
+      const res = await apiFetch(`/api/apps/${name}`)
       if (res.status === 404) throw new Error("NOT_FOUND")
       if (!res.ok) throw new Error("Failed to fetch app")
       return res.json()

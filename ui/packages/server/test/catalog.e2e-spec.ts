@@ -3,7 +3,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import * as path from 'node:path';
+import cookieParser from 'cookie-parser';
 import { AppModule } from '../src/app.module';
+import { SessionService } from '../src/auth/session.service';
 
 // Point to test fixture instead of real catalog.yaml
 process.env.CATALOG_PATH = path.resolve(
@@ -13,9 +15,17 @@ process.env.CATALOG_PATH = path.resolve(
 // GogsService will call Gogs API — return [] gracefully when unreachable in test env
 process.env.GOGS_URL = 'http://localhost:9999'; // non-existent port → fetch throws → GogsService returns []
 process.env.GOGS_TOKEN = 'test-token';
+// Auth (global AuthGuard gates /api/* — mint a session cookie in beforeAll)
+process.env.SESSION_SECRET = 'e2e-secret-long-and-random';
+process.env.CASDOOR_ENDPOINT = 'https://id.example.com';
+process.env.CASDOOR_CLIENT_ID = 'marketplace-ui';
+process.env.CASDOOR_CLIENT_SECRET = 'secret';
+process.env.CASDOOR_ORG_NAME = 'librepod';
+process.env.CASDOOR_APP_NAME = 'marketplace-ui';
 
 describe('Catalog API (e2e)', () => {
   let app: INestApplication;
+  let authCookie: string;
 
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -24,7 +34,11 @@ describe('Catalog API (e2e)', () => {
 
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix('api');
+    app.use(cookieParser());
     await app.init();
+
+    const session = app.get(SessionService);
+    authCookie = `${session.cookieName}=${session.sign({ sub: 'sub-1', name: 'tester', email: 't@librepod' })}`;
   });
 
   afterAll(async () => {
@@ -35,6 +49,7 @@ describe('Catalog API (e2e)', () => {
     it('returns 200 with an array of apps', async () => {
       const response = await request(app.getHttpServer())
         .get('/api/apps')
+        .set('Cookie', authCookie)
         .expect(200);
 
       expect(Array.isArray(response.body)).toBe(true);
@@ -43,6 +58,7 @@ describe('Catalog API (e2e)', () => {
     it('does not include Infrastructure apps', async () => {
       const response = await request(app.getHttpServer())
         .get('/api/apps')
+        .set('Cookie', authCookie)
         .expect(200);
 
       response.body.forEach((app: { category: string }) => {
@@ -53,6 +69,7 @@ describe('Catalog API (e2e)', () => {
     it('returns exactly 3 user-facing apps from fixture', async () => {
       const response = await request(app.getHttpServer())
         .get('/api/apps')
+        .set('Cookie', authCookie)
         .expect(200);
 
       // fixture has 6 apps, 3 infrastructure, so 3 user-facing
@@ -62,6 +79,7 @@ describe('Catalog API (e2e)', () => {
     it('each app has required fields', async () => {
       const response = await request(app.getHttpServer())
         .get('/api/apps')
+        .set('Cookie', authCookie)
         .expect(200);
 
       response.body.forEach((app: Record<string, unknown>) => {
@@ -81,6 +99,7 @@ describe('Catalog API (e2e)', () => {
     it('returns 200 with app data for known app', async () => {
       const response = await request(app.getHttpServer())
         .get('/api/apps/vaultwarden')
+        .set('Cookie', authCookie)
         .expect(200);
 
       expect(response.body.name).toBe('vaultwarden');
@@ -90,18 +109,21 @@ describe('Catalog API (e2e)', () => {
     it('returns 404 for unknown app name', async () => {
       await request(app.getHttpServer())
         .get('/api/apps/nonexistent-app')
+        .set('Cookie', authCookie)
         .expect(404);
     });
 
     it('returns 404 for infrastructure app name (filtered out)', async () => {
       await request(app.getHttpServer())
         .get('/api/apps/traefik')
+        .set('Cookie', authCookie)
         .expect(404);
     });
   });
 
   describe('GET /api/health', () => {
     it('returns 200', async () => {
+      // No session cookie: probes must stay public behind the global AuthGuard.
       await request(app.getHttpServer())
         .get('/api/health')
         .expect(200);
@@ -112,6 +134,7 @@ describe('Catalog API (e2e)', () => {
     it('each app has installedStatus field (BACK-02, STAT-01)', async () => {
       const response = await request(app.getHttpServer())
         .get('/api/apps')
+        .set('Cookie', authCookie)
         .expect(200);
 
       response.body.forEach((app: Record<string, unknown>) => {
@@ -123,6 +146,7 @@ describe('Catalog API (e2e)', () => {
       const validStatuses = ['not_installed', 'installing', 'running', 'error'];
       const response = await request(app.getHttpServer())
         .get('/api/apps')
+        .set('Cookie', authCookie)
         .expect(200);
 
       response.body.forEach((app: Record<string, unknown>) => {
@@ -133,6 +157,7 @@ describe('Catalog API (e2e)', () => {
     it('all apps are not_installed when Gogs is unreachable (graceful degradation, BACK-02)', async () => {
       const response = await request(app.getHttpServer())
         .get('/api/apps')
+        .set('Cookie', authCookie)
         .expect(200);
 
       // GOGS_URL points to non-existent port → GogsService returns [] → all not_installed
@@ -146,6 +171,7 @@ describe('Catalog API (e2e)', () => {
     it('returns 200 with an array (INST-03)', async () => {
       const response = await request(app.getHttpServer())
         .get('/api/installed')
+        .set('Cookie', authCookie)
         .expect(200);
 
       expect(Array.isArray(response.body)).toBe(true);
@@ -155,6 +181,7 @@ describe('Catalog API (e2e)', () => {
       // GOGS_URL points to non-existent port → GogsService returns [] → getInstalled returns []
       const response = await request(app.getHttpServer())
         .get('/api/installed')
+        .set('Cookie', authCookie)
         .expect(200);
 
       expect(response.body).toEqual([]);
@@ -164,6 +191,7 @@ describe('Catalog API (e2e)', () => {
       // With Gogs unreachable, no items — test this invariant by directly checking if any items appear
       const response = await request(app.getHttpServer())
         .get('/api/installed')
+        .set('Cookie', authCookie)
         .expect(200);
 
       response.body.forEach((app: Record<string, unknown>) => {

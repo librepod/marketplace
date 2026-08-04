@@ -1,0 +1,67 @@
+# Strategic-merge patch: (1) add the Casdoor + session env to the
+# marketplace-ui container, and (2) give the pod trust for the private LibrePod
+# root CA so the server-side OIDC exchange to https://id.<BASE_DOMAIN> passes
+# TLS verification (Node needs NODE_EXTRA_CA_CERTS; SSL_CERT_FILE is set for
+# parity per docs/sso-app-author-guide.md §4).
+#
+# Same Reflector + init-container pattern as vaultwarden / headscale / seafile.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: marketplace-ui
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: merge-ca-bundle
+          image: alpine:3.19
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              cat /etc/ssl/certs/ca-certificates.crt > /mnt/merged-ca/ca-certificates.crt
+              echo "" >> /mnt/merged-ca/ca-certificates.crt
+              echo "# LibrePod Root CA" >> /mnt/merged-ca/ca-certificates.crt
+              cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+          volumeMounts:
+            - name: root-ca-cert
+              mountPath: /mnt/root-ca
+              readOnly: true
+            - name: merged-ca-bundle
+              mountPath: /mnt/merged-ca
+      containers:
+        - name: marketplace-ui
+          volumeMounts:
+            - name: merged-ca-bundle
+              mountPath: /etc/ssl/certs/ca-certificates.crt
+              subPath: ca-certificates.crt
+              readOnly: true
+          env:
+            - name: CASDOOR_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: marketplace-ui-sso
+                  key: CASDOOR_CLIENT_ID
+            - name: CASDOOR_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: marketplace-ui-sso
+                  key: CASDOOR_CLIENT_SECRET
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: marketplace-ui-session
+                  key: session-secret
+            - name: NODE_EXTRA_CA_CERTS
+              value: /etc/ssl/certs/ca-certificates.crt
+            - name: SSL_CERT_FILE
+              value: /etc/ssl/certs/ca-certificates.crt
+      volumes:
+        - name: root-ca-cert
+          configMap:
+            name: step-certificates-certs
+            items:
+              - key: root_ca.crt
+                path: root_ca.crt
+        - name: merged-ca-bundle
+          emptyDir: {}

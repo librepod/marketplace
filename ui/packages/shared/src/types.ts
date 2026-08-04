@@ -65,3 +65,13 @@ export interface CatalogFile {
 export interface MarketplaceConfig {
   baseDomain: string;
 }
+
+/**
+ * Authenticated user identity. Populated by GET /api/me from the Casdoor
+ * session. Server-side this is the public subset of SessionClaims (no iat/exp).
+ */
+export interface User {
+  sub: string;
+  name: string;
+  email: string;
+}

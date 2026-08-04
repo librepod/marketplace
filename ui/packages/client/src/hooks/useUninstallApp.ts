@@ -1,11 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { apiFetch } from '@/lib/api'
 import { toast } from 'sonner'
 
 export function useUninstallApp(appName: string, displayName: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/apps/${appName}/uninstall`, { method: 'POST' })
+      const res = await apiFetch(`/api/apps/${appName}/uninstall`, { method: 'POST' })
       if (!res.ok) {
         const body = await res.json().catch(() => ({ message: 'Something went wrong. Try again.' }))
         throw new Error(body.message || 'Something went wrong. Try again.')

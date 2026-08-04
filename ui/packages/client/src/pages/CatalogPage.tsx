@@ -1,5 +1,6 @@
 import React from "react"
 import { useQuery } from "@tanstack/react-query"
+import { apiFetch } from "@/lib/api"
 import type { CatalogApp } from "@librepod/shared"
 import { AppCard } from "@/components/AppCard"
 import { AppCardSkeleton } from "@/components/AppCardSkeleton"
@@ -19,7 +20,7 @@ export function CatalogPage() {
   const { isPending, isError, data, refetch } = useQuery<CatalogApp[]>({
     queryKey: ["apps"],
     queryFn: async () => {
-      const res = await fetch("/api/apps")
+      const res = await apiFetch("/api/apps")
       if (!res.ok) throw new Error("Failed to fetch apps")
       const json = await res.json()
       return json.apps ?? json

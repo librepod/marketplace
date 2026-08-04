@@ -1,6 +1,7 @@
 import React from "react"
 import { Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
+import { apiFetch } from "@/lib/api"
 import type { CatalogApp } from "@librepod/shared"
 import { AppCard } from "@/components/AppCard"
 import { AppCardSkeleton } from "@/components/AppCardSkeleton"
@@ -16,7 +17,7 @@ export function MyAppsPage() {
   const { isPending, isError, data, refetch } = useQuery<CatalogApp[]>({
     queryKey: ["installed"],
     queryFn: async () => {
-      const res = await fetch("/api/installed")
+      const res = await apiFetch("/api/installed")
       if (!res.ok) throw new Error("Failed to fetch installed apps")
       return res.json()
     },

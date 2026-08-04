@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom"
 import { Separator } from "@/components/ui/separator"
 import { Toaster } from "@/components/ui/sonner"
+import { UserMenu } from "@/components/UserMenu"
 import { cn } from "@/lib/utils"
 
 // Top-nav link styling. The active item carries a foreground underline so the
@@ -24,14 +25,17 @@ export function AppShell() {
           <p className="mt-1 text-sm text-muted-foreground">
             Self-hosted apps, one click away
           </p>
-          <nav className="mt-5 flex items-center gap-6" aria-label="Main navigation">
-            <NavLink to="/" end className={navLinkClassName}>
-              Catalog
-            </NavLink>
-            <NavLink to="/my-apps" className={navLinkClassName}>
-              My Apps
-            </NavLink>
-          </nav>
+          <div className="mt-5 flex items-center gap-6">
+            <nav className="flex items-center gap-6" aria-label="Main navigation">
+              <NavLink to="/" end className={navLinkClassName}>
+                Catalog
+              </NavLink>
+              <NavLink to="/my-apps" className={navLinkClassName}>
+                My Apps
+              </NavLink>
+            </nav>
+            <UserMenu />
+          </div>
         </header>
         <Separator className="mb-6" />
         <main className="pb-12">
