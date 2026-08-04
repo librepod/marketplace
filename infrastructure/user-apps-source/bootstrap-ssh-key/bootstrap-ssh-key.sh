@@ -57,8 +57,9 @@ fi
 B64="$(printf '%s:%s' "$FLUX_USER" "$FLUX_PASS" | base64 | tr -d '\n')"
 
 # Wait until Gogs accepts flux basic auth on /api/v1/users/<flux>/tokens — proves
-# gogs is up AND the flux user (restored from gogs-init.zip) exists with the
-# expected password. (We cannot use /api/v1/user/keys here: it 401s on basic auth.)
+# gogs is up AND the flux user (created by the gogs bootstrap-admin initContainer)
+# exists with the expected password. (We cannot use /api/v1/user/keys here: it
+# 401s on basic auth.)
 echo "Waiting for Gogs API to accept flux credentials..."
 READY=0
 for i in $(seq 1 60); do
