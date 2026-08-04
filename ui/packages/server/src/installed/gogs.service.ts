@@ -11,9 +11,15 @@ export class GogsService implements OnModuleInit {
   constructor(private readonly config: ConfigService) {}
 
   private get gogsUrl(): string {
+    // Trailing dot = absolute FQDN. Required: without it, on a host carrying a
+    // `libre.pod` search domain (every LibrePod device + dev box), the bare
+    // `*.svc.cluster.local` name is resolved with the search suffix appended first
+    // and the coredns-custom libre.pod rewrite sends it to Traefik, whose global
+    // HTTP->HTTPS redirect + untrusted default cert makes every Gogs call fail.
+    // The trailing dot skips the resolver search list. See marketplace-ui configmap.
     return this.config.get<string>(
       'GOGS_URL',
-      'http://gogs.gogs.svc.cluster.local:80',
+      'http://gogs.gogs.svc.cluster.local.:80',
     );
   }
 
