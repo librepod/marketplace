@@ -3,17 +3,12 @@ kind: Component
 
 namespace: gogs
 
-# Patches to add restore initContainer to Gogs deployment
+# Patches to add the admin-bootstrap initContainer to the Gogs deployment.
 patches:
   - path: deployment-patch.yaml
 
 generatorOptions:
   disableNameSuffixHash: true
-
-configMapGenerator:
-  - files:
-      - gogs-init.zip
-    name: gogs-init-backup
 
 secretGenerator:
   - name: user-apps-source-auth
