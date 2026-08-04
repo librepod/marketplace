@@ -1,0 +1,25 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gogs-bootstrap-ssh-key
+  namespace: gogs
+  labels:
+    app.kubernetes.io/name: user-apps-source
+    app.kubernetes.io/component: bootstrap-ssh-key
+rules:
+  # Read the flux password from Secret/user-apps-source-auth.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+    resourceNames: ["user-apps-source-auth"]
+  # Create Secret/user-apps-ssh-key. `create` cannot be resourceName-scoped
+  # (the object does not exist yet), so it is granted without a resourceName —
+  # same style as apps/headscale/components/bootstrap-api-key/role.yaml.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+  # Idempotent apply + annotate the created Secret.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "update", "patch"]
+    resourceNames: ["user-apps-ssh-key"]
