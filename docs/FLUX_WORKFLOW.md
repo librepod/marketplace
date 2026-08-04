@@ -56,6 +56,7 @@ controllers. Install it from the official OCI Helm chart:
 
 ```bash
 helm install flux-operator oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator \
+  --version 0.57.0 \
   --namespace flux-system \
   --set installCRDs=true \
   --create-namespace \
@@ -75,7 +76,7 @@ defaults (all four controllers, `cluster.local` domain, etc.):
 ```bash
 helm install flux-instance oci://ghcr.io/controlplaneio-fluxcd/charts/flux-instance \
   --namespace flux-system \
-  --version 0.45.1 \
+  --version 0.57.0 \
   --set instance.sync.interval=1m \
   --set instance.sync.kind=OCIRepository \
   --set instance.sync.name=librepod-bootstrap \

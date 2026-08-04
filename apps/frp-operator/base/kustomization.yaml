@@ -3,11 +3,13 @@ kind: Kustomization
 
 namespace: frp-operator
 
+labels:
+- includeSelectors: true
+  includeTemplates: true
+  pairs:
+    app.kubernetes.io/name: frp-operator
+
 resources:
 - namespace.yaml
-- helmrepository.yaml
-# helmrelease.yaml is intentionally excluded here because the librepod overlay
-# provides its own full HelmRelease using a fork OCI chart (see overlays/librepod/
-# kustomization.yaml for details). Once upstream PR #17 is merged, uncomment this
-# and the overlay will switch to a patch instead of a full override.
-# - helmrelease.yaml
+- ocirepository.yaml
+- helmrelease.yaml

@@ -8,5 +8,8 @@ pkgs.mkShell {
     pkgs.go
     pkgs.kustomize
     pkgs.kubernetes-helm
+    pkgs.kubectl
+    pkgs.curl
+    pkgs.jq
   ];
 }

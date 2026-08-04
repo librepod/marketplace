@@ -4,7 +4,8 @@
   "workspaces": [
     "packages/server",
     "packages/client",
-    "packages/shared"
+    "packages/shared",
+    "packages/e2e"
   ],
   "engines": {
     "node": ">=22.0.0"
@@ -17,7 +18,9 @@
     "test": "npm run test --workspace=packages/server",
     "test:client": "npm run test --workspace=packages/client -- --run",
     "test:client:watch": "npm run test --workspace=packages/client",
-    "test:e2e": "npm run test:e2e --workspace=packages/server"
+    "test:e2e": "npm run test:e2e --workspace=packages/server",
+    "test:e2e:ui": "npm run test:e2e:ui --workspace=packages/e2e",
+    "test:e2e:ui:cluster": "npm run test:e2e:ui:cluster --workspace=packages/e2e"
   },
   "dependencies": {
     "@nestjs/serve-static": "^5.0.5"

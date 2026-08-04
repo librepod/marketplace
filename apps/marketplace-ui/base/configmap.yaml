@@ -5,7 +5,15 @@ metadata:
 data:
   PORT: "3000"
   CATALOG_PATH: "/data/catalog.yaml"
-  GOGS_URL: "http://gogs.gogs.svc.cluster.local:80"
+  # Trailing dot = absolute FQDN. Do NOT remove it. On a host whose resolv.conf
+  # has a search domain ending in the app zone (e.g. `search ... libre.pod`, which
+  # every LibrePod device and the dev box carry), a bare `gogs.gogs.svc.cluster.local`
+  # is resolved with the search domain appended first -> `...svc.cluster.local.<host>.libre.pod`
+  # -> matched by the coredns-custom libre.pod rewrite -> rewritten to Traefik's ClusterIP.
+  # Traefik then 301-redirects HTTP->HTTPS and serves the untrusted default cert, so every
+  # Gogs API call (`fetch failed`) breaks and installs silently degrade to not_installed.
+  # The trailing dot makes the name absolute, skipping the search list entirely.
+  GOGS_URL: "http://gogs.gogs.svc.cluster.local.:80"
   ALLOWED_ORIGINS: "https://marketplace.${BASE_DOMAIN:=libre.pod}"
   CASDOOR_ENDPOINT: "https://id.${BASE_DOMAIN:=libre.pod}"
   CASDOOR_ORG_NAME: "librepod"

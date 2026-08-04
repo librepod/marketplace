@@ -1,0 +1,46 @@
+# k3d config for the Tier 2 e2e cluster. Distinct name so it never clobbers the dev cluster.
+# Usage (the orchestrator isolates KUBECONFIG so this never touches the user's context):
+#   k3d cluster create --config packages/e2e/support/k3d-e2e.config.yaml
+#
+# Lean copy of the repo-root k3d-config.yaml: no persistent-volume mapping (ephemeral
+# storage is fine — the bootstrap's nfs-client StorageClass is backed by k3s local-path
+# anyway), no ingress/host port mappings (we reach marketplace-ui via kubectl port-forward).
+#
+# PATH RESOLUTION (verified against k3d v5.9.0): `files.source` paths are resolved
+# relative to THIS config file's directory (ui/packages/e2e/support/), NOT the CWD.
+# So reaching <repo>/clusters/... requires 4 levels up from support/. Do NOT "simplify"
+# these back to `clusters/...` — that only works for the repo-root k3d-config.yaml.
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: librepod-k3d-e2e
+servers: 1
+image: rancher/k3s:v1.34.3-k3s1
+
+# No volumes: mapping — ephemeral storage is fine for an e2e cluster.
+
+files:
+  - source: ../../../../clusters/librepod-k3d/bootstrap/cosign-pub.yaml
+    destination: /var/lib/rancher/k3s/server/manifests/custom/cosign-pub.yaml
+    nodeFilters: ["server:*"]
+  - source: ../../../../clusters/librepod-k3d/bootstrap/nfs-client-storageclass.yaml
+    destination: /var/lib/rancher/k3s/server/manifests/custom/nfs-client-storageclass.yaml
+    nodeFilters: ["server:*"]
+  - source: ../../../../clusters/librepod-k3d/bootstrap/flux-operator.yaml
+    destination: /var/lib/rancher/k3s/server/manifests/custom/flux-operator.yaml
+    nodeFilters: ["server:*"]
+  - source: ../../../../clusters/librepod-k3d/bootstrap/flux-instance.yaml
+    destination: /var/lib/rancher/k3s/server/manifests/custom/flux-instance.yaml
+    nodeFilters: ["server:*"]
+
+options:
+  k3d:
+    wait: true
+    timeout: "120s"
+  k3s:
+    extraArgs:
+      - arg: --disable=traefik
+        nodeFilters: ["server:*"]
+  kubeconfig:
+    updateDefaultKubeconfig: true
+    switchCurrentContext: true

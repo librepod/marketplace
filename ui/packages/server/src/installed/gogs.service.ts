@@ -11,9 +11,15 @@ export class GogsService implements OnModuleInit {
   constructor(private readonly config: ConfigService) {}
 
   private get gogsUrl(): string {
+    // Trailing dot = absolute FQDN. Required: without it, on a host carrying a
+    // `libre.pod` search domain (every LibrePod device + dev box), the bare
+    // `*.svc.cluster.local` name is resolved with the search suffix appended first
+    // and the coredns-custom libre.pod rewrite sends it to Traefik, whose global
+    // HTTP->HTTPS redirect + untrusted default cert makes every Gogs call fail.
+    // The trailing dot skips the resolver search list. See marketplace-ui configmap.
     return this.config.get<string>(
       'GOGS_URL',
-      'http://gogs.gogs.svc.cluster.local:80',
+      'http://gogs.gogs.svc.cluster.local.:80',
     );
   }
 
@@ -64,9 +70,12 @@ export class GogsService implements OnModuleInit {
         headers: { Authorization: `token ${this.apiToken}` },
       });
       if (!res.ok) return [];
-      const text = await res.text();
-      const parsed = yaml.load(text) as { resources?: string[] } | null;
-      return (parsed?.resources ?? []).map((r: string) => r.replace(/\/$/, ''));
+      const parsed = yaml.load(await res.text()) as { resources?: string[] } | null;
+      // Root kustomization entries are paths like "apps/<name>" (and may carry a
+      // trailing slash); strip to the bare app name callers compare against.
+      return (parsed?.resources ?? [])
+        .map((r: string) => r.replace(/^apps\//, '').replace(/\/$/, ''))
+        .filter(Boolean);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(
