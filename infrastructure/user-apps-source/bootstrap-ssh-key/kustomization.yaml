@@ -7,7 +7,7 @@ resources:
   - serviceaccount.yaml
   - role.yaml
   - rolebinding.yaml
-  # job.yaml is added in Task 4.
+  - job.yaml
 
 generatorOptions:
   disableNameSuffixHash: true
