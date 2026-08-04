@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+namespace: marketplace-ui
+
+resources:
+  - serviceaccount.yaml
+  - role.yaml
+  - rolebinding.yaml
+  - job.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  # The bootstrap script. `substitute: disabled` is REQUIRED: the script uses
+  # shell parameter expansion (${VAR:-default}), which Flux's postBuild.substitute
+  # would otherwise mangle (it treats any ${VAR} as its own substitution and
+  # blanks it). The script reads its config from env at runtime. Same reason
+  # apps/headscale/components/bootstrap-api-key sets this on its script ConfigMap.
+  - name: cm-marketplace-ui-bootstrap-session-script
+    files:
+      - bootstrap-session.sh=job.sh
+    options:
+      annotations:
+        kustomize.toolkit.fluxcd.io/substitute: disabled

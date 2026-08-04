@@ -5,7 +5,12 @@ resources:
 - ../../base
 - ingressroute.yaml
 - ssoclient.yaml
-- secret-session.yaml
+
+components:
+# Generates Secret/marketplace-ui-session (a random HMAC session-cookie key) on
+# first install. The Secret is Job-owned, never committed, so Flux cannot
+# clobber it back to a placeholder — same model as headscale's bootstrap-api-key.
+- ../../components/bootstrap-session-secret
 
 namespace: marketplace-ui
 
