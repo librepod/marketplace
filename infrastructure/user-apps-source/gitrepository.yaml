@@ -5,8 +5,8 @@ metadata:
   namespace: flux-system
 spec:
   interval: 1m
-  url: http://gogs.gogs.svc.cluster.local:80/flux/user-apps.git
+  url: ssh://git@gogs.gogs.svc.cluster.local:22/flux/user-apps.git
   ref:
     branch: master
   secretRef:
-    name: user-apps-source-auth
+    name: user-apps-ssh-key

@@ -135,9 +135,6 @@ jobs:
             echo "Signing PR artifact (keyless): $DIGEST"
             cosign sign --yes "$DIGEST"
           else
-            # Note: flux push artifact ignores *.zip by default, but we need zip files
-            # for configMapGenerator to embed binary data (e.g., gogs-init.zip)
-
             echo "Pushing versioned artifact and capture its digest..."
             DIGEST_V=$(flux push artifact \
               oci://ghcr.io/${{ github.repository_owner }}/marketplace/apps/${{ matrix.app }}:${{ steps.version.outputs.version }} \

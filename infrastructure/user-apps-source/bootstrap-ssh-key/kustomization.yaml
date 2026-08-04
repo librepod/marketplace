@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: gogs
+
+resources:
+  - serviceaccount.yaml
+  - role.yaml
+  - rolebinding.yaml
+  - job.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  # The provisioning script. `substitute: disabled` is REQUIRED: the script uses
+  # shell parameter expansion (${VAR:-default}), which Flux's postBuild.substitute
+  # would otherwise mangle (it blanks any ${VAR}). The script reads its config
+  # from the Job's env at runtime. See memory: flux-substitute-gotcha.
+  - name: cm-gogs-bootstrap-ssh-key-script
+    files:
+      - bootstrap-ssh-key.sh
+    options:
+      annotations:
+        kustomize.toolkit.fluxcd.io/substitute: disabled

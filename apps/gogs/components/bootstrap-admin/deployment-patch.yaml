@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gogs
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: bootstrap-admin
+          image: gogs/gogs
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: GOGS_USER
+              valueFrom:
+                secretKeyRef:
+                  name: user-apps-source-auth
+                  key: username
+            - name: GOGS_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: user-apps-source-auth
+                  key: password
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+
+              MARKER_FILE="/data/.bootstrap-admin-complete"
+
+              # Idempotency: once we've bootstrapped (or adopted an existing
+              # install), never touch users again.
+              if [ -f "$MARKER_FILE" ]; then
+                echo "Admin bootstrap already completed (marker found), skipping."
+                exit 0
+              fi
+
+              # Create the flux admin directly against the DB (no auth exists on
+              # a fresh install; INSTALL_LOCK=true skips the wizard). On an
+              # already-provisioned cluster (old zip-restored, or a prior run
+              # whose marker was lost) create-user errors because the user
+              # exists — swallow it and rely on the marker for idempotency.
+              echo "Ensuring Gogs admin user '${GOGS_USER}'..."
+              cd /app/gogs
+              ./gogs admin create-user \
+                --name "$GOGS_USER" \
+                --password "$GOGS_PASS" \
+                --email "flux@libre.pod" \
+                --admin \
+                --config /data/gogs/conf/app.ini || \
+                echo "create-user returned non-zero (user likely already exists); continuing."
+
+              touch "$MARKER_FILE"
+              echo "Admin bootstrap complete."
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /data/gogs/conf/app.ini
+              subPath: app.ini

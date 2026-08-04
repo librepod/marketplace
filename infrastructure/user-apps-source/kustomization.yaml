@@ -4,3 +4,4 @@ kind: Kustomization
 resources:
   - gitrepository.yaml
   - user-apps.yaml
+  - bootstrap-ssh-key

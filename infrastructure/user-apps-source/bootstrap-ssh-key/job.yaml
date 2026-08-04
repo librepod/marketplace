@@ -1,0 +1,78 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gogs-bootstrap-ssh-key
+  namespace: gogs
+  labels:
+    # Deliberately NOT app.kubernetes.io/name: gogs. That label is the gogs
+    # Deployment's pod selector (apps/gogs/base/kustomization.yaml sets it via
+    # labels.includeSelectors: true). A Job pod carrying it would be "adopted" by
+    # that selector. The component label below carries no selector, so it is
+    # harmless and still identifies the pod's purpose. See memory: bootstrap-job-pattern.
+    app.kubernetes.io/name: user-apps-source
+    app.kubernetes.io/component: bootstrap-ssh-key
+spec:
+  backoffLimit: 3
+  parallelism: 1
+  completions: 1
+  # NOTE: deliberately NO ttlSecondsAfterFinished — a Completed Job persists so
+  # Flux does NOT recreate+re-run it on later reconciles.
+  #
+  # To ROTATE the key: delete this Job AND Secret/user-apps-ssh-key, then
+  # `flux reconcile kustomization user-apps-source --with-source`. The recreated
+  # Job generates a fresh keypair and REPLACES any stale `librepod-flux` key left
+  # in Gogs (it deletes the old key by title before registering the new one), so
+  # the new Secret's private key always matches what Gogs has. A stray re-run
+  # while the Secret exists is a harmless no-op (the script exits early).
+  template:
+    metadata:
+      name: gogs-bootstrap-ssh-key
+      labels:
+        # NO app.kubernetes.io/name: gogs here either — see the Job metadata comment.
+        app.kubernetes.io/component: bootstrap-ssh-key
+    spec:
+      restartPolicy: Never
+      serviceAccountName: gogs-bootstrap-ssh-key
+      containers:
+        - name: bootstrap-ssh-key
+          # alpine:3.19 is already pulled cluster-wide (CA-bundle init containers,
+          # headscale bootstrap Job). Root is required only for `apk add
+          # openssh-client`; this is a one-shot pod, not a long-running service.
+          image: alpine:3.19
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/scripts/bootstrap-ssh-key.sh"]
+          env:
+            - name: GOGS_NAMESPACE
+              value: gogs
+            - name: FLUX_USER
+              valueFrom:
+                secretKeyRef:
+                  name: user-apps-source-auth
+                  key: username
+            - name: FLUX_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: user-apps-source-auth
+                  key: password
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: script
+          configMap:
+            name: cm-gogs-bootstrap-ssh-key-script
+            items:
+              - key: bootstrap-ssh-key.sh
+                path: bootstrap-ssh-key.sh
+        - name: tmp
+          emptyDir: {}
