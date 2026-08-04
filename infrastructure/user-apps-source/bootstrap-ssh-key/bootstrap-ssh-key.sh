@@ -147,6 +147,66 @@ if [ ! -s /tmp/known_hosts ]; then
   exit 1
 fi
 
+# Seed the initial commit so Flux's user-apps Kustomization (path ./, branch
+# master, prune+wait) has a valid empty target from day one. Only when the repo
+# is truly empty (no branches) — never rewrite existing history on an adopted
+# cluster. Authenticates with the key registered above, so a short retry absorbs
+# Gogs' key-propagation lag.
+NEEDS_SEED=0
+if [ "$REPO_EXISTED" = "0" ]; then
+  NEEDS_SEED=1
+else
+  BRANCHES="$(curl -fsS -H "Authorization: token ${TOK}" "${GOGS_API}/api/v1/repos/${FLUX_USER}/user-apps/branches" || echo '[]')"
+  if [ "$(printf '%s' "$BRANCHES" | jq 'length')" = "0" ]; then
+    NEEDS_SEED=1
+  fi
+fi
+
+if [ "$NEEDS_SEED" = "1" ]; then
+  echo "Seeding initial commit on master..."
+  export GIT_SSH_COMMAND="ssh -i /tmp/id -o UserKnownHostsFile=/tmp/known_hosts -o IdentitiesOnly=yes"
+  SEED_DIR=/tmp/user-apps-seed
+  rm -rf "$SEED_DIR"
+  mkdir -p "$SEED_DIR"
+  cd "$SEED_DIR"
+  cat > kustomization.yaml <<'YAML'
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []
+YAML
+  cat > README.md <<'MD'
+# LibrePod user apps
+
+This repository holds user-installed apps for this LibrePod cluster. It is
+managed by the LibrePod marketplace UI — app installs append entries to
+`kustomization.yaml`. FluxCD reconciles this repo into the cluster.
+MD
+  git init -q
+  git config user.email "flux@libre.pod"
+  git config user.name "flux"
+  git checkout -q -b master
+  git add kustomization.yaml README.md
+  git commit -q -m "Initial commit"
+  REMOTE="ssh://git@gogs.${NS}.svc.cluster.local:22/${FLUX_USER}/user-apps.git"
+  PUSHED=0
+  for i in 1 2 3 4 5; do
+    if git push -q "$REMOTE" master; then
+      PUSHED=1
+      break
+    fi
+    echo "push attempt $i failed (key may not have propagated yet); retrying..."
+    sleep 5
+  done
+  if [ "$PUSHED" != "1" ]; then
+    echo "ERROR: could not push seed commit to ${REMOTE}" >&2
+    exit 1
+  fi
+  echo "Seed commit pushed."
+  cd /tmp
+else
+  echo "Repo already has history; skipping seed."
+fi
+
 # Create the Secret with Reflector annotations (mirror to flux-system +
 # marketplace-ui). Phase 1 only consumes the flux-system reflection.
 echo "Creating Secret/${SECRET_NAME}..."
