@@ -3,8 +3,8 @@ kind: Deployment
 metadata:
   name: gogs
   annotations:
-    # The bootstrap-admin initContainer script uses shell ${VAR} expansion
-    # (e.g. ${GOGS_USER}). Flux's postBuild.substitute (BASE_DOMAIN on the gogs
+    # The bootstrap-admin postStart hook uses shell ${VAR} expansion (e.g.
+    # ${GOGS_USER}). Flux's postBuild.substitute (BASE_DOMAIN on the gogs
     # Kustomization) would otherwise blank any ${VAR} it doesn't recognize.
     # BASE_DOMAIN is consumed in app.ini + the IngressRoute, not this Deployment,
     # so disabling substitution here is safe. See docs/FLUX_WORKFLOW.md.
@@ -12,20 +12,11 @@ metadata:
 spec:
   template:
     spec:
-      initContainers:
-        - name: bootstrap-admin
-          image: gogs/gogs
-          imagePullPolicy: IfNotPresent
-          securityContext:
-            runAsNonRoot: true
-            runAsUser: 1000
-            runAsGroup: 1000
-            allowPrivilegeEscalation: false
-            seccompProfile:
-              type: RuntimeDefault
-            capabilities:
-              drop:
-                - ALL
+      containers:
+        - name: gogs
+          # Inject the flux admin credentials so the postStart hook can create
+          # the user. These are NOT gogs config keys (gogs uses GOGS__<section>__
+          # <key>), so they don't affect gogs itself.
           env:
             - name: GOGS_USER
               valueFrom:
@@ -37,41 +28,78 @@ spec:
                 secretKeyRef:
                   name: user-apps-source-auth
                   key: password
-          command:
-            - /bin/sh
-            - -c
-            - |
-              set -e
+          lifecycle:
+            # Create the flux admin AFTER gogs has started. `gogs admin
+            # create-user` needs the DB schema, which gogs only initializes when
+            # the `web` server starts — running it in an initContainer (before
+            # the main container) fails on a fresh DB and leaves NO user. The
+            # postStart hook runs concurrently with the entrypoint, so it first
+            # waits until the web server answers (schema initialized), then
+            # creates the admin. Marker-guarded so it runs once and no-ops on an
+            # already-provisioned install.
+            postStart:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    # A postStart hook that exits non-zero KILLS the container
+                    # (crashloop), so this script must never hard-fail gogs. It
+                    # is best-effort: if it can't create the admin, gogs still
+                    # runs and the bootstrap Job's readiness-wait surfaces the
+                    # missing user. Hence no `set -e` and every path exits 0.
+                    MARKER_FILE="/data/.bootstrap-admin-complete"
 
-              MARKER_FILE="/data/.bootstrap-admin-complete"
+                    # Idempotency: once bootstrapped (or an existing install was
+                    # adopted), never touch users again.
+                    if [ -f "$MARKER_FILE" ]; then
+                      echo "Admin bootstrap already completed (marker found), skipping."
+                      exit 0
+                    fi
 
-              # Idempotency: once we've bootstrapped (or adopted an existing
-              # install), never touch users again.
-              if [ -f "$MARKER_FILE" ]; then
-                echo "Admin bootstrap already completed (marker found), skipping."
-                exit 0
-              fi
+                    # Wait until the gogs web server answers — the signal that the
+                    # DB schema has been initialized and create-user can succeed.
+                    # (INSTALL_LOCK=true skips the install wizard.) create-user in
+                    # an initContainer (before this server starts) fails on a
+                    # fresh DB and leaves NO user — that is why this runs here.
+                    echo "Waiting for gogs web server to initialize the DB..."
+                    i=0
+                    until wget -qO- http://localhost:3000/ >/dev/null 2>&1; do
+                      i=$((i + 1))
+                      if [ "$i" -ge 60 ]; then
+                        echo "WARN: gogs web not reachable after 120s; skipping admin bootstrap (Job will surface it)." >&2
+                        exit 0
+                      fi
+                      sleep 2
+                    done
 
-              # Create the flux admin directly against the DB (no auth exists on
-              # a fresh install; INSTALL_LOCK=true skips the wizard). On an
-              # already-provisioned cluster (old zip-restored, or a prior run
-              # whose marker was lost) create-user errors because the user
-              # exists — swallow it and rely on the marker for idempotency.
-              echo "Ensuring Gogs admin user '${GOGS_USER}'..."
-              cd /app/gogs
-              ./gogs admin create-user \
-                --name "$GOGS_USER" \
-                --password "$GOGS_PASS" \
-                --email "flux@libre.pod" \
-                --admin \
-                --config /data/gogs/conf/app.ini || \
-                echo "create-user returned non-zero (user likely already exists); continuing."
-
-              touch "$MARKER_FILE"
-              echo "Admin bootstrap complete."
-          volumeMounts:
-            - name: data
-              mountPath: /data
-            - name: config
-              mountPath: /data/gogs/conf/app.ini
-              subPath: app.ini
+                    # Create the flux admin. On an already-provisioned cluster
+                    # (old zip-restored, or a prior run whose marker was lost)
+                    # create-user errors because the user exists — swallow it. Set
+                    # the marker only on a genuine success so a transient failure
+                    # is retried on the next container start rather than being
+                    # permanently masked by the marker.
+                    echo "Ensuring Gogs admin user '${GOGS_USER}'..."
+                    cd /app/gogs
+                    if ./gogs admin create-user \
+                      --name "$GOGS_USER" \
+                      --password "$GOGS_PASS" \
+                      --email "flux@libre.pod" \
+                      --admin \
+                      --config /data/gogs/conf/app.ini; then
+                      touch "$MARKER_FILE"
+                      echo "Admin created; bootstrap complete."
+                    else
+                      # Non-zero here means either "user already exists" (adopted
+                      # install — safe, mark complete) or a real transient error.
+                      # Probe the API to tell them apart: if flux can authenticate,
+                      # the user exists and we mark complete; otherwise leave the
+                      # marker unset so the next start retries.
+                      if wget -qO- --header="Authorization: Basic $(printf '%s:%s' "$GOGS_USER" "$GOGS_PASS" | base64 | tr -d '\n')" \
+                          "http://localhost:3000/api/v1/users/${GOGS_USER}/tokens" >/dev/null 2>&1; then
+                        touch "$MARKER_FILE"
+                        echo "Admin already exists and authenticates; bootstrap complete."
+                      else
+                        echo "WARN: create-user failed and flux does not authenticate; leaving marker unset to retry next start." >&2
+                      fi
+                    fi
