@@ -17,8 +17,8 @@ spec:
       serviceAccountName: marketplace-ui
       containers:
         - name: marketplace-ui
-          image: ghcr.io/librepod/marketplace-ui:latest
-          imagePullPolicy: Always
+          image: ghcr.io/librepod/marketplace-ui:0.2.2
+          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 3000
