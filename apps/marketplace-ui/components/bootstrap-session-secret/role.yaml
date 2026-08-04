@@ -1,0 +1,20 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: marketplace-ui-bootstrap-session
+  labels:
+    app.kubernetes.io/name: marketplace-ui
+    app.kubernetes.io/component: bootstrap-session
+rules:
+  # Mint Secret/marketplace-ui-session. `resourceNames` cannot scope `create`
+  # (the object does not exist yet at create time), so create is granted without
+  # a resourceName and get/patch/update are locked to the named Secret — the same
+  # tight scoping style as apps/headscale/components/bootstrap-api-key/role.yaml
+  # and apps/tailscale/base/role.yaml.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "patch", "update"]
+    resourceNames: ["marketplace-ui-session"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]

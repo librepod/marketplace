@@ -1,0 +1,68 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: marketplace-ui-bootstrap-session
+  labels:
+    # Deliberately NOT app.kubernetes.io/name: marketplace-ui. That label is the
+    # marketplace-ui Deployment's pod selector (base/kustomization.yaml sets it
+    # via labels.includeSelectors: true). A Job pod carrying it gets "adopted"
+    # by that selector, so a future `kubectl exec deploy/marketplace-ui` could
+    # resolve nondeterministically to THIS Job's pod — which has no
+    # marketplace-ui container — and fail. The component label below carries no
+    # selector, so it is harmless and still identifies the pod's purpose.
+    # See memory: bootstrap-job-pattern.
+    app.kubernetes.io/component: bootstrap-session
+spec:
+  backoffLimit: 3
+  parallelism: 1
+  completions: 1
+  # NOTE: deliberately NO ttlSecondsAfterFinished. Letting the Completed Job
+  # persist means Flux does NOT recreate it on later reconciles — a TTL-GC'd Job
+  # would be rebuilt by Flux and re-run on every reconcile. To force key
+  # rotation, delete BOTH this Job and Secret/marketplace-ui-session, then
+  # `flux reconcile kustomization marketplace-ui --with-source`: Flux recreates
+  # the Job and it mints a fresh key. The script is idempotent, so a stray
+  # re-run is a harmless no-op (an existing real key is preserved).
+  template:
+    metadata:
+      name: marketplace-ui-bootstrap-session
+      labels:
+        # NO app.kubernetes.io/name: marketplace-ui here either — see the comment
+        # on the Job's metadata.labels above. The pod template MUST stay off the
+        # marketplace-ui Deployment selector; this is the label that collides.
+        app.kubernetes.io/component: bootstrap-session
+    spec:
+      restartPolicy: Never
+      serviceAccountName: marketplace-ui-bootstrap-session
+      containers:
+        - name: bootstrap-session
+          # alpine:3.19 (already pulled cluster-wide for the CA-bundle init
+          # container) + a runtime kubectl download — the repo's bootstrap
+          # convention (apps/headscale/components/bootstrap-api-key/job.sh,
+          # apps/step-certificates/.../job.sh). We avoid third-party kubectl
+          # images. busybox wget handles dl.k8s.io fine, and the script pins
+          # kubectl to the cluster's minor version at runtime.
+          image: alpine:3.19
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/scripts/bootstrap-session.sh"]
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: script
+          configMap:
+            name: cm-marketplace-ui-bootstrap-session-script
+            items:
+              - key: bootstrap-session.sh
+                path: bootstrap-session.sh
+        - name: tmp
+          emptyDir: {}
