@@ -15,11 +15,20 @@ spec:
   backoffLimit: 3
   parallelism: 1
   completions: 1
-  # NOTE: deliberately NO ttlSecondsAfterFinished. A Completed Job persists, so
-  # Flux does NOT recreate+re-run it on later reconciles. To re-provision (e.g.
-  # after rotating the key), delete BOTH this Job and Secret/user-apps-ssh-key,
-  # then `flux reconcile kustomization user-apps-source --with-source`. The
-  # script is idempotent, so a stray re-run is a harmless no-op.
+  # NOTE: deliberately NO ttlSecondsAfterFinished — a Completed Job persists so
+  # Flux does NOT recreate+re-run it on later reconciles.
+  #
+  # To ROTATE the key, all three must be removed first. The script registers the
+  # pubkey under the FIXED title `librepod-flux`; if a stale key with that title
+  # is left in Gogs, registration is skipped, the new Secret's private key won't
+  # match, and Flux fails with `permission denied (publickey)`:
+  #   1. Delete the `librepod-flux` SSH key from the `flux` Gogs user
+  #      (Gogs UI, or `DELETE /api/v1/user/keys/<id>`).
+  #   2. Delete this Job AND Secret/user-apps-ssh-key.
+  #   3. `flux reconcile kustomization user-apps-source --with-source`.
+  # TODO: automate step 1 (delete-by-title) in bootstrap-ssh-key.sh once plan
+  # Task 1 confirms the Gogs DELETE-endpoint shape. The script is idempotent on
+  # the Secret, so a stray re-run while the Secret exists is a harmless no-op.
   template:
     metadata:
       name: gogs-bootstrap-ssh-key

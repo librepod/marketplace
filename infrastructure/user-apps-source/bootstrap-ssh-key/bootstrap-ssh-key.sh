@@ -77,15 +77,17 @@ PUB="$(cat /tmp/id.pub)"
 # already exists, e.g. after this Job was deleted and recreated by Flux).
 echo "Checking for existing key titled ${KEY_TITLE}..."
 EXISTING="$(wget -q -O - --header="Authorization: Basic $B64" "${GOGS_API}/api/v1/user/keys" 2>/dev/null || true)"
-if echo "$EXISTING" | grep -q "\"title\":\"${KEY_TITLE}\""; then
+if echo "$EXISTING" | grep -Eq "\"title\"[[:space:]]*:[[:space:]]*\"${KEY_TITLE}\""; then
   echo "Key ${KEY_TITLE} already registered with Gogs; skipping registration."
 else
   echo "Registering pubkey with Gogs as ${KEY_TITLE}..."
-  wget -q -O /dev/null \
-    --header="Authorization: Basic $B64" \
-    --header="Content-Type: application/json" \
-    --post-data="{\"title\":\"${KEY_TITLE}\",\"key\":\"${PUB}\"}" \
-    "${GOGS_API}/api/v1/user/keys"
+  if ! wget --header="Authorization: Basic $B64" \
+            --header="Content-Type: application/json" \
+            --post-data="{\"title\":\"${KEY_TITLE}\",\"key\":\"${PUB}\"}" \
+            -O - "${GOGS_API}/api/v1/user/keys"; then
+    echo "ERROR: pubkey registration request to Gogs failed (response above)" >&2
+    exit 1
+  fi
 fi
 
 # Discover Gogs's SSH host key.
