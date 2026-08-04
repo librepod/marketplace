@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-08-04T17:52:50Z"
+  generatedAt: "2026-08-04T18:04:53Z"
 apps:
     - name: baikal
       version: "0.11.1-nginx"
@@ -490,11 +490,7 @@ apps:
               interval: 10m
               url: oci://ghcr.io/librepod/marketplace/apps/gogs
               ignore: |
-                # FluxCD source-controller excludes *.zip files by default when extracting OCI artifacts.
-                # We need gogs-init.zip for configMapGenerator to embed binary backup data.
-                # This override explicitly includes zip files along with the required directories.
                 /*
-                !/*.zip
                 !/base
                 !/components
                 !/overlays
