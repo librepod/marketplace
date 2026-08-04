@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-08-04T17:05:16Z"
+  generatedAt: "2026-08-04T17:40:05Z"
 apps:
     - name: baikal
       version: "0.11.1-nginx"
@@ -870,7 +870,7 @@ apps:
                 type: random
                 length: 40
     - name: marketplace-ui
-      version: "0.2.1"
+      version: "0.2.2"
       displayName: "Marketplace UI"
       description: "Web-based app marketplace for discovering, installing, and managing self-hosted apps on LibrePod clusters"
       category: "System"
