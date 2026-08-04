@@ -29,8 +29,9 @@ TOKEN_NAME="librepod-ssh-bootstrap"
 
 # openssh-client: ssh-keygen + ssh-keyscan. curl: Gogs API incl. DELETE (busybox
 # wget can't DELETE). jq: robust JSON parsing (Gogs pretty-prints with spaces).
-echo "Installing openssh-client curl jq..."
-apk add --no-cache openssh-client curl jq >/dev/null
+# git: seed the initial commit over SSH.
+echo "Installing openssh-client curl jq git..."
+apk add --no-cache openssh-client curl jq git >/dev/null
 
 # Download kubectl matching the cluster's actual minor version (repo bootstrap
 # convention; see apps/headscale/components/bootstrap-api-key/job.sh).
@@ -93,6 +94,23 @@ if [ -z "$TOK" ] || [ "$TOK" = "null" ]; then
   exit 1
 fi
 echo "Gogs API token obtained."
+
+# Ensure the user-apps repo exists. auto_init:false so WE control the first
+# commit and its branch name (master, to match the GitRepository ref). Idempotent:
+# if the repo already exists (old zip-restored cluster or a prior run) we skip
+# creation and remember that so the seed step below leaves existing history alone.
+echo "Ensuring repo ${FLUX_USER}/user-apps..."
+REPO_EXISTED=0
+if curl -fsS -o /dev/null -H "Authorization: token ${TOK}" "${GOGS_API}/api/v1/repos/${FLUX_USER}/user-apps"; then
+  REPO_EXISTED=1
+  echo "Repo ${FLUX_USER}/user-apps already exists."
+else
+  echo "Repo not found; creating..."
+  curl -fsS -o /dev/null -H "Authorization: token ${TOK}" -H "Content-Type: application/json" \
+    -X POST --data '{"name":"user-apps","private":true,"auto_init":false}' \
+    "${GOGS_API}/api/v1/user/repos"
+  echo "Repo created."
+fi
 
 # Generate the keypair.
 echo "Generating ed25519 keypair..."
