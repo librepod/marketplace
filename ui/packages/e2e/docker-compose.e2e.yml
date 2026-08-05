@@ -11,7 +11,7 @@
 # returns when gogs is healthy, which can be before gogs-seed finishes.
 services:
   gogs-init:
-    image: gogs/gogs:0.14.2
+    image: gogs/gogs:0.14.3
     volumes:
       - gogs-data:/data
       # Compose resolves relative paths from this file's dir (ui/packages/e2e/).
@@ -32,7 +32,7 @@ services:
     restart: "no"
 
   gogs:
-    image: gogs/gogs:0.14.2
+    image: gogs/gogs:0.14.3
     depends_on:
       gogs-init:
         condition: service_completed_successfully
@@ -46,7 +46,7 @@ services:
     # report healthy, gating gogs-seed's start.
 
   gogs-seed:
-    image: gogs/gogs:0.14.2
+    image: gogs/gogs:0.14.3
     depends_on:
       gogs:
         condition: service_started
