@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator"
 import { ErrorBlock } from "@/components/ErrorBlock"
 import { StatusBadge } from "@/components/StatusBadge"
 import { NotFoundPage } from "./NotFoundPage"
-import { Loader2, ExternalLink } from "lucide-react"
+import { Loader2, ExternalLink, Lock } from "lucide-react"
 import { useInstallApp } from "@/hooks/useInstallApp"
 import { useUninstallApp } from "@/hooks/useUninstallApp"
 import { useConfig } from "@/hooks/useConfig"
@@ -169,48 +169,56 @@ export function AppDetailPage() {
         </div>
 
         <div className="mt-8 flex flex-wrap items-center gap-3">
-          {(!data.installedStatus || data.installedStatus === 'not_installed') && (
-            <Button
-              onClick={() => installMutation.mutate()}
-              disabled={installMutation.isPending}
-            >
-              {installMutation.isPending && (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              )}
-              {installMutation.isPending ? 'Installing...' : 'Install App'}
-            </Button>
-          )}
-
-          {data.installedStatus === 'installing' && (
-            <Button disabled>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Installing...
-            </Button>
-          )}
-
-          {data.installedStatus === 'running' && (
+          {data.system ? (
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-foreground/5 px-3 py-1.5 text-sm text-muted-foreground">
+              <Lock className="size-4" aria-hidden /> Managed by platform
+            </span>
+          ) : (
             <>
-              {openUrl && (
+              {(!data.installedStatus || data.installedStatus === 'not_installed') && (
                 <Button
-                  render={<a href={openUrl} target="_blank" rel="noopener noreferrer" />}
+                  onClick={() => installMutation.mutate()}
+                  disabled={installMutation.isPending}
                 >
-                  Open {data.displayName}
-                  <ExternalLink />
-                  <span className="sr-only"> (opens in a new tab)</span>
+                  {installMutation.isPending && (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )}
+                  {installMutation.isPending ? 'Installing...' : 'Install App'}
                 </Button>
               )}
-              <UninstallAction
-                displayName={data.displayName}
-                uninstallMutation={uninstallMutation}
-              />
-            </>
-          )}
 
-          {data.installedStatus === 'error' && (
-            <UninstallAction
-              displayName={data.displayName}
-              uninstallMutation={uninstallMutation}
-            />
+              {data.installedStatus === 'installing' && (
+                <Button disabled>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Installing...
+                </Button>
+              )}
+
+              {data.installedStatus === 'running' && (
+                <>
+                  {openUrl && (
+                    <Button
+                      render={<a href={openUrl} target="_blank" rel="noopener noreferrer" />}
+                    >
+                      Open {data.displayName}
+                      <ExternalLink />
+                      <span className="sr-only"> (opens in a new tab)</span>
+                    </Button>
+                  )}
+                  <UninstallAction
+                    displayName={data.displayName}
+                    uninstallMutation={uninstallMutation}
+                  />
+                </>
+              )}
+
+              {data.installedStatus === 'error' && (
+                <UninstallAction
+                  displayName={data.displayName}
+                  uninstallMutation={uninstallMutation}
+                />
+              )}
+            </>
           )}
         </div>
       </div>

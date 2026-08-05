@@ -14,7 +14,8 @@ export class CatalogController {
   @Get()
   async findAll(): Promise<CatalogApp[]> {
     const apps = this.catalogService.findAll();
-    return this.installedService.enrich(apps);
+    const enriched = await this.installedService.enrich(apps);
+    return enriched.filter((app) => !app.system);
   }
 
   @Get(':name')

@@ -181,6 +181,7 @@ that file; if Gogs is unreachable it returns `[]` (everything shows `not_install
   → `InstalledService.enrich()` stamps each app with `installedStatus`.
 - `GET /api/apps/:name` → same, single app.
 - `GET /api/installed` → enriched list filtered to non-`not_installed`.
+- `GET /api/system-apps` → `InstalledService.getSystemApps()` → enriched apps where `system === true` (the read-only Platform panel on `/`).
 - `POST /api/apps/:name/install` | `/uninstall` → `InstalledService` (mutex-serialized).
 - `GET /api/health` → Terminus liveness (empty checks array).
 
@@ -218,6 +219,28 @@ Reads Flux CRDs via `@kubernetes/client-node` `CustomObjectsApi`: lists
 `marketplace.io/app=<name>`, derives status from `Ready`/`Reconciling` conditions
 (`running`/`installing`/`error`). Uses in-cluster config when `KUBERNETES_SERVICE_HOST` is set,
 else local kubeconfig. Unreachable k8s or not-yet-propagated CRD → `installing`.
+
+### System apps (`SystemAppsService`)
+A "system app" is a platform component managed by the cluster's `system-apps`
+Flux Kustomization (traefik, casdoor, gogs, frp-operator, …), not user-installable.
+Membership is derived at runtime per cluster (flavour-correct): list flux-system
+`OCIRepository`s carrying the `kustomize.toolkit.fluxcd.io/name=system-apps`
+parent label, parse each `spec.url` (`oci://…/apps/<catalog-name>`) for the
+catalog app name, and keep the paired Flux object name for status. Cached ~30s;
+on k8s-unreachable degrades to the last-known set (empty on cold start).
+`getSystemApps()` returns `Map<catalogName, fluxKustomizationName>` (note the
+name can differ, e.g. `nfs-provisioner` → `storage`).
+
+In `enrich`, system classification wins over the Gogs "installed?" check, and
+status is derived via `FluxStatusService.getStatusFor(name, { systemKustomization })`
+(queries the Kustomization by name, not the `marketplace.io/app` label). This is
+why a system app like frp-operator reads `running` instead of a forever-`installing`
+badge even when it also has a stale entry in the Gogs user-apps repo.
+
+`CatalogApp.system` is a runtime-enriched boolean (not in `catalog.yaml`).
+`/api/apps` excludes system apps; `/api/system-apps` lists them; install/uninstall
+of a system app returns 409. The `SYSTEM_APPS_OVERRIDE` env (JSON
+`[{name, kustomization}]`) is a test seam used by Tier 1 e2e.
 
 ### Client data layer
 Three TanStack Query keys: `["apps"]` (catalog), `["apps", name]` (detail), `["installed"]`.

@@ -28,6 +28,11 @@ function mockFetch(installed: CatalogApp[] | { ok: false; status: number }) {
     if (url.includes('/api/config')) {
       return Promise.resolve({ ok: true, json: async () => ({ baseDomain: 'libre.pod' }) } as Response)
     }
+    // The always-mounted PlatformPanel fetches /api/system-apps; return [] so
+    // it renders just its summary and doesn't error or add unexpected rows.
+    if (url.includes('/api/system-apps')) {
+      return Promise.resolve({ ok: true, json: async () => [] } as Response)
+    }
     if (url.includes('/api/installed')) {
       if (Array.isArray(installed)) {
         return Promise.resolve({ ok: true, json: async () => installed } as Response)

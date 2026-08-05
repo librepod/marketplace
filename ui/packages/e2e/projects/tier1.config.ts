@@ -69,6 +69,16 @@ export default defineConfig({
       // point KUBECONFIG at a closed port (see support/kubeconfig.closed.yaml)
       // so the k8s call ECONNREFUSES instead of querying the host's real cluster.
       KUBECONFIG: `${process.cwd()}/packages/e2e/support/kubeconfig.closed.yaml`,
+      // Test seam: mark `frp-operator` as a managed platform app for this run,
+      // so the Platform panel + /api/system-apps + the install 409 can be
+      // exercised hermetically (no real system-apps Kustomization in Tier 1).
+      // `frp-operator` (not `gogs`): the other app-level specs assert that
+      // `gogs` is a normal user-facing app, so reusing it here would filter it
+      // out of /api/apps and break smoke/catalog specs. frp-operator is a
+      // dedicated fixture app no other spec asserts on.
+      SYSTEM_APPS_OVERRIDE: JSON.stringify([
+        { name: "frp-operator", kustomization: "frp-operator" },
+      ]),
     },
     url: `${ORIGIN}/api/health`,
     reuseExistingServer: false, // always start a server matching the fresh build
