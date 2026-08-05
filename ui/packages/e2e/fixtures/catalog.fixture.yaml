@@ -63,6 +63,21 @@ apps:
     sourceType: oci-kustomize
     sourceUrl: oci://ghcr.io/librepod/marketplace/apps/gogs
 
+  # A platform-managed app used as the e2e target for the read-only Platform
+  # panel (see SYSTEM_APPS_OVERRIDE in projects/tier1.config.ts). Mirrors the
+  # real-world case this feature fixes: it would normally appear
+  # user-installable in the catalog, but the cluster manages it — so it is
+  # excluded from /api/apps and install is refused (409) by the system guard
+  # before the templates check. Deliberately not asserted by any other spec.
+  - name: frp-operator
+    version: "0.1.0"
+    displayName: FRP Operator
+    description: Fast reverse proxy operator for exposing services
+    category: Networking
+    icon: https://example.com/frp-operator.png
+    sourceType: oci-kustomize
+    sourceUrl: oci://ghcr.io/librepod/marketplace/apps/frp-operator
+
   - name: litellm
     version: "1.81.9"
     displayName: LiteLLM
