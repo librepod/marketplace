@@ -69,6 +69,12 @@ export default defineConfig({
       // point KUBECONFIG at a closed port (see support/kubeconfig.closed.yaml)
       // so the k8s call ECONNREFUSES instead of querying the host's real cluster.
       KUBECONFIG: `${process.cwd()}/packages/e2e/support/kubeconfig.closed.yaml`,
+      // Test seam: mark `gogs` as a managed platform app for this run, so the
+      // Platform panel + /api/system-apps + the install 409 can be exercised
+      // hermetically (no real system-apps Kustomization in Tier 1).
+      SYSTEM_APPS_OVERRIDE: JSON.stringify([
+        { name: "gogs", kustomization: "gogs" },
+      ]),
     },
     url: `${ORIGIN}/api/health`,
     reuseExistingServer: false, // always start a server matching the fresh build
