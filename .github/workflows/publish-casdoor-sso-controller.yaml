@@ -39,10 +39,18 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: sigstore/cosign-installer@v4.1.1
         with: { cosign-release: 'v3.0.6' }
+      - name: Get app version
+        id: version
+        run: |
+          # Single source of truth: the manifest (apps/casdoor-sso-controller)
+          # pins the image by this version, so the built tag must match it.
+          VERSION=$(grep 'version:' apps/casdoor-sso-controller/metadata.yaml \
+            | head -1 | sed 's/.*version: *//' | tr -d '"')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Build & push
         id: img
         run: |
-          TAG="0.2.5"
+          TAG="${{ steps.version.outputs.version }}"
           docker buildx build --push \
             --metadata-file metadata.json \
             -t ghcr.io/librepod/casdoor-sso-controller:${TAG} \
@@ -66,8 +74,8 @@ jobs:
 
   # Publish a PR-tagged image for branch/PR testing. Unsigned by design: the dev
   # cluster runs no image-signature admission controller, so signing is unenforced
-  # here and would only slow the PR run. Released tags (0.2.4/latest) are still
-  # produced + key-signed by build-and-sign on master.
+  # here and would only slow the PR run. Released tags (the metadata.yaml
+  # version + latest) are still produced + key-signed by build-and-sign on master.
   build-pr:
     needs: test
     if: github.event_name == 'pull_request'
