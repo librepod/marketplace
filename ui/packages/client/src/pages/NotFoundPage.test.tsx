@@ -9,9 +9,9 @@ describe('NotFoundPage', () => {
     expect(screen.getByRole('heading', { name: 'Page not found' })).toBeInTheDocument()
   })
 
-  it('offers a link back to the catalog', () => {
+  it('offers a link home (back to your apps)', () => {
     render(<MemoryRouter><NotFoundPage /></MemoryRouter>)
-    const link = screen.getByRole('link', { name: /back to catalog/i })
+    const link = screen.getByRole('link', { name: /back to your apps/i })
     expect(link).toHaveAttribute('href', '/')
   })
 })

@@ -12,7 +12,8 @@ test("app boots and catalog API returns seeded apps", async ({ page, request }) 
   expect(names).toEqual(expect.arrayContaining(["vaultwarden", "gogs", "litellm"]));
   expect(names).not.toContain("traefik");
 
-  await page.goto("/");
+  // The catalog moved to /catalog; / is now the installed-apps control plane.
+  await page.goto("/catalog");
   await expect(page.getByRole("heading", { name: "LibrePod", level: 1 })).toBeVisible();
   await expect(page.getByRole("link", { name: "Vaultwarden" })).toBeVisible();
 });

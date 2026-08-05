@@ -223,8 +223,20 @@ else local kubeconfig. Unreachable k8s or not-yet-propagated CRD → `installing
 Three TanStack Query keys: `["apps"]` (catalog), `["apps", name]` (detail), `["installed"]`.
 Install/uninstall mutations (`useInstallApp`/`useUninstallApp`) invalidate all three on
 success. Default `staleTime: 5min`, `retry: 0` (manual retry via UI button). Routes:
-`/` (CatalogPage), `/apps/:name` (AppDetailPage), `/my-apps` (MyAppsPage), all under `AppShell`.
+`/` (MyAppsPage — the installed-apps control plane, the daily home), `/catalog`
+(CatalogPage — browse/install), `/apps/:name` (AppDetailPage — status/uninstall),
+`/my-apps` (legacy alias → redirects to `/`), all under `AppShell`.
 Dark mode is forced on mount (`main.tsx`, decision D-02).
+
+**My Apps control plane** (`MyAppsPage`): the home is a launcher, not a browse grid.
+Each `LaunchTile` body is a live link opening the running app at
+`https://<name>.<baseDomain>` (via `appUrl()` in `lib/utils.ts`) in a new tab; a
+corner "Manage" affordance routes to the detail page (the two are sibling anchors,
+never nested). Apps not yet `running` route their body to detail instead of a dead
+host. Above the grid, a device-status strip reports running/installing/error counts
++ base domain; below it, `ControlsPanel` shows roadmap placeholders (Backups /
+Restart / Users) marked with `SoonTag`. All status dots read from the single
+`STATUS_DOT` map exported by `StatusBadge.tsx`.
 
 ## Configuration (env vars)
 

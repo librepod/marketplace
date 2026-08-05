@@ -4,7 +4,7 @@ export class CatalogPage {
   constructor(private readonly page: Page) {}
 
   async goto(): Promise<void> {
-    await this.page.goto("/");
+    await this.page.goto("/catalog");
   }
 
   async gotoWith(query?: string, category?: string): Promise<void> {
@@ -12,7 +12,7 @@ export class CatalogPage {
     if (query) params.set("q", query);
     if (category) params.set("category", category);
     const qs = params.toString();
-    await this.page.goto(qs ? `/?${qs}` : "/");
+    await this.page.goto(qs ? `/catalog?${qs}` : "/catalog");
   }
 
   card(displayName: string): Locator {
