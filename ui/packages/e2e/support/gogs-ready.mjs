@@ -1,8 +1,14 @@
-// Waits for Gogs, then verifies the seeded state is usable by the marketplace
-// server: (1) the token bootstrap (Basic auth flux:<password>) works exactly
-// as GogsService.onModuleInit does it, and (2) the root kustomization.yaml in
-// flux/user-apps is readable and in the clean empty state (resources: []).
-// Exits 0 only when the server can install against this Gogs.
+// Waits for Gogs AND for the seed (support/gogs/seed.sh, run as the gogs-seed
+// compose service) to complete, then verifies the state is usable by the
+// marketplace server: (1) the token bootstrap (Basic auth flux:<password>)
+// works exactly as GogsService.onModuleInit does it, and (2) the root
+// kustomization.yaml in flux/user-apps is readable and in the clean empty state
+// (resources: []). Exits 0 only when the server can install against this Gogs.
+//
+// Polling matters: `docker compose up --wait` returns when the gogs service is
+// healthy, which can be several seconds BEFORE the one-shot gogs-seed service
+// finishes creating the user/repo/kustomization. So both the user-existence and
+// kustomization checks retry until the seed catches up.
 const GOGS_URL = process.env.GOGS_URL ?? "http://127.0.0.1:43000";
 const USERNAME = process.env.GOGS_USERNAME ?? "flux";
 // NB: GOGS_TOKEN is the seeded user's *password* (used for Basic auth here),
@@ -36,17 +42,50 @@ async function bootstrapToken() {
   return (await r.json()).sha1;
 }
 
+// Retry until the flux user exists (bootstrapToken succeeds). Failed attempts —
+// user not yet created by gogs-seed — do NOT mint tokens, so this produces
+// exactly one token once the user appears.
+async function waitForUser(timeoutMs = 60000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastErr;
+  while (Date.now() < deadline) {
+    try {
+      return await bootstrapToken();
+    } catch (e) {
+      lastErr = e;
+      await sleep(1000);
+    }
+  }
+  throw new Error(
+    `flux user/token not reachable within ${timeoutMs}ms (gogs-seed may have failed): ${lastErr?.message ?? lastErr}`,
+  );
+}
+
+// Retry the root-kustomization read until gogs-seed has pushed it in the clean
+// empty state. Uses the token from waitForUser (the raw endpoint requires a
+// token, not Basic, on this Gogs build).
+async function waitForKustomization(token, timeoutMs = 60000) {
+  const deadline = Date.now() + timeoutMs;
+  const url = `${GOGS_URL}/api/v1/repos/flux/user-apps/raw/master/kustomization.yaml`;
+  let lastErr;
+  while (Date.now() < deadline) {
+    try {
+      const r = await fetch(url, { headers: { Authorization: `token ${token}` } });
+      if (!r.ok) throw new Error(`read failed: ${r.status}`);
+      const body = await r.text();
+      if (!/resources:\s*\[\s*\]/.test(body))
+        throw new Error(`not in expected empty state:\n${body}`);
+      return;
+    } catch (e) {
+      lastErr = e;
+      await sleep(1000);
+    }
+  }
+  throw new Error(`root kustomization not seeded within ${timeoutMs}ms: ${lastErr?.message ?? lastErr}`);
+}
+
 await waitForGogs();
-console.log("Gogs is responding. Verifying seeded state...");
-
-const token = await bootstrapToken();
-const kr = await fetch(
-  `${GOGS_URL}/api/v1/repos/flux/user-apps/raw/master/kustomization.yaml`,
-  { headers: { Authorization: `token ${token}` } },
-);
-if (!kr.ok) throw new Error(`root kustomization read failed: ${kr.status}`);
-const body = await kr.text();
-if (!/resources:\s*\[\s*\]/.test(body))
-  throw new Error(`root kustomization not in expected empty state:\n${body}`);
-
+console.log("Gogs is responding. Waiting for seed to complete...");
+const token = await waitForUser();
+await waitForKustomization(token);
 console.log("Gogs ready: token bootstrap OK, flux/user-apps root kustomization verified.");

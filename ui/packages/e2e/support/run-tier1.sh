@@ -22,8 +22,13 @@ echo "==> Building client + server"
 npm run build:client
 npm run build
 
-echo "==> Starting Gogs (backup-restore)"
-docker compose -f "$COMPOSE" up -d --wait
+echo "==> Starting Gogs (seeded runtime)"
+# Detached, deliberately WITHOUT --wait: gogs-seed is a one-shot with no
+# healthcheck, and `up --wait` rejects healthcheck-less services on some docker
+# compose versions (CI's standard build, though not the local one). gogs-ready.mjs
+# below POLLS until gogs is up AND the seed completes, so it is the real readiness
+# gate. depends_on still orders gogs-init → gogs → gogs-seed regardless of --wait.
+docker compose -f "$COMPOSE" up -d
 
 echo "==> Verifying Gogs readiness"
 GOGS_URL="http://127.0.0.1:43000" GOGS_USERNAME="flux" GOGS_TOKEN="pass@w0rd" \
