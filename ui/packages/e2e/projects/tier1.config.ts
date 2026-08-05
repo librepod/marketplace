@@ -1,6 +1,6 @@
-import crypto from "node:crypto";
 import { defineConfig } from "@playwright/test";
 import base from "../playwright.config";
+import { sessionStorageState } from "../support/mint-session";
 
 // Tier 1 shares a single seeded Gogs across specs, so an install in one spec
 // mutates state another spec reads. Serialize (workers: 1) to avoid races.
@@ -29,38 +29,9 @@ const ORIGIN = `http://localhost:${PORT}`;
 //      SessionService uses, and injected via storageState. That authenticates
 //      both the `page` (SPA/AuthGate) and `request` (/api/apps) fixtures,
 //      exercising the actual AuthGuard verify path — no test-hook in auth code.
-//      NB: the HMAC below must stay in sync with SessionService.sign/verify.
+//      NB: the HMAC lives in support/mint-session.ts; it must stay in sync
+//      with SessionService.sign/verify.
 const SESSION_SECRET = "tier1-e2e-session-secret-not-for-prod";
-const SESSION_TTL_SEC = 8 * 60 * 60; // mirrors SessionService.TTL_SECONDS
-function mintSessionToken(): string {
-  const now = Math.floor(Date.now() / 1000);
-  const body = Buffer.from(
-    JSON.stringify({
-      sub: "e2e",
-      name: "E2E Runner",
-      email: "e2e@tier1.local",
-      iat: now,
-      exp: now + SESSION_TTL_SEC,
-    }),
-  ).toString("base64url");
-  const sig = crypto.createHmac("sha256", SESSION_SECRET).update(body).digest("base64url");
-  return `${body}.${sig}`;
-}
-const sessionStorageState = {
-  cookies: [
-    {
-      name: "mp_session",
-      value: mintSessionToken(),
-      domain: "localhost",
-      path: "/",
-      expires: Math.floor(Date.now() / 1000) + SESSION_TTL_SEC,
-      httpOnly: false,
-      secure: false, // e2e is plain HTTP on localhost
-      sameSite: "Lax" as const,
-    },
-  ],
-  origins: [],
-};
 
 export default defineConfig({
   ...base,
@@ -70,7 +41,7 @@ export default defineConfig({
   use: {
     ...base.use,
     baseURL: ORIGIN,
-    storageState: sessionStorageState,
+    storageState: sessionStorageState(SESSION_SECRET, "localhost"),
   },
   webServer: {
     // The orchestrator already built client+server; this just serves the

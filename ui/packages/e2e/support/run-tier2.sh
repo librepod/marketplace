@@ -62,6 +62,20 @@ curl -sf "http://127.0.0.1:${PF_PORT}/api/health" >/dev/null || {
   exit 1
 }
 
+# Since #51 the API requires a session cookie (global AuthGuard gates /api/*). The
+# in-cluster marketplace-ui verifies against a RANDOM SESSION_SECRET in
+# Secret/marketplace-ui-session (key 'session-secret', minted by the bootstrap-session
+# Job) — read it here and export it; tier2.config.ts mints an offline HMAC cookie
+# identical to SessionService.sign and injects it via storageState.
+echo "==> Minting Tier 2 session cookie from Secret/$NS/marketplace-ui-session"
+SESSION_SECRET="$(kubectl get secret marketplace-ui-session -n "$NS" -o 'jsonpath={.data.session-secret}' 2>/dev/null | base64 -d 2>/dev/null || true)"
+if [ -z "$SESSION_SECRET" ]; then
+  echo "ERROR: could not read SESSION_SECRET from Secret/$NS/marketplace-ui-session (key 'session-secret')." >&2
+  echo "       The bootstrap-session Job should have created it before the Deployment rolled out." >&2
+  exit 1
+fi
+export E2E_SESSION_SECRET="$SESSION_SECRET"
+
 echo "==> Running Playwright (Tier 2)"
 cd "$E2E"
 set +e
