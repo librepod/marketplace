@@ -258,4 +258,18 @@ describe('AppDetailPage', () => {
       })
     })
   })
+
+  it('shows "Managed by platform" and hides Install/Open for a system app (SYS-01)', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ ...mockApp, system: true, installedStatus: 'running' }),
+    } as Response)
+    render(<AppDetailPage />, { wrapper: createWrapper() })
+    await waitFor(() => {
+      expect(screen.getByText(/Managed by platform/i)).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('button', { name: 'Install App' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Open Vaultwarden/i })).not.toBeInTheDocument()
+  })
 })
