@@ -7,6 +7,7 @@ import type { CatalogApp } from "@librepod/shared"
 import { LaunchTile } from "@/components/LaunchTile"
 import { AppCardSkeleton } from "@/components/AppCardSkeleton"
 import { ErrorBlock } from "@/components/ErrorBlock"
+import { PlatformPanel } from "@/components/PlatformPanel"
 import { SoonTag } from "@/components/SoonTag"
 import { STATUS_DOT } from "@/components/StatusBadge"
 import { useConfig } from "@/hooks/useConfig"
@@ -78,6 +79,8 @@ export function MyAppsPage() {
           <ControlsPanel />
         </>
       )}
+
+      <PlatformPanel />
     </>
   )
 }
