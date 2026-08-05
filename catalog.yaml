@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-08-04T22:15:13Z"
+  generatedAt: "2026-08-05T11:54:21Z"
 apps:
     - name: baikal
       version: "0.11.1-nginx"
@@ -469,7 +469,7 @@ apps:
               description: "Authentication token matching the FRP server configuration"
               required: true
     - name: gogs
-      version: "next-0.14"
+      version: "0.14.3"
       displayName: "Gogs"
       description: "Lightweight self-hosted Git service with built-in issue tracking and wiki"
       category: "Development"
@@ -496,7 +496,7 @@ apps:
                 !/overlays
                 !/metadata.yaml
               ref:
-                tag: "next-0.14"
+                tag: "0.14.3"
         release: |
             apiVersion: kustomize.toolkit.fluxcd.io/v1
             kind: Kustomization
