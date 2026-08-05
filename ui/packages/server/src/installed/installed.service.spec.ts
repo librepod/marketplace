@@ -4,6 +4,7 @@ import { GogsService } from './gogs.service';
 import { FluxStatusService } from './flux-status.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { ConfigService } from '@nestjs/config';
+import { SystemAppsService } from './system-apps.service';
 
 const mockCatalogApps = [
   {
@@ -60,6 +61,10 @@ describe('InstalledService', () => {
   };
   let mockFluxService: { getStatusFor: ReturnType<typeof vi.fn> };
   let mockCatalogService: { findAll: ReturnType<typeof vi.fn>; findOne: ReturnType<typeof vi.fn> };
+  let mockSystemAppsService: {
+    getSystemApps: ReturnType<typeof vi.fn>;
+    isSystem: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     mockGogsService = {
@@ -84,11 +89,17 @@ describe('InstalledService', () => {
       },
     } as unknown as ConfigService;
 
+    mockSystemAppsService = {
+      getSystemApps: vi.fn().mockResolvedValue(new Map()),
+      isSystem: vi.fn().mockResolvedValue(false),
+    };
+
     service = new InstalledService(
       mockCatalogService as unknown as CatalogService,
       mockGogsService as unknown as GogsService,
       mockFluxService as unknown as FluxStatusService,
       mockConfigService,
+      mockSystemAppsService as unknown as SystemAppsService,
     );
   });
 
@@ -156,6 +167,18 @@ describe('InstalledService', () => {
       const installed = await service.getInstalled();
 
       expect(installed).toEqual([]);
+    });
+
+    it('excludes system apps', async () => {
+      mockSystemAppsService.getSystemApps.mockResolvedValue(
+        new Map([['gogs', 'gogs']]),
+      );
+      mockGogsService.getInstalledAppNames.mockResolvedValue(['vaultwarden', 'gogs']);
+      mockFluxService.getStatusFor.mockResolvedValue('running');
+
+      const installed = await service.getInstalled();
+
+      expect(installed.map((a) => a.name)).toEqual(['vaultwarden']);
     });
   });
 
@@ -260,6 +283,68 @@ describe('InstalledService', () => {
       const serialized =
         (vaultwardenEnd < gogsStart) || (gogsEnd < vaultwardenStart);
       expect(serialized).toBe(true);
+    });
+  });
+
+  describe('enrich() system classification', () => {
+    it('marks a managed app system:true and derives status from the system branch', async () => {
+      mockSystemAppsService.getSystemApps.mockResolvedValue(
+        new Map([['gogs', 'gogs']]),
+      );
+      // gogs must be classified system BEFORE the Gogs check is consulted
+      mockGogsService.getInstalledAppNames.mockResolvedValue(['gogs']);
+      mockFluxService.getStatusFor.mockResolvedValue('running');
+
+      const enriched = await service.enrich(mockCatalogApps);
+
+      const gogs = enriched.find((a) => a.name === 'gogs')!;
+      expect(gogs.system).toBe(true);
+      expect(gogs.installedStatus).toBe('running');
+      expect(mockFluxService.getStatusFor).toHaveBeenCalledWith('gogs', {
+        systemKustomization: 'gogs',
+      });
+    });
+
+    it('resolves the original bug: frp-operator classified system → running, not installing', async () => {
+      const frp = { ...mockCatalogApps[0], name: 'frp-operator', displayName: 'FRP Operator' };
+      mockSystemAppsService.getSystemApps.mockResolvedValue(
+        new Map([['frp-operator', 'frp-operator']]),
+      );
+      mockGogsService.getInstalledAppNames.mockResolvedValue(['frp-operator']);
+      mockFluxService.getStatusFor.mockResolvedValue('running');
+
+      const [enriched] = await service.enrich([frp]);
+
+      expect(enriched.system).toBe(true);
+      expect(enriched.installedStatus).toBe('running');
+    });
+
+    it('leaves a user app system:false and uses the marketplace label query', async () => {
+      mockSystemAppsService.getSystemApps.mockResolvedValue(new Map());
+      mockGogsService.getInstalledAppNames.mockResolvedValue(['vaultwarden']);
+      mockFluxService.getStatusFor.mockResolvedValue('running');
+
+      const enriched = await service.enrich(mockCatalogApps);
+
+      const vw = enriched.find((a) => a.name === 'vaultwarden')!;
+      expect(vw.system).toBeFalsy();
+      expect(mockFluxService.getStatusFor).toHaveBeenCalledWith('vaultwarden');
+    });
+  });
+
+  describe('install() / uninstall() managed-app guard', () => {
+    it('install throws ConflictException for a managed app', async () => {
+      mockSystemAppsService.isSystem.mockResolvedValue(true);
+
+      await expect(service.install('gogs')).rejects.toThrow(/managed by the platform/);
+      expect(mockGogsService.createFile).not.toHaveBeenCalled();
+    });
+
+    it('uninstall throws ConflictException for a managed app', async () => {
+      mockSystemAppsService.isSystem.mockResolvedValue(true);
+
+      await expect(service.uninstall('gogs')).rejects.toThrow(/managed by the platform/);
+      expect(mockGogsService.removeFromRootKustomization).not.toHaveBeenCalled();
     });
   });
 });
