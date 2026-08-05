@@ -75,11 +75,15 @@ export function LaunchTile({ app, baseDomain }: { app: CatalogApp; baseDomain?: 
         </div>
       )}
 
+      {/* Compact 28px icon visually; the ::before expands the pointer hit area
+          to the WCAG 44px minimum so the corner control is reachable on touch
+          without enlarging the visible affordance. */}
       <Link
         to={`/apps/${app.name}`}
         aria-label={`Manage ${app.displayName}`}
         title={`Manage ${app.displayName}`}
         className="absolute bottom-3 right-3 z-10 inline-flex size-7 items-center justify-center rounded-md text-muted-foreground
+                   before:absolute before:inset-[-0.5rem] before:content-['']
                    transition-colors duration-150 hover:bg-muted hover:text-foreground
                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
       >

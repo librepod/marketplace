@@ -106,16 +106,18 @@ function DeviceSummary({ apps, baseDomain }: { apps: CatalogApp[]; baseDomain?: 
           <div className="min-w-0">
             <p className="text-sm font-medium leading-tight">Your LibrePod</p>
             <p className="truncate text-xs text-muted-foreground">
-              {baseDomain ?? " "}
+              {baseDomain ?? (
+                <span className="inline-block h-3 w-24 animate-pulse rounded-sm bg-muted-foreground/20" />
+              )}
             </p>
           </div>
         </div>
 
-        <dl className="flex items-center gap-5 sm:gap-6">
+        <div className="flex items-center gap-5 sm:gap-6">
           <Stat dot="running" active={running > 0} value={running} label="Running" />
           <Stat dot="installing" active={installing > 0} value={installing} label="Setting up" />
           <Stat dot="error" active={errored > 0} value={errored} label="Attention" />
-        </dl>
+        </div>
       </div>
     </section>
   )
@@ -132,11 +134,22 @@ function Stat({
   value: number
   label: string
 }) {
+  // Not a description list: the value reads before the label visually, which
+  // would force <dd> ahead of <dt> in source order (invalid HTML). Use a plain
+  // group instead, and expose the value+label pair to assistive tech via
+  // aria-label so it still reads as one unit ("5 Running").
   return (
-    <div className={cn("flex items-center gap-2 transition-opacity", !active && "opacity-40")}>
+    <div
+      className={cn("flex items-center gap-2 transition-opacity", !active && "opacity-40")}
+      aria-label={`${value} ${label}`}
+    >
       <span className={cn("size-2 shrink-0 rounded-full", STATUS_DOT[dot])} aria-hidden />
-      <dd className="text-lg font-semibold leading-none tabular-nums">{value}</dd>
-      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <span className="text-lg font-semibold leading-none tabular-nums" aria-hidden>
+        {value}
+      </span>
+      <span className="text-xs text-muted-foreground" aria-hidden>
+        {label}
+      </span>
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useParams, Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { apiFetch } from "@/lib/api"
+import { appUrl } from "@/lib/utils"
 import type { CatalogApp } from "@librepod/shared"
 import { AppIcon } from "@/components/AppIcon"
 import { Badge } from "@/components/ui/badge"
@@ -111,7 +112,7 @@ export function AppDetailPage() {
   // time, so this URL matches the Traefik IngressRoute host the app runs under.
   // (HTTP apps only — non-HTTP apps are reached over the tailnet, not the web.)
   const { data: config } = useConfig()
-  const openUrl = config && name ? `https://${name}.${config.baseDomain}` : undefined
+  const openUrl = name ? appUrl(name, config?.baseDomain) : undefined
 
   if (!name) return <NotFoundPage title="App not found" description="This app doesn't exist in the catalog." />
   if (isPending) return <DetailSkeleton />
