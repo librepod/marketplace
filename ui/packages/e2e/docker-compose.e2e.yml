@@ -1,44 +1,67 @@
-# Tier 1 hermetic Gogs. Mirrors prod's repo-init initContainer: a one-shot
-# restore service unpacks the repo's gogs-init.zip into a shared named volume,
-# then the gogs service starts only after the restore completes.
+# Tier 1 hermetic Gogs. Seed is now runtime (CLI + API), not a committed backup
+# zip: #50 dropped gogs-init.zip when prod seeding moved to bootstrap-admin, but
+# never updated this compose — so the old `gogs restore --from <zip>` exited 1 on
+# the now-empty mount. This mirrors prod's approach instead:
+#   gogs-init : one-shot prep of /data (app.ini + ownership) — no zip
+#   gogs      : the web server (depends on gogs-init completing)
+#   gogs-seed : one-shot, after gogs is up — runs support/gogs/seed.sh to create
+#               the flux admin (gogs admin create-user, like the prod postStart
+#               hook) + the user-apps repo + an empty root kustomization.yaml.
+# gogs-ready.mjs polls until the seeded state is observable — `compose up --wait`
+# returns when gogs is healthy, which can be before gogs-seed finishes.
 services:
-  gogs-restore:
+  gogs-init:
     image: gogs/gogs:0.14.2
     volumes:
       - gogs-data:/data
-      # Compose resolves relative paths from this file's dir (ui/packages/e2e/);
-      # apps/ is a sibling of ui/ at the repo root, so it's three levels up.
-      - ../../../apps/gogs/components/repo-init/gogs-init.zip:/data/gogs-init.zip:ro
+      # Compose resolves relative paths from this file's dir (ui/packages/e2e/).
       - ./support/gogs:/gogs-config:ro
-    # Gogs refuses to start as root (its config pins the runtime user to "git"),
-    # but the named volume is root-owned, so uid 1000 can't write to it either.
-    # Resolve the chicken-and-egg as root: chown /data to git, then gosu git
-    # for the restore itself.
     entrypoint: ["sh", "-c"]
     command:
-      - >
-        set -e &&
-        mkdir -p /data/gogs/conf /data/gogs/log /data/tmp &&
-        cp /gogs-config/app.ini /data/gogs/conf/app.ini &&
-        chown git:git /data &&
-        chown -R git:git /data/gogs /data/tmp &&
-        export TMPDIR=/data/tmp &&
-        cd /app/gogs &&
-        gosu git ./gogs restore --from /data/gogs-init.zip --config /data/gogs/conf/app.ini
+      - |
+        set -e
+        mkdir -p /data/gogs/conf /data/gogs/log /data/tmp
+        cp /gogs-config/app.ini /data/gogs/conf/app.ini
+        # Gogs runs as uid 1000 (git); the named volume is root-owned, so chown
+        # /data before gogs starts. (0.14.2's start.sh also chowns, but doing it
+        # here keeps gogs-seed's gosu-git DB writes ownership-compatible.)
+        chown git:git /data
+        chown -R git:git /data/gogs /data/tmp
+    healthcheck:
+      disable: true
     restart: "no"
 
   gogs:
     image: gogs/gogs:0.14.2
     depends_on:
-      gogs-restore:
+      gogs-init:
         condition: service_completed_successfully
     ports:
       - "127.0.0.1:43000:3000"
     volumes:
       - gogs-data:/data
-    # No entrypoint/user override: the image's start.sh chowns /data and drops
-    # to the git user via gosu, then runs gogs web reading our restored
-    # /data/gogs/conf/app.ini.
+    # No entrypoint/user override: 0.14.2's start.sh chowns /data and drops to
+    # the git user via gosu, then runs gogs web reading /data/gogs/conf/app.ini.
+    # The image's baked-in healthcheck (probes :3000) is what makes this service
+    # report healthy, gating gogs-seed's start.
+
+  gogs-seed:
+    image: gogs/gogs:0.14.2
+    depends_on:
+      gogs:
+        condition: service_started
+    volumes:
+      # /data for `gogs admin create-user` (writes /data/gogs.db) + app.ini path;
+      # /gogs-config for seed.sh.
+      - gogs-data:/data
+      - ./support/gogs:/gogs-config:ro
+    entrypoint: ["sh", "/gogs-config/seed.sh"]
+    # The gogs image has a baked-in healthcheck probing :3000; this container
+    # runs the seed script (not web), so disable it to avoid a misleading
+    # "unhealthy" label. gogs-ready.mjs is the real seed-complete gate.
+    healthcheck:
+      disable: true
+    restart: "no"
 
 volumes:
   gogs-data:
