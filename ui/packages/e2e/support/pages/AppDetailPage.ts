@@ -1,4 +1,4 @@
-import type { Page, Locator } from "@playwright/test";
+import { expect, type Page, type Locator } from "@playwright/test";
 
 export class AppDetailPage {
   constructor(private readonly page: Page) {}
@@ -38,11 +38,18 @@ export class AppDetailPage {
   }
 
   // Only reachable at status running/error (needs a cluster → Tier 2). The
-  // AlertDialog trigger and its confirm action both read "Uninstall App", so
-  // after opening the dialog the action is the second match.
+  // AlertDialog trigger and its confirm action both read "Uninstall App"; scope
+  // the confirm click to the open dialog so it can never match the trigger
+  // (which lives outside the alertdialog), and assert the dialog opened first.
+  // The trigger is a toggle: if base-ui's open state hasn't settled after a
+  // prior Keep-App dismissal, .first().click() can CLOSE instead of OPEN —
+  // asserting visibility surfaces that as a clear failure rather than a cryptic
+  // 15s timeout on a positional .nth(1) that never resolves.
   async confirmUninstall(): Promise<void> {
     await this.uninstallButton().first().click();
-    await this.page.getByRole("button", { name: "Uninstall App" }).nth(1).click();
+    const dialog = this.page.getByRole("alertdialog");
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Uninstall App" }).click();
   }
 
   keepApp(): Locator {
