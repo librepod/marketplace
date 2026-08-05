@@ -15,16 +15,14 @@ spec:
         - name: gogs
           image: gogs/gogs
           imagePullPolicy: IfNotPresent
-          securityContext:
-            runAsNonRoot: true
-            runAsUser: 1000
-            runAsGroup: 1000
-            allowPrivilegeEscalation: false
-            seccompProfile:
-              type: RuntimeDefault
-            capabilities:
-              drop:
-                - ALL
+          # The gogs/gogs 0.14.x image uses an s6-supervised, root-based
+          # entrypoint: it chowns /data, launches s6-svscan (which writes locks
+          # under the root-owned /app/gogs/docker/s6), and su-execs to the git
+          # user itself. A hardened non-root securityContext (runAsUser 1000 /
+          # drop ALL) prevents all of that and crashloops the container with
+          # "s6-svscan: fatal: unable to open .s6-svscan/lock: Permission
+          # denied". So the container starts as root and the image drops privs.
+          # fsGroup on the pod (below) still governs volume group ownership.
           ports:
             - name: http
               containerPort: 3000
