@@ -1,17 +1,19 @@
 name: Publish Marketplace UI
 
+# Owns the marketplace-ui Docker IMAGE only (source: ui/). The OCI manifest
+# artifact (source: apps/marketplace-ui/) is published by the generic
+# publish-apps.yaml workflow — keeping the image and manifest on independent
+# cadences and avoiding a duplicate OCI push + cosign/Rekor 409.
 on:
   push:
     branches: [master]
     paths:
       - 'ui/**'
-      - 'apps/marketplace-ui/**'
   pull_request:
     types: [opened, synchronize, reopened]
     branches: [master]
     paths:
       - 'ui/**'
-      - 'apps/marketplace-ui/**'
   workflow_dispatch:
 
 jobs:
@@ -92,97 +94,8 @@ jobs:
               "ghcr.io/librepod/marketplace-ui@${DIGEST}"
           fi
 
-  publish-manifests:
-    runs-on: ubuntu-latest
-    permissions:
-      packages: write
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: fluxcd/flux2/action@main
-
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@v4.1.1
-        with:
-          cosign-release: 'v3.0.6'
-
-      - name: Get app version
-        id: version
-        run: |
-          VERSION=$(grep 'version:' apps/marketplace-ui/metadata.yaml \
-            | head -1 | sed 's/.*version: *//' | tr -d '"')
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Push and sign manifest artifact
-        env:
-          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
-          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-        run: |
-          retry() {
-            # Retry through transient GHCR secondary rate-limits (HTTP 403)
-            # during cosign signature blob uploads.
-            local max=5 delay=15 i=0
-            until "$@"; do
-              i=$((i + 1))
-              if [ "$i" -ge "$max" ]; then
-                echo "::error::Failed after $i attempts: $*" >&2
-                return 1
-              fi
-              echo "Attempt $i failed; retrying in ${delay}s..." >&2
-              sleep "$delay"
-              delay=$((delay + 15))
-            done
-          }
-
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            TAG="pr-${{ github.event.pull_request.number }}"
-            echo "Pushing PR artifact..."
-            DIGEST=$(flux push artifact \
-              oci://ghcr.io/${{ github.repository_owner }}/marketplace/apps/marketplace-ui:${TAG} \
-              --path=./apps/marketplace-ui \
-              --source="$(git config --get remote.origin.url)" \
-              --revision="$(git rev-parse HEAD)" \
-              --ignore-paths=.git/,.gitignore,.gitmodules,.gitattributes,*.jpg,*.jpeg,*.gif,*.png,*.wmv,*.flv,*.tar.gz \
-              --output json | jq -r '.repository + "@" + .digest')
-
-            echo "Signing PR artifact (keyless): $DIGEST"
-            retry cosign sign --yes "$DIGEST"
-          else
-            echo "Pushing versioned artifact..."
-            DIGEST_V=$(flux push artifact \
-              oci://ghcr.io/${{ github.repository_owner }}/marketplace/apps/marketplace-ui:${{ steps.version.outputs.version }} \
-              --path=./apps/marketplace-ui \
-              --source="$(git config --get remote.origin.url)" \
-              --revision="$(git rev-parse HEAD)" \
-              --ignore-paths=.git/,.gitignore,.gitmodules,.gitattributes,*.jpg,*.jpeg,*.gif,*.png,*.wmv,*.flv,*.tar.gz \
-              --output json | jq -r '.repository + "@" + .digest')
-
-            echo "Signing versioned artifact: $DIGEST_V"
-            retry cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST_V"
-
-            echo "Pushing latest artifact..."
-            DIGEST_L=$(flux push artifact \
-              oci://ghcr.io/${{ github.repository_owner }}/marketplace/apps/marketplace-ui:latest \
-              --path=./apps/marketplace-ui \
-              --source="$(git config --get remote.origin.url)" \
-              --revision="$(git rev-parse HEAD)" \
-              --ignore-paths=.git/,.gitignore,.gitmodules,.gitattributes,*.jpg,*.jpeg,*.gif,*.png,*.wmv,*.flv,*.tar.gz \
-              --output json | jq -r '.repository + "@" + .digest')
-
-            echo "Signing latest artifact: $DIGEST_L"
-            retry cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST_L"
-          fi
-
   comment:
-    needs: [publish-image, publish-manifests]
+    needs: [publish-image]
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -195,17 +108,11 @@ jobs:
             const tag = `pr-${pr_number}`;
             const owner = context.repo.owner;
 
-            const body = `### PR Artifacts Ready
+            const body = `### PR Image Ready
 
             | Type | Tag |
             |------|-----|
-            | Docker image | \`ghcr.io/${owner}/marketplace-ui:${tag}\` |
-            | OCI manifest | \`ghcr.io/${owner}/marketplace/apps/marketplace-ui:${tag}\` |
-
-            \`\`\`bash
-            # Test in dev cluster:
-            flux reconcile source oci <name> --tag ${tag}
-            \`\`\``;
+            | Docker image | \`ghcr.io/${owner}/marketplace-ui:${tag}\` |`;
 
             github.rest.issues.createComment({
               ...context.repo,
