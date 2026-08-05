@@ -2,6 +2,7 @@ import { NavLink, Outlet } from "react-router-dom"
 import { Separator } from "@/components/ui/separator"
 import { Toaster } from "@/components/ui/sonner"
 import { UserMenu } from "@/components/UserMenu"
+import { SoonTag } from "@/components/SoonTag"
 import { cn } from "@/lib/utils"
 
 // Top-nav link styling. The active item carries a foreground underline so the
@@ -23,16 +24,26 @@ export function AppShell() {
         <header className="pb-6 pt-8">
           <h1 className="text-2xl font-semibold">LibrePod</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Self-hosted apps, one click away
+            Your apps and your device, one place
           </p>
           <div className="mt-5 flex items-center gap-6">
             <nav className="flex items-center gap-6" aria-label="Main navigation">
               <NavLink to="/" end className={navLinkClassName}>
+                Apps
+              </NavLink>
+              <NavLink to="/catalog" className={navLinkClassName}>
                 Catalog
               </NavLink>
-              <NavLink to="/my-apps" className={navLinkClassName}>
-                My Apps
-              </NavLink>
+              {/* Users management is on the roadmap — shown as a disabled,
+                  non-navigable item so the control-plane shape is legible
+                  without offering a dead link. */}
+              <span
+                aria-disabled
+                className="inline-flex cursor-default items-center gap-1.5 text-sm font-medium text-muted-foreground/60"
+              >
+                Users
+                <SoonTag />
+              </span>
             </nav>
             <UserMenu />
           </div>

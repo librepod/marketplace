@@ -16,7 +16,7 @@ test.describe("resilience", () => {
     }
 
     // No usable cluster → FluxStatusService degrades silently; the UI still works.
-    await page.goto("/");
+    await page.goto("/catalog");
     await expect(page.getByRole("link", { name: "Vaultwarden" })).toBeVisible();
     // Install actions are actionable even without a cluster.
     await page.getByRole("link", { name: "Vaultwarden" }).click();
@@ -24,12 +24,13 @@ test.describe("resilience", () => {
   });
 
   test("deep-link reload on a client route does not 404", async ({ page }) => {
-    // Navigate client-side, then reload — must serve index.html (SPA fallback).
+    // Navigate client-side to the catalog, then reload — must serve index.html
+    // (SPA fallback), not 404 on a non-root deep link.
     await page.goto("/");
-    await page.getByRole("link", { name: "My Apps" }).click();
-    await expect(page).toHaveURL(/\/my-apps/);
+    await page.getByRole("link", { name: "Catalog" }).click();
+    await expect(page).toHaveURL(/\/catalog/);
     await page.reload();
-    await expect(page.getByRole("heading", { name: /My Apps/ })).toBeVisible();
-    expect(page.url()).toMatch(/\/my-apps/);
+    await expect(page).toHaveURL(/\/catalog/);
+    await expect(page.getByRole("heading", { name: "LibrePod", level: 1 })).toBeVisible();
   });
 });

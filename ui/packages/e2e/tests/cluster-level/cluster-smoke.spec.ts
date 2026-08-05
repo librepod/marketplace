@@ -12,7 +12,8 @@ test("catalog renders against the live cluster", async ({ page, request }) => {
   // CatalogService filters out Infrastructure apps (system apps, not user-installable).
   expect(apps.every((a) => a.category !== "Infrastructure")).toBeTruthy();
 
-  await page.goto("/");
+  // The catalog moved to /catalog; / is the installed-apps control plane.
+  await page.goto("/catalog");
   await expect(page.getByRole("heading", { name: "LibrePod", level: 1 })).toBeVisible();
   // AppCard renders the whole card as a <Link aria-label={displayName}>.
   await expect(page.getByRole("link", { name: apps[0].displayName })).toBeVisible();

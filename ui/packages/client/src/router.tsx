@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router-dom"
+import { createBrowserRouter, Navigate } from "react-router-dom"
 import { AppShell } from "./components/AppShell"
 import { AuthGate } from "./components/AuthGate"
 import { CatalogPage } from "./pages/CatalogPage"
@@ -14,9 +14,12 @@ export const router = createBrowserRouter([
       </AuthGate>
     ),
     children: [
-      { path: "/", element: <CatalogPage /> },
+      // The control plane is home: the daily action is opening an installed app.
+      { path: "/", element: <MyAppsPage /> },
+      { path: "/catalog", element: <CatalogPage /> },
       { path: "/apps/:name", element: <AppDetailPage /> },
-      { path: "/my-apps", element: <MyAppsPage /> },
+      // Legacy alias — the installed grid used to live here.
+      { path: "/my-apps", element: <Navigate to="/" replace /> },
       { path: "*", element: <NotFoundPage /> },
     ],
   },

@@ -11,8 +11,9 @@ export class AppShell {
     return this.nav().getByRole("link", { name: "Catalog" }).click();
   }
 
+  // The installed-apps control plane is home; its nav item is labelled "Apps".
   goToMyApps(): Promise<void> {
-    return this.nav().getByRole("link", { name: "My Apps" }).click();
+    return this.nav().getByRole("link", { name: "Apps", exact: true }).click();
   }
 
   // Match toasts by visible text. Sonner success toasts and StatusBadge both

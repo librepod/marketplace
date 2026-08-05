@@ -122,7 +122,7 @@ export function AppDetailPage() {
   return (
     <div className="mx-auto max-w-2xl">
       <Link
-        to="/"
+        to="/catalog"
         className="text-sm text-muted-foreground hover:underline"
       >
         ← Back to catalog

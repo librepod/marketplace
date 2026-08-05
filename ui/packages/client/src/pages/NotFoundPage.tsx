@@ -22,7 +22,7 @@ export function NotFoundPage({
         to="/"
         className="mt-4 inline-block text-sm text-muted-foreground hover:underline"
       >
-        ← Back to catalog
+        ← Back to your apps
       </Link>
     </div>
   )

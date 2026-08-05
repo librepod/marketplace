@@ -19,6 +19,25 @@ const mockInstalledApps: CatalogApp[] = [
   },
 ]
 
+// MyAppsPage fetches BOTH /api/installed (the grid) and /api/config (the base
+// domain used to build launch URLs). Route the mock by URL so order doesn't
+// matter and config always resolves.
+function mockFetch(installed: CatalogApp[] | { ok: false; status: number }) {
+  return vi.spyOn(global, 'fetch').mockImplementation((input) => {
+    const url = String(input)
+    if (url.includes('/api/config')) {
+      return Promise.resolve({ ok: true, json: async () => ({ baseDomain: 'libre.pod' }) } as Response)
+    }
+    if (url.includes('/api/installed')) {
+      if (Array.isArray(installed)) {
+        return Promise.resolve({ ok: true, json: async () => installed } as Response)
+      }
+      return Promise.resolve(installed as Response)
+    }
+    return Promise.reject(new Error(`unexpected fetch: ${url}`))
+  })
+}
+
 function createWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: 0 } },
@@ -43,45 +62,50 @@ describe('MyAppsPage (INST-03)', () => {
     expect(skeletons.length).toBeGreaterThan(0)
   })
 
-  it('renders installed app cards after data loads (INST-03)', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockInstalledApps,
-    } as Response)
+  it('renders installed apps as launch tiles after data loads (INST-03)', async () => {
+    mockFetch(mockInstalledApps)
     render(<MyAppsPage />, { wrapper: createWrapper() })
     await waitFor(() => {
       expect(screen.getByText('Vaultwarden')).toBeInTheDocument()
     })
   })
 
+  it('a running tile links directly to the live app URL, opening in a new tab', async () => {
+    mockFetch(mockInstalledApps)
+    render(<MyAppsPage />, { wrapper: createWrapper() })
+    const launch = await screen.findByRole('link', { name: /open vaultwarden/i })
+    expect(launch).toHaveAttribute('href', 'https://vaultwarden.libre.pod')
+    expect(launch).toHaveAttribute('target', '_blank')
+    expect(launch).toHaveAttribute('rel', expect.stringContaining('noopener'))
+  })
+
+  it('every tile exposes a manage link to the app detail page', async () => {
+    mockFetch(mockInstalledApps)
+    render(<MyAppsPage />, { wrapper: createWrapper() })
+    const manage = await screen.findByRole('link', { name: /manage vaultwarden/i })
+    expect(manage).toHaveAttribute('href', '/apps/vaultwarden')
+  })
+
   it('shows error block on fetch failure', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-    } as Response)
+    mockFetch({ ok: false, status: 500 })
     render(<MyAppsPage />, { wrapper: createWrapper() })
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: "Couldn't reach your device" })).toBeInTheDocument()
     })
   })
 
-  it('shows empty state when no apps installed (INST-03)', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      json: async () => [],
-    } as Response)
+  it('shows the first-run welcome when no apps installed (INST-03)', async () => {
+    mockFetch([])
     render(<MyAppsPage />, { wrapper: createWrapper() })
     await waitFor(() => {
-      // Empty state message — MyAppsPage uses different copy from CatalogPage
-      expect(screen.getByText(/no apps installed/i)).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /welcome to your librepod/i })).toBeInTheDocument()
     })
+    // The first-run CTA points at the catalog.
+    expect(screen.getByRole('link', { name: /browse the catalog/i })).toHaveAttribute('href', '/catalog')
   })
 
   it('fetches from /api/installed endpoint (INST-03)', async () => {
-    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      json: async () => [],
-    } as Response)
+    const fetchSpy = mockFetch([])
     render(<MyAppsPage />, { wrapper: createWrapper() })
     await waitFor(() => {
       // apiFetch wraps fetch and always sends credentials: 'include' so the
@@ -92,16 +116,16 @@ describe('MyAppsPage (INST-03)', () => {
     })
   })
 
-  it('installed app cards show StatusBadge when installedStatus is running (STAT-01)', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockInstalledApps,
-    } as Response)
+  it('the device summary reports a running count and status (STAT-01)', async () => {
+    mockFetch(mockInstalledApps)
     render(<MyAppsPage />, { wrapper: createWrapper() })
     await waitFor(() => {
       expect(screen.getByText('Vaultwarden')).toBeInTheDocument()
     })
-    // StatusBadge renders 'Running' label for running apps (STAT-01, D-13)
-    expect(screen.getByText('Running')).toBeInTheDocument()
+    // The tile carries a StatusBadge (role=status) reading 'Running' (STAT-01, D-13).
+    expect(screen.getByRole('status')).toHaveTextContent(/Running/)
+    // The device summary region labels the running count.
+    const summary = screen.getByRole('region', { name: /device status/i })
+    expect(summary).toHaveTextContent(/Running/)
   })
 })
