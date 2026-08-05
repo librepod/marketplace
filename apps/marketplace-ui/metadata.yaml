@@ -8,8 +8,8 @@ spec:
   icon: "https://raw.githubusercontent.com/nicehash/rest-clients-demo/master/img/app-store.png"
   category: "System"
   website: "https://github.com/librepod/marketplace"
-  version: "0.2.2"
-  appVersion: "0.2.2"
+  version: "0.3.0"
+  appVersion: "0.3.0"
   source:
     type: oci-kustomize
     url: "oci://ghcr.io/librepod/marketplace/apps/marketplace-ui"
