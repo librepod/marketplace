@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: renovate
+  namespace: renovate
+spec:
+  # Hardcoded on purpose: the cadence is NOT a Flux-substituted param.
+  # Substituting into this scalar is unsafe — kustomize strips the quotes
+  # around a ${SCHEDULE} token, and values that start with a reserved YAML
+  # char (@hourly, @daily, * * * * *) then produce invalid YAML at reconcile
+  # time. Operators change the cadence by editing this line (same model as
+  # editing the config.json ConfigMap). A literal value keeps the quotes it
+  # needs, so any cron expression or @-descriptor is valid here.
+  schedule: "@hourly"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 12021
+            fsGroup: 12021
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: renovate
+              image: renovate/renovate
+              envFrom:
+                - configMapRef:
+                    name: renovate
+                - secretRef:
+                    name: renovate-env
+              volumeMounts:
+                - name: config
+                  mountPath: /opt/renovate
+                  readOnly: true
+                - name: work
+                  mountPath: /tmp/renovate
+                - name: cache
+                  mountPath: /tmp/renovate/cache
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  memory: 1Gi
+          volumes:
+            - name: config
+              configMap:
+                name: renovate-config
+            - name: work
+              emptyDir: {}
+            - name: cache
+              persistentVolumeClaim:
+                claimName: renovate-cache
