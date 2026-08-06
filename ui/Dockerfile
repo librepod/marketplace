@@ -1,5 +1,5 @@
 # Stage 1: Build client and server
-FROM node:22-alpine AS builder
+FROM node:24-alpine AS builder
 WORKDIR /app
 
 # Copy workspace root package files first for layer caching
@@ -18,7 +18,7 @@ COPY . .
 RUN npm run build:client && npm run build
 
 # Stage 2: Minimal production image
-FROM node:22-alpine AS production
+FROM node:24-alpine AS production
 WORKDIR /app
 
 # Copy workspace root package files
