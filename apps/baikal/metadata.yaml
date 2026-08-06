@@ -10,6 +10,7 @@ spec:
   website: "https://github.com/sabre-io/Baikal"
 
   # renovate: datasource=docker depName=ghcr.io/aalmenar/baikal
+  # serge: notesRepo=sabre-io/Baikal
   version: "0.11.1-nginx"
 
   source:

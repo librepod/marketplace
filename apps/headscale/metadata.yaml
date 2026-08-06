@@ -10,6 +10,7 @@ spec:
   website: "https://github.com/juanfont/headscale"
 
   # renovate: datasource=docker depName=headscale/headscale
+  # serge: notesRepo=juanfont/headscale
   version: "v0.28.0"
 
   source:

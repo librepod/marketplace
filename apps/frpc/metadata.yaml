@@ -10,6 +10,7 @@ spec:
   website: "https://github.com/fatedier/frp"
 
   # renovate: datasource=docker depName=ghcr.io/fatedier/frpc
+  # serge: notesRepo=fatedier/frp
   version: "v0.65.0"
 
   source:

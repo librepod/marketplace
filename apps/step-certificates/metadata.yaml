@@ -10,6 +10,7 @@ spec:
   website: "https://smallstep.com/docs/step-ca"
 
   # renovate: datasource=docker depName=cr.smallstep.com/smallstep/step-ca
+  # serge: notesRepo=smallstep/certificates
   version: "0.29.0"
 
   source:

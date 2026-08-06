@@ -10,6 +10,7 @@ spec:
   website: "https://smallstep.com/docs/step-ca/certmanager"
 
   # renovate: datasource=github-releases depName=smallstep/step-issuer
+  # serge: notesRepo=smallstep/step-issuer
   version: "0.9.11"
 
   source:

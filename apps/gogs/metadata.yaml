@@ -10,6 +10,7 @@ spec:
   website: "https://gogs.io/"
 
   # renovate: datasource=docker depName=gogs/gogs
+  # serge: notesRepo=gogs/gogs
   version: "0.14.3"
 
   source:

@@ -10,6 +10,7 @@ spec:
   website: "https://github.com/traefik/whoami"
 
   # renovate: datasource=docker depName=traefik/whoami
+  # serge: notesRepo=traefik/whoami
   version: "v1.11.0"
 
   source:
