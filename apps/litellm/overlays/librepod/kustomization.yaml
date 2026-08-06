@@ -26,7 +26,7 @@ images:
 - name: litellm/litellm
   newTag: v1.93.0
 - name: postgres
-  newTag: 16-alpine
+  newTag: 18-alpine
 
 
 patches:
