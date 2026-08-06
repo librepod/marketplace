@@ -68,7 +68,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/tailscale
         ref:
-          tag: "1.98.4"
+          tag: "__VERSION__"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization

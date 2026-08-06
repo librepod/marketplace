@@ -78,7 +78,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/seafile
         ref:
-          tag: "13.0-latest"
+          tag: "__VERSION__"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization

@@ -50,7 +50,7 @@ spec:
           !/overlays
           !/metadata.yaml
         ref:
-          tag: "0.14.3"
+          tag: "__VERSION__"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization

@@ -34,7 +34,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/casdoor-sso-controller
         ref:
-          tag: "0.2.5"
+          tag: "__VERSION__"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization

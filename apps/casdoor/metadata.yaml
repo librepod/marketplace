@@ -44,7 +44,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/casdoor
         ref:
-          tag: "3.106.0"
+          tag: "__VERSION__"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization

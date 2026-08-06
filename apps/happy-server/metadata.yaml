@@ -58,7 +58,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/happy-server
         ref:
-          tag: "latest"
+          tag: "__VERSION__"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization

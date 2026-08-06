@@ -40,7 +40,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/rustdesk-server-oss
         ref:
-          tag: "1.1.15"
+          tag: "__VERSION__"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization
