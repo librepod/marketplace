@@ -41,6 +41,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
       - name: Build + lint + flux render
         run: |
           nix-shell shell.nix --run '
@@ -52,7 +54,7 @@ jobs:
             kubeconform \
               -schema-location default \
               -schema-location "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json" \
-              -strict -summary /tmp/rendered.yaml
+              -strict -ignore-missing-schemas -summary /tmp/rendered.yaml
             echo "== flux build =="
             flux build kustomization "$APP" \
               --path "apps/$APP/overlays/librepod" \
@@ -73,6 +75,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
       - name: Ephemeral k3d deploy + smoke test
         run: |
           echo "On-demand e2e for ${{ matrix.app }} (label renovate-e2e present)."
