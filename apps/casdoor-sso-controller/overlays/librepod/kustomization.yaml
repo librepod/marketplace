@@ -2,3 +2,6 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../base
+images:
+- name: ghcr.io/librepod/casdoor-sso-controller
+  newTag: "0.2.5"
