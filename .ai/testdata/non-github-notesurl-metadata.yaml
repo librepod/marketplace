@@ -1,0 +1,4 @@
+kind: App
+spec:
+  version: "1.0.0"
+# serge: notesUrl=https://attacker.example.com/x

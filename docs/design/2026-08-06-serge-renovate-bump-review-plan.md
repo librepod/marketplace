@@ -18,7 +18,7 @@
 - **Hint comment format:** exactly `# serge: notesRepo=<owner>/<repo>` or `# serge: notesUrl=<url>`, placed on the line immediately after the existing `# renovate:` comment and immediately before `version:`. (Spec §Component 3.)
 - **Conservative default:** when release notes are absent/unfetched OR confidence is low, the verdict is REVIEW, never SAFE. (Spec §Component 2.)
 - **Never review `catalog.yaml`** (generated). (Spec §Component 2.)
-- **Fetch the whole tag range** old..new, not just the endpoints — intermediate releases carry breaking changes. (Spec §Component 1, "Invariants".)
+- **Notes fetch scope:** fetches the target (new) tag's release notes, with a recent-releases list fallback; a full old..new range-walk is future work — intermediate-release notes may be missed on multi-minor jumps. (Spec §Component 1, "Invariants".)
 
 **Reference:** spec at `docs/design/2026-08-06-serge-renovate-bump-review-design.md`; action customization facts in memory `serge-action-customization-surface`.
 

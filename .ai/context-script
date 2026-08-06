@@ -26,13 +26,41 @@ gh_get() {
   fi
 }
 
-# Plain GET (no Accept override) for arbitrary notesUrl hints.
+# Plain GET (no Accept override) for arbitrary notesUrl hints. By the time
+# this is called, notes_url has already been validated (see below) to have
+# an allowlisted GitHub host — so it's always safe to attach the token here.
+# We never reach this function with a non-GitHub host.
 plain_get() {
   if [ -n "${GITHUB_TOKEN:-}" ]; then
     curl -sSL -H "Authorization: Bearer $GITHUB_TOKEN" "$1" 2>/dev/null
   else
     curl -sSL "$1" 2>/dev/null
   fi
+}
+
+# Extract the host (authority) from a validated https:// URL. POSIX-safe:
+# strip the "https://" scheme, then cut at the first '/', '?', or '#' to
+# isolate the authority component. $1 = full URL, assumed to already start
+# with "https://" (caller checks this first).
+url_host() {
+  rest=${1#https://}
+  # Cut at the first delimiter that ends the authority component.
+  host=$rest
+  host=${host%%/*}
+  host=${host%%\?*}
+  host=${host%%#*}
+  printf '%s' "$host"
+}
+
+# Allowlist of GitHub hosts the token (and any request) may be sent to.
+# notesUrl is attacker-controlled (PR content), so any host outside this
+# list must never see the Authorization header — and, per the maintainer's
+# decision, must be rejected outright rather than fetched unauthenticated.
+is_github_host() {
+  case "$1" in
+    api.github.com|raw.githubusercontent.com|objects.githubusercontent.com|github.com) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 input=$(cat)
@@ -87,6 +115,21 @@ for f in $metafiles; do
   fi
   if [ -n "$notes_url" ] && printf '%s' "$notes_url" | grep -Eq '[^A-Za-z0-9._~:/?#@!$&'"'"'()*+,;=%-]'; then
     notes_url="" # contains a shell metachar, whitespace, or other disallowed byte
+  fi
+  if [ -n "$notes_url" ]; then
+    notes_host=$(url_host "$notes_url")
+    # Reject userinfo in the authority (e.g. https://api.github.com@evil.example/)
+    # and any host not on the GitHub allowlist. This is the security boundary
+    # that keeps GITHUB_TOKEN from ever reaching an attacker-controlled host —
+    # notesUrl comes straight from PR-controlled metadata.yaml content.
+    case "$notes_host" in
+      *@*) notes_url="" ;;
+      *)
+        if ! is_github_host "$notes_host"; then
+          notes_url=""
+        fi
+        ;;
+    esac
   fi
 
   if [ -z "$notes_repo" ] && [ -z "$notes_url" ]; then

@@ -65,7 +65,8 @@ Renovate opens PR #NNN (bumps spec.version in apps/<app>/metadata.yaml)
         │        • find changed apps/<app>/metadata.yaml
         │        • old→new spec.version (new = file, old = git show base:)
         │        • read "# serge: notesRepo=<owner>/<repo>" hint
-        │        • fetch release notes for the tag RANGE via GitHub API
+        │        • fetch release notes for the target (new) tag via GitHub
+        │          API, with a recent-releases fallback (not a full range-walk)
         │        • print { "context": "<app> v_old→v_new\n\n<notes|note>" }
         │        • FAIL-SOFT: on any miss, emit a "notes not fetched" context, exit 0
         │
@@ -95,16 +96,21 @@ additions, deletions, previous_path }] }`.
 3. Read the app's resolution hint from the metadata comment:
    `# serge: notesRepo=<owner>/<repo>` (GitHub), with optional
    `notesUrl=<url>` for non-GitHub changelogs.
-4. Fetch release notes for every tag in `old..new` via the GitHub releases
-   API (`GET /repos/{owner}/{repo}/releases/tags/{tag}`), authenticated with
-   the workflow token. Concatenate; truncate to ~12k chars.
+4. Fetch release notes for the target (new) tag via the GitHub releases API
+   (`GET /repos/{owner}/{repo}/releases/tags/{tag}`), authenticated with the
+   workflow token; try a couple of tag spellings (`v1.2.3` / `1.2.3`). If
+   that misses, fall back to a recent-releases list (`GET
+   /repos/{owner}/{repo}/releases?per_page=10`). Concatenate; truncate to
+   ~12k chars. A full old..new range-walk is future work — intermediate-
+   release notes may be missed on multi-minor jumps.
 5. **Output** `{ "context": "..." }`. On missing hint / fetch failure, emit a
    "⚠️ Release notes NOT auto-fetched … default toward REVIEW" context and
    **exit 0**.
 
-**Invariants:** always exit 0 (never fail the review); fetch the whole tag
-range (intermediate releases carry breaking changes too); cap size to protect
-`max_diff_chars`.
+**Invariants:** always exit 0 (never fail the review); fetches the target
+(new) tag's release notes, with a recent-releases list fallback — a full
+old..new range-walk is future work, so intermediate-release notes may be
+missed on multi-minor jumps; cap size to protect `max_diff_chars`.
 
 ### 2. `.ai/review-rules.md` (policy)
 

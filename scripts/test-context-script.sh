@@ -49,4 +49,27 @@ cleanup_inject_test
 trap - EXIT
 echo "PASS test 3"
 
+echo "== test 4: notesUrl pointing at a non-GitHub host is rejected before any fetch, exit 0 =="
+# Regression test for the token-exfiltration finding: a metadata.yaml
+# carrying a '# serge: notesUrl=...' hint whose host is NOT on the GitHub
+# allowlist must degrade to the 'not fetched' marker and exit 0. The host
+# allowlist check runs before any curl call, so this is network-free even
+# though attacker.example.com is a syntactically well-formed, resolvable-
+# looking host (unlike test 3's garbage URL).
+HOST_TEST_APP_DIR="apps/__context-script-test-non-github-host__"
+cleanup_host_test() { rm -rf "$HOST_TEST_APP_DIR"; }
+trap cleanup_host_test EXIT
+
+mkdir -p "$HOST_TEST_APP_DIR"
+cp .ai/testdata/non-github-notesurl-metadata.yaml "$HOST_TEST_APP_DIR/metadata.yaml"
+
+out=$(cat .ai/testdata/pr-non-github-notesurl.json | sh "$SCRIPT") || fail "script exited non-zero on non-GitHub notesUrl"
+echo "$out" | jq -e '.context' >/dev/null 2>&1 || fail "non-GitHub-host output is not {context:...} JSON"
+echo "$out" | jq -r '.context' | grep -q "Release notes NOT auto-fetched" \
+  || fail "non-GitHub notesUrl host was not rejected/degraded"
+
+cleanup_host_test
+trap - EXIT
+echo "PASS test 4"
+
 echo "ALL TESTS PASSED"
