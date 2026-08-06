@@ -37,7 +37,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: sigstore/cosign-installer@v4.1.1
+      - uses: sigstore/cosign-installer@v4.1.2
         with: { cosign-release: 'v3.0.6' }
       - name: Get app version
         id: version
