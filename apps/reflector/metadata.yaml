@@ -10,7 +10,7 @@ spec:
   website: "https://github.com/emberstack/kubernetes-reflector"
 
   # renovate: datasource=docker depName=ghcr.io/emberstack/helm-charts/reflector
-  version: "10.0.0"
+  version: "10.0.63"
 
   source:
     type: oci-kustomize
