@@ -9,6 +9,7 @@ spec:
   category: "Network"
   website: "https://github.com/fatedier/frp"
 
+  # renovate: datasource=docker depName=ghcr.io/fatedier/frpc
   version: "v0.65.0"
 
   source:

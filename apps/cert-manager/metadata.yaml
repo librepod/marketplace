@@ -9,6 +9,7 @@ spec:
   category: "Infrastructure"
   website: "https://cert-manager.io/"
 
+  # renovate: datasource=docker depName=quay.io/jetstack/charts/cert-manager
   version: "1.20.0"
 
   source:

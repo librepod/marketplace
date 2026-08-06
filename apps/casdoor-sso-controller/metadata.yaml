@@ -9,6 +9,7 @@ spec:
   category: "Security"
   website: "https://github.com/librepod/marketplace"
 
+  # renovate: datasource=docker depName=ghcr.io/librepod/casdoor-sso-controller
   version: "0.2.5"
 
   source:

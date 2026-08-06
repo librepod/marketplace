@@ -9,6 +9,7 @@ spec:
   category: "Infrastructure"
   website: "https://smallstep.com/docs/step-ca"
 
+  # renovate: datasource=docker depName=cr.smallstep.com/smallstep/step-ca
   version: "0.29.0"
 
   source:

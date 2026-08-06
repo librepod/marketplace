@@ -9,6 +9,7 @@ spec:
   category: "Security"
   website: "https://github.com/dani-garcia/vaultwarden"
 
+  # renovate: datasource=docker depName=vaultwarden/server
   version: "1.37.0"
 
   source:

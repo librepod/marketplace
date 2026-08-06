@@ -17,24 +17,23 @@
       customType: "regex",
       managerFilePatterns: ["/apps/.*/metadata\\.yaml/"],
       matchStrings: [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+version:\\s*\"?(?<currentValue>[^\"\\s]+)\"?",
+        // datasource + depName are required; registryUrl + extractVersion are
+        // optional trailing fields (used by the classic-helm and github-releases
+        // apps). Order after depName is fixed: [registryUrl] then [extractVersion].
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: registryUrl=(?<registryUrl>\\S+))?(?: extractVersion=(?<extractVersion>\\S+))?\\s+version:\\s*\"?(?<currentValue>[^\"\\s]+)\"?",
       ],
     },
   ],
   packageRules: [
     // --- Scope: only track apps/. Everything else (ui/ npm, .github/ actions,
-    // go.mod) is disabled for now — the mission is app image/chart updates.
+    // go.mod) is disabled — the mission is app image/chart updates.
     // Re-enable those areas deliberately later if desired.
     { matchFileNames: ["**/*", "!apps/**"], enabled: false },
-
-    // --- Pilot gate: within apps/, only the three pilot apps are active.
-    // Task 12 removes this once the pilot is signed off.
-    { matchFileNames: ["apps/**"], enabled: false },
-    { matchFileNames: ["apps/gogs/**", "apps/litellm/**", "apps/whoami/**"], enabled: true },
 
     // --- Pin vendored dependency images. A sidecar shipped by the app vendor
     // (e.g. postgres:16) is a compatibility contract, not something to chase —
     // bumping it can break the product. Only the app's OWN image should move.
+    // (couchdb is intentionally NOT pinned: it IS the obsidian-livesync app.)
     {
       matchDatasources: ["docker"],
       matchPackageNames: [
@@ -44,15 +43,15 @@
         "mysql",
         "memcached",
         "valkey",
+        "minio/minio",
         "ghcr.io/immich-app/postgres",
       ],
       enabled: false,
     },
 
-    // --- One grouped PR per pilot app (image bump + spec.version together).
-    { matchFileNames: ["apps/gogs/**"], groupName: "gogs" },
-    { matchFileNames: ["apps/litellm/**"], groupName: "litellm" },
-    { matchFileNames: ["apps/whoami/**"], groupName: "whoami" },
+    // --- One grouped PR per app: the image/chart bump + the spec.version bump
+    // land together, keyed by the app's directory (apps/<app>).
+    { matchFileNames: ["apps/*/**"], groupName: "{{packageFileDir}}" },
 
     // --- Major bumps get the e2e label + their own PR.
     { matchUpdateTypes: ["major"], addLabels: ["renovate-e2e"] },

@@ -9,6 +9,7 @@ spec:
   category: "Productivity"
   website: "https://github.com/sabre-io/Baikal"
 
+  # renovate: datasource=docker depName=ghcr.io/aalmenar/baikal
   version: "0.11.1-nginx"
 
   source:

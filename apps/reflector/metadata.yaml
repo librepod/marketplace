@@ -9,6 +9,7 @@ spec:
   category: "Infrastructure"
   website: "https://github.com/emberstack/kubernetes-reflector"
 
+  # renovate: datasource=docker depName=ghcr.io/emberstack/helm-charts/reflector
   version: "10.0.0"
 
   source:

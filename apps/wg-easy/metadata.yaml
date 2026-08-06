@@ -9,6 +9,7 @@ spec:
   category: "Network"
   website: "https://github.com/wg-easy/wg-easy"
 
+  # renovate: datasource=docker depName=ghcr.io/wg-easy/wg-easy
   version: "15.3.0"
 
   source:

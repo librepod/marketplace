@@ -9,6 +9,7 @@ spec:
   category: "Infrastructure"
   website: "https://external-secrets.io/"
 
+  # renovate: datasource=helm depName=external-secrets registryUrl=https://charts.external-secrets.io
   version: "2.2.0"
 
   source:
