@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-08-06T09:27:15Z"
+  generatedAt: "2026-08-06T09:29:58Z"
 apps:
     - name: baikal
       version: "0.11.1-nginx"
@@ -126,7 +126,7 @@ apps:
       displayName: "Casdoor SSO Controller"
       description: "Auto-provisions Casdoor OIDC applications for native-SSO apps"
       category: "Security"
-      icon: ""
+      icon: "https://cdn.casbin.org/img/casdoor-logo_1185x256.png"
       sourceType: oci-kustomize
       sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/casdoor-sso-controller"
       templates:
@@ -424,7 +424,7 @@ apps:
       displayName: "FRP Operator"
       description: "Kubernetes operator for managing FRP clients via CRDs"
       category: "Network"
-      icon: ""
+      icon: "https://raw.githubusercontent.com/fatedier/frp/dev/web/frpc/src/assets/icons/logo.svg"
       sourceType: oci-kustomize
       sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/frp-operator"
       templates:

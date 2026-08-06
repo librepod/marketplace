@@ -5,6 +5,7 @@ metadata:
 spec:
   displayName: "FRP Operator"
   description: "Kubernetes operator for managing FRP clients via CRDs"
+  icon: "https://raw.githubusercontent.com/fatedier/frp/dev/web/frpc/src/assets/icons/logo.svg"
   category: "Network"
   website: "https://github.com/zufardhiyaulhaq/frp-operator"
 

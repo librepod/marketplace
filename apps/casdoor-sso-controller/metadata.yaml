@@ -5,6 +5,7 @@ metadata:
 spec:
   displayName: "Casdoor SSO Controller"
   description: "Auto-provisions Casdoor OIDC applications for native-SSO apps"
+  icon: "https://cdn.casbin.org/img/casdoor-logo_1185x256.png"
   category: "Security"
   website: "https://github.com/librepod/marketplace"
 

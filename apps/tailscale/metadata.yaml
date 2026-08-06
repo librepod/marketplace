@@ -43,17 +43,6 @@ spec:
       - kind: StorageClass
         description: "nfs-client (provided by nfs-provisioner app)"
 
-  notes: |
-    Generate an auth key from your control server:
-    - Tailscale SaaS: https://login.tailscale.com/admin/settings/keys
-    - Headscale: headscale preauthkeys create --user <ID> --reusable
-
-    Use a reusable key so the node can re-authenticate if the pod is recreated.
-
-    TS_ROUTES sets --advertise-routes automatically (e.g. "10.42.0.0/16,10.43.0.0/16").
-    TS_ACCEPT_DNS and TS_USERSPACE default to false (Tailscale's built-in defaults).
-    To change them, add flags to TS_EXTRA_ARGS (e.g. --accept-dns).
-
   templates:
     source: |
       apiVersion: source.toolkit.fluxcd.io/v1
