@@ -22,11 +22,39 @@
     },
   ],
   packageRules: [
+    // --- Scope: only track apps/. Everything else (ui/ npm, .github/ actions,
+    // go.mod) is disabled for now — the mission is app image/chart updates.
+    // Re-enable those areas deliberately later if desired.
+    { matchFileNames: ["**/*", "!apps/**"], enabled: false },
+
+    // --- Pilot gate: within apps/, only the three pilot apps are active.
+    // Task 12 removes this once the pilot is signed off.
     { matchFileNames: ["apps/**"], enabled: false },
     { matchFileNames: ["apps/gogs/**", "apps/litellm/**", "apps/whoami/**"], enabled: true },
+
+    // --- Pin vendored dependency images. A sidecar shipped by the app vendor
+    // (e.g. postgres:16) is a compatibility contract, not something to chase —
+    // bumping it can break the product. Only the app's OWN image should move.
+    {
+      matchDatasources: ["docker"],
+      matchPackageNames: [
+        "postgres",
+        "redis",
+        "mariadb",
+        "mysql",
+        "memcached",
+        "valkey",
+        "ghcr.io/immich-app/postgres",
+      ],
+      enabled: false,
+    },
+
+    // --- One grouped PR per pilot app (image bump + spec.version together).
     { matchFileNames: ["apps/gogs/**"], groupName: "gogs" },
     { matchFileNames: ["apps/litellm/**"], groupName: "litellm" },
     { matchFileNames: ["apps/whoami/**"], groupName: "whoami" },
+
+    // --- Major bumps get the e2e label + their own PR.
     { matchUpdateTypes: ["major"], addLabels: ["renovate-e2e"] },
   ],
 }
