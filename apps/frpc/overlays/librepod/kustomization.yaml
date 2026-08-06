@@ -9,4 +9,4 @@ resources:
 
 images:
 - name: ghcr.io/fatedier/frpc
-  newTag: v0.65.0
+  newTag: v0.70.1
