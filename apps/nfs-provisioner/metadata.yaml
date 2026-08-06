@@ -9,6 +9,7 @@ spec:
   category: "Infrastructure"
   website: "https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner"
 
+  # renovate: datasource=github-releases depName=kubernetes-sigs/nfs-subdir-external-provisioner extractVersion=^nfs-subdir-external-provisioner-(?<version>.+)$
   version: "4.0.18"
 
   source:

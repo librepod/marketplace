@@ -9,6 +9,7 @@ spec:
   category: "Infrastructure"
   website: "https://traefik.io/"
 
+  # renovate: datasource=docker depName=traefik
   version: "v3.6.15"
 
   source:

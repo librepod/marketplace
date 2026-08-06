@@ -9,6 +9,9 @@ spec:
   category: "Productivity"
   website: "https://github.com/haiwen/seafile"
 
+  # NOTE: "13.0-latest" is a rolling tag, not pinned — Renovate cannot
+  # track it. Pin to a concrete patch tag first, then add a renovate
+  # annotation for image seafileltd/seafile-mc (datasource docker).
   version: "13.0-latest"
 
   source:

@@ -9,6 +9,9 @@ spec:
   category: "Productivity"
   website: "https://github.com/denysvitali/happy-server"
 
+  # NOTE: rolling tag, not pinned — Renovate cannot track it. Pin to a
+  # concrete released tag first, then add a renovate annotation for
+  # image ghcr.io/denysvitali/happy-server (datasource docker).
   version: "latest"
 
   source:

@@ -9,6 +9,7 @@ spec:
   category: "Security"
   website: "https://casdoor.org/"
 
+  # renovate: datasource=docker depName=registry-1.docker.io/casbin/casdoor-helm-charts
   version: "3.106.0"
 
   source:

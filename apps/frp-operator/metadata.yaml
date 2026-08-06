@@ -9,6 +9,7 @@ spec:
   category: "Network"
   website: "https://github.com/zufardhiyaulhaq/frp-operator"
 
+  # renovate: datasource=docker depName=ghcr.io/librepod/frp-operator
   version: "v0.9.0"
 
   source:

@@ -9,6 +9,7 @@ spec:
   category: "Productivity"
   website: "https://github.com/vrtmrz/obsidian-livesync"
 
+  # renovate: datasource=docker depName=couchdb
   version: "3.5.1"
 
   source:
