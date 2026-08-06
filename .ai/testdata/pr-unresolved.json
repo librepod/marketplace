@@ -1,0 +1,7 @@
+{
+  "title": "chore(deps): update some app",
+  "body": "",
+  "files": [
+    { "path": "apps/DOES-NOT-EXIST/metadata.yaml", "status": "modified", "additions": 1, "deletions": 1 }
+  ]
+}

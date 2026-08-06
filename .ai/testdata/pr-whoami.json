@@ -1,0 +1,7 @@
+{
+  "title": "chore(deps): update traefik/whoami docker tag to v1.11.0",
+  "body": "Bumps whoami.",
+  "files": [
+    { "path": "apps/whoami/metadata.yaml", "status": "modified", "additions": 1, "deletions": 1 }
+  ]
+}
