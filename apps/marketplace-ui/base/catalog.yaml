@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-08-06T12:40:27Z"
+  generatedAt: "2026-08-06T12:50:13Z"
 apps:
     - name: baikal
       version: "0.11.1-nginx"
@@ -778,7 +778,7 @@ apps:
                 type: random
                 length: 40
     - name: litellm
-      version: "v1.93.0"
+      version: "v1.95.0"
       displayName: "LiteLLM"
       description: "Open-source API gateway for 100+ LLM providers"
       category: "AI"
@@ -799,7 +799,7 @@ apps:
               interval: 10m
               url: oci://ghcr.io/librepod/marketplace/apps/litellm
               ref:
-                tag: "v1.93.0"
+                tag: "v1.95.0"
         release: |
             apiVersion: kustomize.toolkit.fluxcd.io/v1
             kind: Kustomization
