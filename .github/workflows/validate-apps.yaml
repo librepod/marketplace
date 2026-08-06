@@ -1,0 +1,81 @@
+name: Validate App Manifests
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'apps/*/metadata.yaml'
+      - 'apps/*/base/**'
+      - 'apps/*/overlays/**'
+      - 'apps/*/components/**'
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.changes.outputs.apps }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: changes
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          CHANGED=$(git diff --name-only "${BASE}" HEAD -- 'apps/' | cut -d'/' -f2 | sort -u)
+          APPS="[]"
+          for app in $CHANGED; do
+            [ -f "apps/$app/metadata.yaml" ] || continue
+            [ -d "apps/$app/overlays/librepod" ] || continue
+            APPS=$(echo "$APPS" | jq --arg a "$app" '. + [$a]')
+          done
+          echo "apps=$(echo "$APPS" | jq -c .)" >> "$GITHUB_OUTPUT"
+
+  validate:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.apps != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.detect-changes.outputs.apps) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31
+      - name: Build + lint + flux render
+        run: |
+          nix-shell shell.nix --run '
+            set -euo pipefail
+            APP=${{ matrix.app }}
+            echo "== kustomize build =="
+            kustomize build "apps/$APP/overlays/librepod" > /tmp/rendered.yaml
+            echo "== kubeconform =="
+            kubeconform \
+              -schema-location default \
+              -schema-location "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json" \
+              -strict -summary /tmp/rendered.yaml
+            echo "== flux build =="
+            flux build kustomization "$APP" \
+              --path "apps/$APP/overlays/librepod" \
+              --local-sources GitRepository/flux-system/librepod-apps=./ \
+              --dry-run || true
+          '
+
+  e2e:
+    needs: detect-changes
+    if: >
+      needs.detect-changes.outputs.apps != '[]' &&
+      contains(github.event.pull_request.labels.*.name, 'renovate-e2e')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.detect-changes.outputs.apps) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31
+      - name: Ephemeral k3d deploy + smoke test
+        run: |
+          echo "On-demand e2e for ${{ matrix.app }} (label renovate-e2e present)."
+          echo "TODO wiring note: reuse the k3d flow from ui-e2e-cluster.yaml /"
+          echo "the verify-app skill to deploy apps/${{ matrix.app }} and smoke-test."
+          # Placeholder gate: kept green until the k3d harness is wired in a follow-up.
