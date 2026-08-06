@@ -10,7 +10,7 @@ spec:
   website: "https://github.com/juanfont/headscale"
 
   # renovate: datasource=docker depName=headscale/headscale
-  version: "v0.28.0"
+  version: "v0.29.3"
 
   source:
     type: oci-kustomize
