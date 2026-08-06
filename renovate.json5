@@ -4,6 +4,12 @@
   dependencyDashboard: true,
   ignorePaths: ["infrastructure/**"],
   automerge: false,
+  // config:recommended defaults to prHourlyLimit: 2, which parks most updates
+  // as "rate-limited" on the dashboard (security PRs consume the budget first).
+  // 0 = unlimited: open every pending PR each run. Safe here because there is
+  // no auto-merge — a human still reviews and merges each one.
+  prHourlyLimit: 0,
+  prConcurrentLimit: 0,
   kustomize: { managerFilePatterns: ["/apps/.*/overlays/.*/kustomization\\.ya?ml/"] },
   flux: { managerFilePatterns: ["/apps/.*/base/ocirepository\\.ya?ml/"] },
   customManagers: [
