@@ -1,0 +1,58 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: renovate
+  namespace: renovate
+spec:
+  schedule: "${SCHEDULE}"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 12021
+            fsGroup: 12021
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: renovate
+              # renovate: datasource=docker depName=renovate/renovate
+              image: renovate/renovate:44.14.1
+              env:
+                - name: LOG_LEVEL
+                  value: "${LOG_LEVEL}"
+                - name: RENOVATE_CONFIG_FILE
+                  value: /opt/renovate/config.json
+                - name: RENOVATE_BASE_DIR
+                  value: /tmp/renovate
+              envFrom:
+                - secretRef:
+                    name: renovate-env
+              volumeMounts:
+                - name: config
+                  mountPath: /opt/renovate
+                  readOnly: true
+                - name: work
+                  mountPath: /tmp/renovate
+                - name: cache
+                  mountPath: /tmp/renovate/cache
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  memory: 1Gi
+          volumes:
+            - name: config
+              configMap:
+                name: renovate-config
+            - name: work
+              emptyDir: {}
+            - name: cache
+              persistentVolumeClaim:
+                claimName: renovate-cache
