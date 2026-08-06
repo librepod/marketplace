@@ -10,7 +10,7 @@ spec:
   website: "https://tailscale.com"
 
   # renovate: datasource=docker depName=tailscale/tailscale
-  version: "1.98.4"
+  version: "1.98.10"
 
   source:
     type: oci-kustomize
