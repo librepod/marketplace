@@ -9,6 +9,7 @@ spec:
   category: "AI"
   website: "https://github.com/BerriAI/litellm"
 
+  # renovate: datasource=docker depName=litellm/litellm
   version: "v1.93.0"
 
   source:
