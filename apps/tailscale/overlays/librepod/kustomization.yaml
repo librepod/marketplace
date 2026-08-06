@@ -6,7 +6,7 @@ resources:
 
 images:
   - name: tailscale/tailscale
-    newTag: "v1.98.4"
+    newTag: "v1.98.10"
 
 patches:
   - path: ./patch-storage-class.yaml
