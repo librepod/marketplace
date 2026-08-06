@@ -23,4 +23,30 @@ else
   echo "SKIP test 2 (whoami has no '# serge:' hint yet — run after Task 4)"
 fi
 
+echo "== test 3: malicious notesUrl hint (command injection attempt) is rejected, no side effect, exit 0 =="
+# Regression test for the command-injection finding: a metadata.yaml carrying
+# a '# serge: notesUrl=...' hint with a shell command substitution must NOT
+# be executed. It must degrade to the 'not fetched' marker, exit 0, and must
+# not create /tmp/context-script-injection-marker. Network-free: the URL is
+# unreachable garbage, so even if validation somehow failed open, curl alone
+# cannot execute $(...) — this test proves the shell itself never evals it.
+INJECT_APP_DIR="apps/__context-script-test-injection__"
+INJECT_MARKER="/tmp/context-script-injection-marker"
+rm -f "$INJECT_MARKER"
+cleanup_inject_test() { rm -rf "$INJECT_APP_DIR"; rm -f "$INJECT_MARKER"; }
+trap cleanup_inject_test EXIT
+
+mkdir -p "$INJECT_APP_DIR"
+cp .ai/testdata/malicious-metadata.yaml "$INJECT_APP_DIR/metadata.yaml"
+
+out=$(cat .ai/testdata/pr-malicious-notesurl.json | sh "$SCRIPT") || fail "script exited non-zero on malicious hint"
+echo "$out" | jq -e '.context' >/dev/null 2>&1 || fail "malicious-hint output is not {context:...} JSON"
+echo "$out" | jq -r '.context' | grep -q "Release notes NOT auto-fetched" \
+  || fail "malicious notesUrl was not rejected/degraded"
+[ -e "$INJECT_MARKER" ] && fail "INJECTION SUCCEEDED: $INJECT_MARKER was created by the malicious hint"
+
+cleanup_inject_test
+trap - EXIT
+echo "PASS test 3"
+
 echo "ALL TESTS PASSED"

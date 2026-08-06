@@ -15,6 +15,26 @@ emit() {
   exit 0
 }
 
+# GET a URL with optional auth, no eval, no shell interpolation of the URL.
+# $1 = full URL. Always a single argv entry — never word-split or globbed.
+gh_get() {
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    curl -sSL -H "Authorization: Bearer $GITHUB_TOKEN" \
+      -H "Accept: application/vnd.github+json" "$1" 2>/dev/null
+  else
+    curl -sSL -H "Accept: application/vnd.github+json" "$1" 2>/dev/null
+  fi
+}
+
+# Plain GET (no Accept override) for arbitrary notesUrl hints.
+plain_get() {
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    curl -sSL -H "Authorization: Bearer $GITHUB_TOKEN" "$1" 2>/dev/null
+  else
+    curl -sSL "$1" 2>/dev/null
+  fi
+}
+
 input=$(cat)
 
 # Which metadata.yaml files changed? (Renovate bumps spec.version there.)
@@ -51,6 +71,24 @@ for f in $metafiles; do
   notes_repo=$(grep -oE '# serge: notesRepo=\S+' "$f" 2>/dev/null | head -1 | sed 's/.*notesRepo=//')
   notes_url=$(grep -oE '# serge: notesUrl=\S+' "$f" 2>/dev/null | head -1 | sed 's/.*notesUrl=//')
 
+  # Validate hints before ever touching them with curl. These come from
+  # attacker-controllable PR content (a changed apps/*/metadata.yaml), so a
+  # malformed/malicious hint must degrade to "not fetched", never be executed
+  # or otherwise treated as trusted input.
+  if [ -n "$notes_repo" ] && ! printf '%s' "$notes_repo" | grep -Eq '^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$'; then
+    notes_repo=""
+  fi
+
+  if [ -n "$notes_url" ]; then
+    case "$notes_url" in
+      https://*) : ;; # required scheme — fall through to the metachar check
+      *) notes_url="" ;;
+    esac
+  fi
+  if [ -n "$notes_url" ] && printf '%s' "$notes_url" | grep -Eq '[^A-Za-z0-9._~:/?#@!$&'"'"'()*+,;=%-]'; then
+    notes_url="" # contains a shell metachar, whitespace, or other disallowed byte
+  fi
+
   if [ -z "$notes_repo" ] && [ -z "$notes_url" ]; then
     out="${out}${header}
 
@@ -61,32 +99,36 @@ Judge from the diff and default the verdict toward REVIEW.
     continue
   fi
 
-  auth=""
-  [ -n "${GITHUB_TOKEN:-}" ] && auth="-H \"Authorization: Bearer $GITHUB_TOKEN\""
-
   notes=""
   if [ -n "$notes_repo" ]; then
-    # Fetch the release for the NEW tag; try both 'vX' and 'X' tag spellings.
-    for tag in "$new_ver" "v${new_ver#v}" "${new_ver#v}"; do
-      body=$(eval curl -sSL $auth \
-        -H '"Accept: application/vnd.github+json"' \
-        "https://api.github.com/repos/$notes_repo/releases/tags/$tag" 2>/dev/null)
-      got=$(printf '%s' "$body" | jq -r '.body // empty' 2>/dev/null)
-      if [ -n "$got" ]; then
-        notes="Release $tag:
+    # Fetch the release for the NEW tag; try both 'vX' and 'X' tag spellings,
+    # deduped (when new_ver already starts with 'v', "v${new_ver#v}" and
+    # "$new_ver" are identical — skip the repeat). Skip entirely if new_ver
+    # is empty (nothing to look up).
+    tried=""
+    if [ -n "$new_ver" ]; then
+      for tag in "$new_ver" "v${new_ver#v}" "${new_ver#v}"; do
+        case " $tried " in
+          *" $tag "*) continue ;; # already tried this exact tag spelling
+        esac
+        tried="$tried $tag"
+
+        body=$(gh_get "https://api.github.com/repos/$notes_repo/releases/tags/$tag")
+        got=$(printf '%s' "$body" | jq -r '.body // empty' 2>/dev/null)
+        if [ -n "$got" ]; then
+          notes="Release $tag:
 $got"
-        break
-      fi
-    done
+          break
+        fi
+      done
+    fi
     # Fallback: list recent releases so a range/notes still show up.
     if [ -z "$notes" ]; then
-      notes=$(eval curl -sSL $auth \
-        -H '"Accept: application/vnd.github+json"' \
-        "https://api.github.com/repos/$notes_repo/releases?per_page=10" 2>/dev/null \
+      notes=$(gh_get "https://api.github.com/repos/$notes_repo/releases?per_page=10" \
         | jq -r '.[]? | "Release \(.tag_name):\n\(.body // "")\n"' 2>/dev/null)
     fi
   elif [ -n "$notes_url" ]; then
-    notes=$(eval curl -sSL $auth "$notes_url" 2>/dev/null)
+    notes=$(plain_get "$notes_url")
   fi
 
   if [ -z "$notes" ]; then
