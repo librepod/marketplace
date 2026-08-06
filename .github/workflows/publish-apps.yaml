@@ -29,7 +29,7 @@ jobs:
     outputs:
       apps: ${{ steps.changes.outputs.apps }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: ${{ github.event_name == 'push' && 2 || 0 }}
 
@@ -94,7 +94,7 @@ jobs:
       matrix:
         app: ${{ fromJSON(needs.detect-changes.outputs.apps) }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: fluxcd/flux2/action@main
 
