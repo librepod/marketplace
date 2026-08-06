@@ -9,6 +9,7 @@ spec:
   category: "AI"
   website: "https://github.com/BerriAI/litellm"
 
+  # renovate: datasource=docker depName=litellm/litellm
   version: "v1.93.0"
 
   source:
@@ -59,7 +60,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/litellm
         ref:
-          tag: "v1.93.0"
+          tag: "__VERSION__"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization

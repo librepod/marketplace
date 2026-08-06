@@ -63,6 +63,9 @@ for metadata_file in "$REPO_ROOT"/apps/*/metadata.yaml; do
   # Extract fields using grep/sed (no yq dependency)
   NAME=$(grep '^  name:' "$metadata_file" | head -1 | sed 's/.*name: *//')
   VERSION=$(grep '^  version:' "$metadata_file" | head -1 | sed 's/.*version: *//' | tr -d '"')
+  if [ -z "$VERSION" ]; then
+    echo "ERROR: $app_name has empty spec.version" >&2; exit 1
+  fi
   DISPLAY_NAME=$(grep '^  displayName:' "$metadata_file" | sed 's/.*displayName: *//' | tr -d '"')
   CATEGORY=$(grep '^  category:' "$metadata_file" | sed 's/.*category: *//' | tr -d '"')
   ICON=$(grep '^  icon:' "$metadata_file" | sed 's/.*icon: *//' | tr -d '"')
@@ -84,6 +87,8 @@ ENTRY
 
   # Extract templates
   TMPL_SOURCE=$(extract_template_block "$metadata_file" "source")
+  # Fill the version sentinel from spec.version (single source of truth).
+  TMPL_SOURCE=$(printf '%s' "$TMPL_SOURCE" | sed "s/__VERSION__/${VERSION}/g")
   TMPL_RELEASE=$(extract_template_block "$metadata_file" "release")
   TMPL_SECRET=$(extract_template_block "$metadata_file" "secret")
   TMPL_KUSTOMIZATION=$(extract_template_block "$metadata_file" "kustomization")
@@ -127,6 +132,10 @@ ENTRY
     fi
   fi
 done
+
+if grep -q '__VERSION__' "$CATALOG_FILE"; then
+  echo "ERROR: __VERSION__ sentinel leaked into catalog.yaml" >&2; exit 1
+fi
 
 # Copy to marketplace-ui ConfigMap source
 cp "$CATALOG_FILE" "$CONFIGMAP_CATALOG"

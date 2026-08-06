@@ -61,7 +61,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/wg-easy
         ref:
-          tag: "15.3.0"
+          tag: "__VERSION__"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization

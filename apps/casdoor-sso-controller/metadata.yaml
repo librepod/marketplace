@@ -5,6 +5,7 @@ metadata:
 spec:
   displayName: "Casdoor SSO Controller"
   description: "Auto-provisions Casdoor OIDC applications for native-SSO apps"
+  icon: "https://cdn.casbin.org/img/casdoor-logo_1185x256.png"
   category: "Security"
   website: "https://github.com/librepod/marketplace"
 
@@ -34,7 +35,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/casdoor-sso-controller
         ref:
-          tag: "0.2.5"
+          tag: "__VERSION__"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization

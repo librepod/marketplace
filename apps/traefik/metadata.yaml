@@ -44,7 +44,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/traefik
         ref:
-          tag: "v3.6.15"
+          tag: "__VERSION__"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization

@@ -39,7 +39,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/step-certificates
         ref:
-          tag: "0.29.0"
+          tag: "__VERSION__"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization

@@ -9,8 +9,60 @@ spec:
   category: "System"
   website: "https://github.com/librepod/marketplace"
   version: "0.4.0"
-  appVersion: "0.4.0"
   source:
     type: oci-kustomize
     url: "oci://ghcr.io/librepod/marketplace/apps/marketplace-ui"
     path: ./overlays/librepod
+  dependencies:
+    required:
+      - kind: IngressController
+        description: "Traefik (provided by traefik app)"
+      - kind: SSOProvider
+        description: "Casdoor (provided by casdoor app)"
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-marketplace-ui
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "marketplace-ui"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/marketplace-ui
+        ref:
+          tag: "__VERSION__"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-marketplace-ui
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "marketplace-ui"
+      spec:
+        dependsOn:
+          - name: gogs
+          - name: cert-manager
+          - name: casdoor-sso-controller
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-marketplace-ui
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+        postBuild:
+          substitute:
+            BASE_DOMAIN: "${BASE_DOMAIN}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml

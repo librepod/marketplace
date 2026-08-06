@@ -1,0 +1,55 @@
+name: Renovate
+
+on:
+  schedule:
+    # Run every weekday at 06:00 UTC (before working hours).
+    - cron: '0 6 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: 'Renovate log level'
+        required: false
+        default: 'info'
+        type: choice
+        options:
+          - debug
+          - info
+          - warn
+      dryRun:
+        description: 'Dry run (do not open PRs)'
+        required: false
+        default: false
+        type: boolean
+
+# Renovate needs to create branches, open PRs, and read/write issues (the
+# dependency dashboard). It runs as a self-hosted job here.
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: renovate
+  cancel-in-progress: false
+
+jobs:
+  renovate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Self-hosted Renovate
+        uses: renovatebot/github-action@v46.2.1
+        with:
+          # IMPORTANT: use a PAT or GitHub App token stored as the RENOVATE_TOKEN
+          # secret, NOT the default GITHUB_TOKEN. PRs opened by GITHUB_TOKEN do
+          # not trigger other workflows, so validate-apps would never run on
+          # Renovate's PRs. A PAT/App token makes those PR checks fire.
+          token: ${{ secrets.RENOVATE_TOKEN }}
+        env:
+          # Scope Renovate to just this repo.
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
+          # Read config from renovate.json5 at the repo root.
+          RENOVATE_CONFIG_FILE: renovate.json5
+          LOG_LEVEL: ${{ inputs.logLevel || 'info' }}
+          RENOVATE_DRY_RUN: ${{ inputs.dryRun == true && 'full' || '' }}

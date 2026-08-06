@@ -7,6 +7,7 @@ pkgs.mkShell {
     pkgs.k3d
     pkgs.go
     pkgs.kustomize
+    pkgs.kubeconform
     pkgs.kubernetes-helm
     pkgs.kubectl
     pkgs.curl

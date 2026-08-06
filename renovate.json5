@@ -1,0 +1,26 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["config:recommended"],
+  dependencyDashboard: true,
+  ignorePaths: ["infrastructure/**"],
+  automerge: false,
+  kustomize: { managerFilePatterns: ["/apps/.*/overlays/.*/kustomization\\.ya?ml/"] },
+  flux: { managerFilePatterns: ["/apps/.*/base/ocirepository\\.ya?ml/"] },
+  customManagers: [
+    {
+      customType: "regex",
+      managerFilePatterns: ["/apps/.*/metadata\\.yaml/"],
+      matchStrings: [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+version:\\s*\"?(?<currentValue>[^\"\\s]+)\"?",
+      ],
+    },
+  ],
+  packageRules: [
+    { matchFileNames: ["apps/**"], enabled: false },
+    { matchFileNames: ["apps/gogs/**", "apps/litellm/**", "apps/whoami/**"], enabled: true },
+    { matchFileNames: ["apps/gogs/**"], groupName: "gogs" },
+    { matchFileNames: ["apps/litellm/**"], groupName: "litellm" },
+    { matchFileNames: ["apps/whoami/**"], groupName: "whoami" },
+    { matchUpdateTypes: ["major"], addLabels: ["renovate-e2e"] },
+  ],
+}

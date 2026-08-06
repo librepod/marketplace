@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-08-06T11:22:25Z"
+  generatedAt: "2026-08-06T11:31:16Z"
 apps:
     - name: baikal
       version: "0.11.1-nginx"
@@ -60,59 +60,6 @@ apps:
                 type: string
                 example: "example.com"
       secrets: []
-    - name: casdoor-sso-controller
-      version: "0.2.5"
-      displayName: "Casdoor SSO Controller"
-      description: "Auto-provisions Casdoor OIDC applications for native-SSO apps"
-      category: "Security"
-      icon: ""
-      sourceType: oci-kustomize
-      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/casdoor-sso-controller"
-      templates:
-        source: |
-            apiVersion: source.toolkit.fluxcd.io/v1
-            kind: OCIRepository
-            metadata:
-              name: marketplace-casdoor-sso-controller
-              namespace: flux-system
-              labels:
-                marketplace.io/managed: "true"
-                marketplace.io/app: "casdoor-sso-controller"
-            spec:
-              interval: 10m
-              url: oci://ghcr.io/librepod/marketplace/apps/casdoor-sso-controller
-              ref:
-                tag: "0.2.5"
-        release: |
-            apiVersion: kustomize.toolkit.fluxcd.io/v1
-            kind: Kustomization
-            metadata:
-              name: marketplace-casdoor-sso-controller
-              namespace: flux-system
-              labels:
-                marketplace.io/managed: "true"
-                marketplace.io/app: "casdoor-sso-controller"
-            spec:
-              dependsOn:
-                - name: casdoor
-              interval: 1h
-              retryInterval: 2m
-              timeout: 5m
-              sourceRef:
-                kind: OCIRepository
-                name: marketplace-casdoor-sso-controller
-              path: ./overlays/librepod
-              prune: true
-              wait: true
-              postBuild:
-                substitute:
-                  BASE_DOMAIN: "${BASE_DOMAIN}"
-        kustomization: |
-            apiVersion: kustomize.config.k8s.io/v1beta1
-            kind: Kustomization
-            resources:
-              - source.yaml
-              - release.yaml
     - name: casdoor
       version: "3.106.0"
       displayName: "Casdoor"
@@ -174,6 +121,59 @@ apps:
                 description: "Base domain for cluster (Casdoor will be at casdoor.BASE_DOMAIN)"
                 type: string
                 example: "example.com"
+    - name: casdoor-sso-controller
+      version: "0.2.5"
+      displayName: "Casdoor SSO Controller"
+      description: "Auto-provisions Casdoor OIDC applications for native-SSO apps"
+      category: "Security"
+      icon: "https://cdn.casbin.org/img/casdoor-logo_1185x256.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/casdoor-sso-controller"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-casdoor-sso-controller
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "casdoor-sso-controller"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/casdoor-sso-controller
+              ref:
+                tag: "0.2.5"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-casdoor-sso-controller
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "casdoor-sso-controller"
+            spec:
+              dependsOn:
+                - name: casdoor
+              interval: 1h
+              retryInterval: 2m
+              timeout: 5m
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-casdoor-sso-controller
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+              postBuild:
+                substitute:
+                  BASE_DOMAIN: "${BASE_DOMAIN}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
     - name: cert-manager
       version: "1.20.0"
       displayName: "Cert-Manager"
@@ -331,55 +331,6 @@ apps:
               - release.yaml
       params:
             required: []
-    - name: frp-operator
-      version: "v0.9.0"
-      displayName: "FRP Operator"
-      description: "Kubernetes operator for managing FRP clients via CRDs"
-      category: "Network"
-      icon: ""
-      sourceType: oci-kustomize
-      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/frp-operator"
-      templates:
-        source: |
-            apiVersion: source.toolkit.fluxcd.io/v1
-            kind: OCIRepository
-            metadata:
-              name: frp-operator
-              namespace: flux-system
-              labels:
-                marketplace.io/managed: "true"
-                marketplace.io/app: "frp-operator"
-            spec:
-              interval: 10m
-              url: oci://ghcr.io/librepod/marketplace/apps/frp-operator
-              ref:
-                tag: "v0.9.0"
-        release: |
-            apiVersion: kustomize.toolkit.fluxcd.io/v1
-            kind: Kustomization
-            metadata:
-              name: frp-operator
-              namespace: flux-system
-              labels:
-                marketplace.io/managed: "true"
-                marketplace.io/app: "frp-operator"
-            spec:
-              interval: 1h
-              retryInterval: 2m
-              timeout: 5m
-              sourceRef:
-                kind: OCIRepository
-                name: frp-operator
-              force: true
-              path: ./overlays/librepod
-              prune: true
-              wait: true
-        kustomization: |
-            apiVersion: kustomize.config.k8s.io/v1beta1
-            kind: Kustomization
-            resources:
-              - source.yaml
-              - release.yaml
     - name: frpc
       version: "v0.65.0"
       displayName: "FRP Client"
@@ -468,6 +419,55 @@ apps:
             - name: FRP_AUTH_TOKEN
               description: "Authentication token matching the FRP server configuration"
               required: true
+    - name: frp-operator
+      version: "v0.9.0"
+      displayName: "FRP Operator"
+      description: "Kubernetes operator for managing FRP clients via CRDs"
+      category: "Network"
+      icon: "https://raw.githubusercontent.com/fatedier/frp/dev/web/frpc/src/assets/icons/logo.svg"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/frp-operator"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: frp-operator
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "frp-operator"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/frp-operator
+              ref:
+                tag: "v0.9.0"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: frp-operator
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "frp-operator"
+            spec:
+              interval: 1h
+              retryInterval: 2m
+              timeout: 5m
+              sourceRef:
+                kind: OCIRepository
+                name: frp-operator
+              force: true
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
     - name: gogs
       version: "0.14.3"
       displayName: "Gogs"
@@ -873,6 +873,53 @@ apps:
       icon: "https://raw.githubusercontent.com/nicehash/rest-clients-demo/master/img/app-store.png"
       sourceType: oci-kustomize
       sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/marketplace-ui"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-marketplace-ui
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "marketplace-ui"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/marketplace-ui
+              ref:
+                tag: "0.4.0"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-marketplace-ui
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "marketplace-ui"
+            spec:
+              dependsOn:
+                - name: gogs
+                - name: cert-manager
+                - name: casdoor-sso-controller
+              interval: 1h
+              retryInterval: 2m
+              timeout: 5m
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-marketplace-ui
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+              postBuild:
+                substitute:
+                  BASE_DOMAIN: "${BASE_DOMAIN}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
     - name: nfs-provisioner
       version: "4.0.18"
       displayName: "NFS Provisioner"
