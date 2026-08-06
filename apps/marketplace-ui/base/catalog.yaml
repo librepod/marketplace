@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-08-06T09:25:43Z"
+  generatedAt: "2026-08-06T09:27:15Z"
 apps:
     - name: baikal
       version: "0.11.1-nginx"
@@ -873,6 +873,53 @@ apps:
       icon: "https://raw.githubusercontent.com/nicehash/rest-clients-demo/master/img/app-store.png"
       sourceType: oci-kustomize
       sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/marketplace-ui"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-marketplace-ui
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "marketplace-ui"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/marketplace-ui
+              ref:
+                tag: "0.4.0"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-marketplace-ui
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "marketplace-ui"
+            spec:
+              dependsOn:
+                - name: gogs
+                - name: cert-manager
+                - name: casdoor-sso-controller
+              interval: 1h
+              retryInterval: 2m
+              timeout: 5m
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-marketplace-ui
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+              postBuild:
+                substitute:
+                  BASE_DOMAIN: "${BASE_DOMAIN}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
     - name: nfs-provisioner
       version: "4.0.18"
       displayName: "NFS Provisioner"
