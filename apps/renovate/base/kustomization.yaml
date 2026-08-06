@@ -1,5 +1,19 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+
+configMapGenerator:
+  - name: renovate
+    envs:
+      - renovate.env
+    options:
+      # Disable the name hash so envFrom can reference a stable name. kustomize's
+      # nameReference transformer rewrites envFrom configMapRef for Deployments
+      # (spec.template...) but NOT for CronJob's deeper spec.jobTemplate.spec.template
+      # path, so a hashed name (renovate-<hash>) would dangle and the container
+      # would start without its env. Safe here: CronJobs spawn a fresh Job per run,
+      # so there is no stale-pod reload concern from dropping the hash.
+      disableNameSuffixHash: true
+
 resources:
   - namespace.yaml
   - configmap.yaml

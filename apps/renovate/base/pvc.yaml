@@ -6,7 +6,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteMany
-  storageClassName: nfs-client
+  # No storageClassName here — patched in by overlays/librepod/patch-storage-class.yaml
   resources:
     requests:
       storage: 5Gi

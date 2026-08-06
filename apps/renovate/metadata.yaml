@@ -19,11 +19,6 @@ spec:
 
   params:
     optional:
-      - name: SCHEDULE
-        description: "Cron schedule for Renovate runs (standard 5-field cron, or a preset like @hourly / @daily)."
-        type: string
-        default: "@hourly"
-        example: "0 */2 * * *"
       - name: LOG_LEVEL
         description: "Renovate log level (one of: trace, debug, info, warn, error, fatal)."
         type: string
@@ -82,7 +77,6 @@ spec:
         wait: true
         postBuild:
           substitute:
-            SCHEDULE: "${SCHEDULE}"
             LOG_LEVEL: "${LOG_LEVEL}"
           substituteFrom:
             - kind: Secret

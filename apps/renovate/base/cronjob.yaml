@@ -4,7 +4,14 @@ metadata:
   name: renovate
   namespace: renovate
 spec:
-  schedule: "${SCHEDULE}"
+  # Hardcoded on purpose: the cadence is NOT a Flux-substituted param.
+  # Substituting into this scalar is unsafe — kustomize strips the quotes
+  # around a ${SCHEDULE} token, and values that start with a reserved YAML
+  # char (@hourly, @daily, * * * * *) then produce invalid YAML at reconcile
+  # time. Operators change the cadence by editing this line (same model as
+  # editing the config.json ConfigMap). A literal value keeps the quotes it
+  # needs, so any cron expression or @-descriptor is valid here.
+  schedule: "@hourly"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 3
@@ -21,16 +28,10 @@ spec:
               type: RuntimeDefault
           containers:
             - name: renovate
-              # renovate: datasource=docker depName=renovate/renovate
-              image: renovate/renovate:44.14.1
-              env:
-                - name: LOG_LEVEL
-                  value: "${LOG_LEVEL}"
-                - name: RENOVATE_CONFIG_FILE
-                  value: /opt/renovate/config.json
-                - name: RENOVATE_BASE_DIR
-                  value: /tmp/renovate
+              image: renovate/renovate
               envFrom:
+                - configMapRef:
+                    name: renovate
                 - secretRef:
                     name: renovate-env
               volumeMounts:
