@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: renovate-config
+  namespace: renovate
+data:
+  config.json: |
+    {
+      "platform": "github",
+      "endpoint": "",
+      "autodiscover": false,
+      "repositories": [],
+      "gitAuthor": "Renovate Bot <bot@renovateapp.com>",
+      "onboardingConfigFileName": "renovate.json",
+      "extends": ["config:recommended"]
+    }
