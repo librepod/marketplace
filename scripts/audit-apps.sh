@@ -54,6 +54,19 @@ for m in apps/*/metadata.yaml; do
   printf '| %s | %s | %s | %s |\n' "$app" "${missing:-–}" "${forbidden:-–}" "$arche" >> "$REPORT"
 done
 
+# Renovate datasource notes for the non-kustomize / non-native archetypes.
+# Regenerated on every run so they survive the report rewrite.
+cat >> "$REPORT" <<'NOTES'
+
+## Renovate datasource notes
+
+- nfs-provisioner: github-tags, depName=kubernetes-sigs/nfs-subdir-external-provisioner,
+  extractVersion prefix "nfs-subdir-external-provisioner-" (the ?ref= tag in base/kustomization.yaml)
+- immich: docker, depName=<immich app image> for spec.version; chart tracked natively via base/ocirepository.yaml
+- step-certificates: annotate spec.version to the step-certificates image, not a sidecar
+- marketplace-ui: docker, depName=<marketplace-ui image>; spec.version annotation drives it (inline-image base, no images: transformer)
+NOTES
+
 cat "$REPORT"
 echo
 if [ "$violations" -gt 0 ]; then
