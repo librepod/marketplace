@@ -2,307 +2,151 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Automate upstream version tracking for `apps/` — Renovate opens one validated PR per app when an upstream image/chart updates — after first de-duplicating the version field to a single source per app.
+**Goal:** Audit and normalize all `apps/` to one `metadata.yaml` schema and a single trackable version source, then have Renovate open one CI-validated PR per app when an upstream image/chart updates.
 
-**Architecture:** Two sequenced deliverables. **D1** collapses the duplicated version (`spec.version` + `templates.source.ref.tag`) into one string per app using a `__VERSION__` sentinel that `generate-catalog.sh` fills in, and standardizes `marketplace-ui`. **D2** adds `renovate.json5` (native kustomize/flux managers + annotated customManagers, `infrastructure/**` ignored) and a `validate-apps.yaml` CI gate (kustomize build → kubeconform → flux build), plus a label-gated e2e job. D2 rolls out via a 3-app pilot first.
+**Architecture:** Five sequenced deliverables. **D0** ships a re-runnable `scripts/audit-apps.sh` that classifies every app (schema conformance + version archetype) and drives the rest. **D1** builds the CI validation gate early (kubeconform + `validate-apps.yaml`) so later structural fixes are checked. **D2** de-duplicates the version field to one `spec.version` per app via a `__VERSION__` sentinel and standardizes marketplace-ui. **D3** normalizes every app to the canonical schema and a single trackable version source (scope B — schema + trackability, not forced directory restructuring), using the audit + the D1 gate. **D4** adds `renovate.json5` (pilot → full) on the now-clean ground.
 
-**Tech Stack:** Bash + awk/sed (catalog generator), Renovate (JSON5 config), GitHub Actions, `nix-shell shell.nix` (fluxcd, kustomize, kubectl, k3d, jq), kubeconform.
+**Tech Stack:** Bash + awk/sed, Renovate (JSON5), GitHub Actions, `nix-shell shell.nix` (fluxcd, kustomize, kubectl, k3d, jq), kubeconform.
 
 **Reference spec:** `docs/design/2026-08-06-renovate-app-updates-design.md`
 
 ## Global Constraints
 
 - **Sentinel is `__VERSION__`** (double-underscore), never `${VERSION}` — `${...}` collides with Flux `postBuild.substitute`. Verbatim.
-- **`__VERSION__` must never appear in `catalog.yaml`** or `apps/marketplace-ui/base/catalog.yaml` — it ships to user clusters. A leak-guard enforces this.
-- **`spec.version` is the single version string per app** after D1; it becomes the published OCI artifact tag (`publish-apps.yaml` reads it).
+- **`__VERSION__` must never appear in `catalog.yaml`** or `apps/marketplace-ui/base/catalog.yaml` — it ships to user clusters. Leak-guard enforces this.
+- **`spec.version` is the single version string per app**; it becomes the published OCI artifact tag (`publish-apps.yaml` reads it).
 - **Renovate never edits `infrastructure/**`** — system-app cluster adoption stays manual.
-- **No auto-merge** anywhere in Renovate config.
+- **No auto-merge** in Renovate config.
 - **`validate-apps` runs on all `apps/**` PRs** and is a required check (branch-protection setting, applied by the maintainer).
-- **Commit hygiene:** never reference cluster/device hostnames (`librepod-dev`, etc.) in commit messages or public docs. Use `dev`/`prod`.
-- Pilot apps for D2 rollout: **gogs**, **litellm**, **whoami** (all Docker Hub images keyed by their kustomize `name:` — `gogs/gogs`, `litellm/litellm`, `traefik/whoami`).
+- **Normalization scope = B:** every `metadata.yaml` conforms to the canonical schema AND every app has one trackable version source. Do NOT restructure a working app's directory tree purely for uniformity.
+- **Canonical metadata schema** (derived by frequency): required = `name, displayName, description, category, website, version, source, templates, dependencies, icon`; conditional (optional, not a defect) = `params, secrets`; forbidden outliers = `notes, appVersion`.
+- **Commit hygiene:** never reference cluster/device hostnames in commit messages or public docs; use `dev`/`prod`.
+- Pilot apps for D4: **gogs**, **litellm**, **whoami** (Docker Hub images keyed by kustomize `name:` — `gogs/gogs`, `litellm/litellm`, `traefik/whoami`).
 
 ---
 
-# DELIVERABLE 1 — De-duplicate `spec.version`
+# DELIVERABLE 0 — App audit (re-runnable lint)
 
-### Task 1: Sentinel-ize the source-template `ref.tag` in all app metadata
+### Task 1: `scripts/audit-apps.sh` — classify schema + version archetype
 
-Replace the hard-coded `ref.tag` in each `apps/*/metadata.yaml` `templates.source` block with `__VERSION__`, leaving `spec.version` as the sole real version. `marketplace-ui` has no `templates:` block yet — it is handled in Task 4, so it is excluded here.
-
-**Files:**
-- Modify: every `apps/*/metadata.yaml` that contains a `templates.source` block with a `ref: / tag:` (all apps except `marketplace-ui`)
-
-**Interfaces:**
-- Produces: every source template now reads `tag: "__VERSION__"`. Task 2 (generator) relies on this exact sentinel string.
-
-- [ ] **Step 1: Snapshot the current catalog for the byte-identical check later**
-
-```bash
-cp catalog.yaml /tmp/catalog.before.yaml
-```
-
-- [ ] **Step 2: Replace `ref.tag` with the sentinel across all app metadata**
-
-The source-template ref block is uniform everywhere: `ref:` then `tag: "<version>"` at 10-space indent. Rewrite only the `tag:` line that sits inside a `templates.source` block. Because `spec.version` also matches `tag:`-like lines? No — `spec.version` is `version:`, distinct. But a naive global replace of every `tag:` line is unsafe (release templates, other resources have their own tags). Use an awk pass that only rewrites the FIRST `tag:` after a `source: |` marker per file:
-
-```bash
-for f in apps/*/metadata.yaml; do
-  # skip files without a source template
-  grep -q '^    source: |' "$f" || continue
-  awk '
-    /^    source: \|/ { insrc=1 }
-    insrc && /^          tag: / && !done {
-      sub(/tag: .*/, "tag: \"__VERSION__\"")
-      done=1
-    }
-    { print }
-  ' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
-done
-```
-
-- [ ] **Step 3: Verify every app (except marketplace-ui) now has the sentinel and no stray real tag in its source block**
-
-```bash
-# Expect: one __VERSION__ per app that has a source template
-grep -rl '^    source: |' apps/*/metadata.yaml | while read f; do
-  n=$(grep -c 'tag: "__VERSION__"' "$f")
-  echo "$f -> $n sentinel(s)"
-done
-```
-Expected: each listed file shows `-> 1 sentinel(s)`. `apps/marketplace-ui/metadata.yaml` is NOT listed (no source template yet).
-
-- [ ] **Step 4: Sanity — confirm `spec.version` is untouched (still a real value)**
-
-```bash
-grep -h '^  version:' apps/*/metadata.yaml | sort -u | head
-```
-Expected: real versions like `"0.14.3"`, `"v1.93.0"` — NOT `__VERSION__`.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add apps/*/metadata.yaml
-git commit -m "refactor(apps): sentinel-ize source-template ref.tag for catalog generation"
-```
-
----
-
-### Task 2: Fill the sentinel from `spec.version` in the catalog generator
-
-Make `generate-catalog.sh` substitute `__VERSION__` with the app's extracted `$VERSION` when emitting the source template, and hard-fail if any sentinel leaks into the output.
+A checked-in script that reports, per app: metadata-schema conformance against the canonical schema, and the version-declaration archetype (flagging inline-image and no-image cases). Exits non-zero if any app violates the schema, so it doubles as a drift lint. Also writes a human-readable `docs/design/app-audit.md`.
 
 **Files:**
-- Modify: `scripts/generate-catalog.sh`
+- Create: `scripts/audit-apps.sh`
+- Create (generated): `docs/design/app-audit.md`
 
 **Interfaces:**
-- Consumes: `tag: "__VERSION__"` sentinel from Task 1; `$VERSION` variable already extracted in the script from `spec.version`.
-- Produces: a `catalog.yaml` with real tags and no sentinels. Task 3 verifies byte-equality.
+- Produces: a printed table + non-zero exit on schema violation; `app-audit.md`. D3 tasks consume this to know exactly which apps to fix.
 
-- [ ] **Step 1: Substitute the sentinel in the extracted source block**
+- [ ] **Step 1: Write the script**
 
-In `scripts/generate-catalog.sh`, immediately after the line
-`TMPL_SOURCE=$(extract_template_block "$metadata_file" "source")`
-add:
+Create `scripts/audit-apps.sh`:
 
 ```bash
-  # Fill the version sentinel from spec.version (single source of truth).
-  TMPL_SOURCE=$(printf '%s' "$TMPL_SOURCE" | sed "s/__VERSION__/${VERSION}/g")
-```
+#!/usr/bin/env bash
+# Audits apps/ for metadata-schema conformance and version-declaration archetype.
+# Exit 0 = all conform; non-zero = at least one schema violation (drift lint).
+set -uo pipefail
+cd "$(dirname "$0")/.."
 
-- [ ] **Step 2: Add the leak-guard before the "Catalog written" message**
+REQUIRED="name displayName description category website version source templates dependencies icon"
+FORBIDDEN="notes appVersion"
+REPORT="docs/design/app-audit.md"
+violations=0
 
-Near the end of the script, before the final `echo` summary, add:
+{
+  echo "# App Audit"
+  echo
+  echo "_Generated by \`scripts/audit-apps.sh\`._"
+  echo
+  echo "| App | Missing required | Forbidden keys | Version archetype |"
+  echo "|-----|------------------|----------------|-------------------|"
+} > "$REPORT"
 
-```bash
-if grep -q '__VERSION__' "$CATALOG_FILE"; then
-  echo "ERROR: __VERSION__ sentinel leaked into catalog.yaml" >&2
+for m in apps/*/metadata.yaml; do
+  app=$(basename "$(dirname "$m")")
+  keys=$(grep -E '^  [a-zA-Z]+:' "$m" | sed 's/:.*//;s/^  //')
+
+  missing=""
+  for k in $REQUIRED; do
+    echo "$keys" | grep -qx "$k" || missing="$missing $k"
+  done
+  forbidden=""
+  for k in $FORBIDDEN; do
+    echo "$keys" | grep -qx "$k" && forbidden="$forbidden $k"
+  done
+
+  # Version archetype detection
+  arche=""
+  grep -rql 'newTag' "apps/$app/overlays" 2>/dev/null && arche="${arche}kustomize-images "
+  [ -f "apps/$app/base/ocirepository.yaml" ] && arche="${arche}oci-chart "
+  grep -rql 'kind: HelmRelease' "apps/$app/base" "apps/$app/overlays" 2>/dev/null && arche="${arche}helmrelease "
+  # inline image tag in a Deployment, no images: transformer
+  if [ -z "$(grep -rl 'newTag' "apps/$app/overlays" 2>/dev/null)" ] \
+     && grep -rqE '^\s+image:\s+\S+:\S+' "apps/$app/base" 2>/dev/null; then
+    arche="${arche}inline-image "
+  fi
+  # remote kustomize base pinned by git ref
+  grep -rqE 'resources:|https://github.com/.*\?.*ref=' "apps/$app/base/kustomization.yaml" 2>/dev/null \
+    && grep -rq 'github.com/.*ref=' "apps/$app/base/kustomization.yaml" 2>/dev/null \
+    && arche="${arche}remote-base-gitref "
+  [ -z "$arche" ] && arche="UNKNOWN"
+
+  [ -n "$missing" ] && violations=$((violations+1))
+  [ -n "$forbidden" ] && violations=$((violations+1))
+  [ "$arche" = "UNKNOWN" ] && violations=$((violations+1))
+
+  printf '| %s | %s | %s | %s |\n' "$app" "${missing:-–}" "${forbidden:-–}" "$arche" >> "$REPORT"
+done
+
+cat "$REPORT"
+echo
+if [ "$violations" -gt 0 ]; then
+  echo "AUDIT: $violations violation(s) found." >&2
   exit 1
 fi
+echo "AUDIT: all apps conform."
 ```
 
-- [ ] **Step 3: Add a non-empty version guard inside the per-app loop**
+- [ ] **Step 2: Make it executable and run it**
 
-Immediately after `VERSION=$(...)` is assigned in the loop, add:
-
+Run:
 ```bash
-  if [ -z "$VERSION" ]; then
-    echo "ERROR: $app_name has empty spec.version" >&2
-    exit 1
-  fi
+chmod +x scripts/audit-apps.sh
+./scripts/audit-apps.sh; echo "exit=$?"
 ```
+Expected: prints the table; on the current repo it should exit **non-zero** (marketplace-ui/tailscale/casdoor-sso-controller/nfs-provisioner etc. still violate). That non-zero is CORRECT here — it proves the lint detects the known issues. D3 will drive it to exit 0.
 
-- [ ] **Step 4: Run the generator**
-
-Run: `./scripts/generate-catalog.sh`
-Expected: completes without the ERROR lines; prints `Catalog written to: ...`.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit the script and the initial report**
 
 ```bash
-git add scripts/generate-catalog.sh
-git commit -m "feat(catalog): fill version sentinel from spec.version + leak/empty guards"
+git add scripts/audit-apps.sh docs/design/app-audit.md
+git commit -m "chore(audit): add re-runnable app metadata/archetype audit lint"
 ```
 
 ---
 
-### Task 3: Prove the refactor is behavior-neutral (byte-identical catalog)
+# DELIVERABLE 1 — Validation gate (built early)
 
-The regenerated catalog must match the pre-refactor snapshot for every app except marketplace-ui (unchanged until Task 4), ignoring only the `generatedAt` timestamp.
-
-**Files:**
-- Test only (no source change): compares `/tmp/catalog.before.yaml` vs regenerated `catalog.yaml`
-
-**Interfaces:**
-- Consumes: `/tmp/catalog.before.yaml` from Task 1 Step 1; regenerated `catalog.yaml` from Task 2.
-
-- [ ] **Step 1: Diff ignoring the timestamp line**
-
-Run:
-```bash
-diff <(grep -v 'generatedAt' /tmp/catalog.before.yaml) \
-     <(grep -v 'generatedAt' catalog.yaml)
-```
-Expected: **no output** (empty diff). This proves D1 changed nothing shipped. If there IS output, the sentinel/substitution mismatched a real tag — STOP and fix Task 1/2 before proceeding.
-
-- [ ] **Step 2: Confirm no sentinel in either catalog artifact**
-
-Run:
-```bash
-grep -c '__VERSION__' catalog.yaml apps/marketplace-ui/base/catalog.yaml
-```
-Expected: `0` for both files.
-
-- [ ] **Step 3: Commit the regenerated catalog (should be identical, so likely no-op)**
-
-```bash
-git add catalog.yaml apps/marketplace-ui/base/catalog.yaml
-git commit -m "chore: regenerate catalog.yaml after sentinel refactor" || echo "no catalog changes (expected)"
-```
-
----
-
-### Task 4: Standardize `marketplace-ui` metadata
-
-Add the missing standard `templates:` block (with sentinel) and remove the duplicate `appVersion` field, making marketplace-ui a normal app citizen.
-
-**Files:**
-- Modify: `apps/marketplace-ui/metadata.yaml`
-- Regenerate: `catalog.yaml`, `apps/marketplace-ui/base/catalog.yaml`
-
-**Interfaces:**
-- Consumes: sentinel convention from Task 1; generator behavior from Task 2.
-- Produces: marketplace-ui with `templates:` + single `version`. Renovate (D2) treats it uniformly.
-
-- [ ] **Step 1: Remove the duplicate `appVersion` line**
-
-In `apps/marketplace-ui/metadata.yaml`, delete the line:
-```yaml
-  appVersion: "0.4.0"
-```
-Leave `version: "0.4.0"` as the single version.
-
-- [ ] **Step 2: Add the standard `templates:` block**
-
-Append under `spec:` (after the `source:` block), modeled on gogs but with marketplace-ui's real dependencies from `infrastructure/system-apps/marketplace-ui.yaml` (`dependsOn: [gogs, cert-manager, casdoor-sso-controller]`, `interval: 1m`):
-
-```yaml
-  templates:
-    source: |
-      apiVersion: source.toolkit.fluxcd.io/v1
-      kind: OCIRepository
-      metadata:
-        name: marketplace-marketplace-ui
-        namespace: flux-system
-        labels:
-          marketplace.io/managed: "true"
-          marketplace.io/app: "marketplace-ui"
-      spec:
-        interval: 10m
-        url: oci://ghcr.io/librepod/marketplace/apps/marketplace-ui
-        ref:
-          tag: "__VERSION__"
-    release: |
-      apiVersion: kustomize.toolkit.fluxcd.io/v1
-      kind: Kustomization
-      metadata:
-        name: marketplace-marketplace-ui
-        namespace: flux-system
-        labels:
-          marketplace.io/managed: "true"
-          marketplace.io/app: "marketplace-ui"
-      spec:
-        dependsOn:
-          - name: gogs
-          - name: cert-manager
-          - name: casdoor-sso-controller
-        interval: 1h
-        retryInterval: 2m
-        timeout: 5m
-        sourceRef:
-          kind: OCIRepository
-          name: marketplace-marketplace-ui
-        path: ./overlays/librepod
-        prune: true
-        wait: true
-        postBuild:
-          substitute:
-            BASE_DOMAIN: "${BASE_DOMAIN}"
-    kustomization: |
-      apiVersion: kustomize.config.k8s.io/v1beta1
-      kind: Kustomization
-      resources:
-        - source.yaml
-        - release.yaml
-```
-
-- [ ] **Step 3: Regenerate and verify no sentinel leak**
-
-Run:
-```bash
-./scripts/generate-catalog.sh && grep -c '__VERSION__' catalog.yaml
-```
-Expected: generator succeeds; count is `0`.
-
-- [ ] **Step 4: Confirm marketplace-ui now has a templates block in the catalog**
-
-Run:
-```bash
-awk '/- name: marketplace-ui/{f=1} f&&/^    - name:/&&!/marketplace-ui/{exit} f&&/templates:/{print "has templates"; exit}' catalog.yaml
-```
-Expected: `has templates`.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add apps/marketplace-ui/metadata.yaml catalog.yaml apps/marketplace-ui/base/catalog.yaml
-git commit -m "refactor(marketplace-ui): add standard templates block, drop duplicate appVersion"
-```
-
----
-
-# DELIVERABLE 2 — Renovate + validation
-
-### Task 5: Add `kubeconform` to the dev shell
-
-The validation gate needs `kubeconform`, which `shell.nix` does not currently provide.
+### Task 2: Add `kubeconform` to the dev shell
 
 **Files:**
 - Modify: `shell.nix`
 
 **Interfaces:**
-- Produces: `kubeconform` on PATH inside `nix-shell shell.nix`. Task 6 depends on it.
+- Produces: `kubeconform` on PATH in `nix-shell shell.nix`. Task 3 depends on it.
 
 - [ ] **Step 1: Add the package**
 
-In `shell.nix`, add to the `packages` list (after `pkgs.kustomize`):
+In `shell.nix`, add to the `packages` list after `pkgs.kustomize`:
 ```nix
     pkgs.kubeconform
 ```
 
-- [ ] **Step 2: Verify it resolves**
+- [ ] **Step 2: Verify**
 
 Run: `nix-shell shell.nix --run "kubeconform -v"`
-Expected: prints a version (e.g. `v0.6.x`), no "command not found".
+Expected: prints a version, no "command not found".
 
 - [ ] **Step 3: Commit**
 
@@ -313,16 +157,14 @@ git commit -m "chore(shell): add kubeconform for manifest validation"
 
 ---
 
-### Task 6: Add the `validate-apps` CI workflow (build + kubeconform + flux build)
-
-New workflow that, per changed app, runs the B-required validation gate, plus a label-gated on-demand e2e job.
+### Task 3: `validate-apps.yaml` CI gate (build + kubeconform + flux build)
 
 **Files:**
 - Create: `.github/workflows/validate-apps.yaml`
 
 **Interfaces:**
-- Consumes: `kubeconform` from Task 5; the `detect-changes` diff pattern copied from `.github/workflows/publish-apps.yaml`.
-- Produces: a `validate` status check on every `apps/**` PR.
+- Consumes: `kubeconform` (Task 2); `detect-changes` diff pattern copied from `publish-apps.yaml`.
+- Produces: a `validate` status check on every `apps/**` PR. D3 relies on it to check structural fixes.
 
 - [ ] **Step 1: Create the workflow**
 
@@ -412,12 +254,12 @@ jobs:
           # Placeholder gate: kept green until the k3d harness is wired in a follow-up.
 ```
 
-> **Note for implementer:** The `e2e` job is intentionally a stub that documents the reuse target (`ui-e2e-cluster.yaml` / `verify-app`). Wiring the actual ephemeral deploy is a follow-up beyond this plan's D2 scope; the label mechanism and job skeleton are what D2 delivers. Do not leave a stub in the `validate` job — that one must be fully functional.
+> **Note for implementer:** The `e2e` job is intentionally a documented stub (its label mechanism + skeleton ARE the D-level deliverable per spec "C-on-demand"; wiring the real k3d deploy is a follow-up). The `validate` job must be fully functional — it is the required gate.
 
-- [ ] **Step 2: Lint the workflow YAML locally**
+- [ ] **Step 2: Lint the workflow YAML**
 
-Run: `nix-shell shell.nix --run "kubeconform -h >/dev/null" && python3 -c "import yaml,sys; yaml.safe_load(open('.github/workflows/validate-apps.yaml'))" && echo OK`
-Expected: `OK` (valid YAML).
+Run: `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/validate-apps.yaml')); print('OK')"`
+Expected: `OK`.
 
 - [ ] **Step 3: Commit**
 
@@ -428,20 +270,368 @@ git commit -m "ci: add validate-apps gate (kustomize build + kubeconform + flux 
 
 - [ ] **Step 4: (Manual, maintainer) Make `validate` a required status check**
 
-In GitHub branch protection for `master`, add the `validate` job as a required check. Documented here; not automatable in this plan.
+In GitHub branch protection for `master`, add the `validate` job as a required check. Documented; not automatable in this plan.
 
 ---
 
-### Task 7: Add `renovate.json5` with pilot-app scope
+# DELIVERABLE 2 — De-duplicate `spec.version`
 
-Renovate config: native managers, ignore `infrastructure/**`, one PR per app, no auto-merge. Scoped to the 3 pilot apps first via `enabledManagers` + an explicit include, so the pilot proves the flow before full rollout.
+### Task 4: Sentinel-ize the source-template `ref.tag` in all app metadata
+
+Replace the hard-coded `ref.tag` in each `apps/*/metadata.yaml` `templates.source` block with `__VERSION__`. `marketplace-ui` (no `templates:` yet) is excluded here; handled in Task 7.
+
+**Files:**
+- Modify: every `apps/*/metadata.yaml` with a `templates.source` block
+
+**Interfaces:**
+- Produces: every source template reads `tag: "__VERSION__"`. Task 5 (generator) relies on this exact string.
+
+- [ ] **Step 1: Snapshot the current catalog for the byte-identical check**
+
+```bash
+cp catalog.yaml /tmp/catalog.before.yaml
+```
+
+- [ ] **Step 2: Replace `ref.tag` with the sentinel (only the first tag inside `source: |`)**
+
+```bash
+for f in apps/*/metadata.yaml; do
+  grep -q '^    source: |' "$f" || continue
+  awk '
+    /^    source: \|/ { insrc=1 }
+    insrc && /^          tag: / && !done {
+      sub(/tag: .*/, "tag: \"__VERSION__\""); done=1
+    }
+    { print }
+  ' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+done
+```
+
+- [ ] **Step 3: Verify one sentinel per source-template app**
+
+```bash
+grep -rl '^    source: |' apps/*/metadata.yaml | while read f; do
+  echo "$f -> $(grep -c 'tag: "__VERSION__"' "$f") sentinel(s)"
+done
+```
+Expected: each `-> 1 sentinel(s)`; marketplace-ui not listed.
+
+- [ ] **Step 4: Confirm `spec.version` untouched**
+
+```bash
+grep -h '^  version:' apps/*/metadata.yaml | grep -c '__VERSION__'
+```
+Expected: `0`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/*/metadata.yaml
+git commit -m "refactor(apps): sentinel-ize source-template ref.tag for catalog generation"
+```
+
+---
+
+### Task 5: Fill the sentinel from `spec.version` in the catalog generator
+
+**Files:**
+- Modify: `scripts/generate-catalog.sh`
+
+**Interfaces:**
+- Consumes: sentinel (Task 4); `$VERSION` already extracted at `scripts/generate-catalog.sh:65`.
+- Produces: catalog with real tags, no sentinels. Task 6 verifies byte-equality.
+
+- [ ] **Step 1: Substitute the sentinel after the source block is extracted**
+
+Immediately after line `TMPL_SOURCE=$(extract_template_block "$metadata_file" "source")` (line 86), add:
+
+```bash
+  # Fill the version sentinel from spec.version (single source of truth).
+  TMPL_SOURCE=$(printf '%s' "$TMPL_SOURCE" | sed "s/__VERSION__/${VERSION}/g")
+```
+
+- [ ] **Step 2: Add a non-empty version guard after `VERSION=` (line 65)**
+
+```bash
+  if [ -z "$VERSION" ]; then
+    echo "ERROR: $app_name has empty spec.version" >&2; exit 1
+  fi
+```
+
+- [ ] **Step 3: Add the leak-guard before the final summary echo**
+
+```bash
+if grep -q '__VERSION__' "$CATALOG_FILE"; then
+  echo "ERROR: __VERSION__ sentinel leaked into catalog.yaml" >&2; exit 1
+fi
+```
+
+- [ ] **Step 4: Run**
+
+Run: `./scripts/generate-catalog.sh`
+Expected: no ERROR lines; prints `Catalog written to: ...`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add scripts/generate-catalog.sh
+git commit -m "feat(catalog): fill version sentinel from spec.version + leak/empty guards"
+```
+
+---
+
+### Task 6: Prove the refactor is behavior-neutral (byte-identical catalog)
+
+**Files:**
+- Test only.
+
+**Interfaces:**
+- Consumes: `/tmp/catalog.before.yaml` (Task 4); regenerated `catalog.yaml` (Task 5).
+
+- [ ] **Step 1: Diff ignoring the timestamp line**
+
+Run:
+```bash
+diff <(grep -v 'generatedAt' /tmp/catalog.before.yaml) \
+     <(grep -v 'generatedAt' catalog.yaml)
+```
+Expected: **empty**. Non-empty ⇒ a real tag was mangled — STOP, fix Task 4/5. (`generate-catalog.sh` re-stamps `generatedAt` each run, so exclude that line.)
+
+- [ ] **Step 2: Confirm no sentinel in shipped artifacts**
+
+```bash
+grep -c '__VERSION__' catalog.yaml apps/marketplace-ui/base/catalog.yaml
+```
+Expected: `0` for both.
+
+- [ ] **Step 3: Commit (likely no-op)**
+
+```bash
+git add catalog.yaml apps/marketplace-ui/base/catalog.yaml
+git commit -m "chore: regenerate catalog.yaml after sentinel refactor" || echo "no changes (expected)"
+```
+
+---
+
+### Task 7: Standardize `marketplace-ui` metadata
+
+Add the missing standard `templates:` block (with sentinel) and remove the duplicate `appVersion`.
+
+**Files:**
+- Modify: `apps/marketplace-ui/metadata.yaml`
+- Regenerate: `catalog.yaml`, `apps/marketplace-ui/base/catalog.yaml`
+
+- [ ] **Step 1: Remove the duplicate `appVersion` line**
+
+Delete `  appVersion: "0.4.0"`, leaving `version: "0.4.0"`.
+
+- [ ] **Step 2: Add the standard `templates:` block**
+
+Append under `spec:` (dependencies from `infrastructure/system-apps/marketplace-ui.yaml`):
+
+```yaml
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-marketplace-ui
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "marketplace-ui"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/marketplace-ui
+        ref:
+          tag: "__VERSION__"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-marketplace-ui
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "marketplace-ui"
+      spec:
+        dependsOn:
+          - name: gogs
+          - name: cert-manager
+          - name: casdoor-sso-controller
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-marketplace-ui
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+        postBuild:
+          substitute:
+            BASE_DOMAIN: "${BASE_DOMAIN}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml
+```
+
+- [ ] **Step 3: Regenerate + verify no leak**
+
+Run: `./scripts/generate-catalog.sh && grep -c '__VERSION__' catalog.yaml`
+Expected: succeeds; `0`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add apps/marketplace-ui/metadata.yaml catalog.yaml apps/marketplace-ui/base/catalog.yaml
+git commit -m "refactor(marketplace-ui): add standard templates block, drop duplicate appVersion"
+```
+
+---
+
+# DELIVERABLE 3 — Normalize apps to standard (scope B, audit-driven)
+
+> Each task in this deliverable ends by re-running `./scripts/audit-apps.sh` and confirming the fixed app no longer appears as a violation. The final task drives the audit to exit 0.
+
+### Task 8: Fix metadata-schema gaps (missing keys, stray keys)
+
+Bring every `metadata.yaml` to the canonical schema: add missing `icon`/`dependencies`, remove stray `notes`.
+
+**Files:**
+- Modify: `apps/tailscale/metadata.yaml` (remove `notes`)
+- Modify: `apps/casdoor-sso-controller/metadata.yaml`, `apps/frp-operator/metadata.yaml`, `apps/rustdesk-server-oss/metadata.yaml` (add `icon`; add `dependencies`/`params` if the audit flags them)
+- Plus any other app the audit's "Missing required" / "Forbidden keys" columns flag
+
+**Interfaces:**
+- Consumes: `docs/design/app-audit.md` (Task 1).
+
+- [ ] **Step 1: List remaining schema violations**
+
+Run: `./scripts/audit-apps.sh 2>/dev/null | grep -vE '\| – \| – \|'`
+Expected: rows only for apps with a non-`–` "Missing required" or "Forbidden keys" cell.
+
+- [ ] **Step 2: Remove the stray `notes` key from tailscale**
+
+In `apps/tailscale/metadata.yaml`, delete the `notes:` key and its block.
+
+- [ ] **Step 3: Add missing `icon` to the three apps**
+
+Add an `icon: "<upstream logo URL>"` line under `displayName`/`description` for `casdoor-sso-controller`, `frp-operator`, `rustdesk-server-oss`. Use the project's official/logo URL (find via the app's website field or upstream repo). For any app the audit also flags as missing `dependencies`, add a `dependencies:` block modeled on a peer app (e.g. an `IngressController` + `StorageClass` entry as applicable).
+
+- [ ] **Step 4: Re-run audit — schema columns clean**
+
+Run: `./scripts/audit-apps.sh 2>/dev/null | grep -E 'notes|appVersion' ; echo "---"; ./scripts/audit-apps.sh >/dev/null 2>&1; echo "note: nonzero still expected until archetype fixes (Task 9-10)"`
+Expected: no `notes`/`appVersion` rows; schema-missing rows resolved.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/*/metadata.yaml
+git commit -m "refactor(apps): conform metadata.yaml to canonical schema (icons, deps, drop notes)"
+```
+
+---
+
+### Task 9: Make `casdoor-sso-controller` natively trackable (inline image → `images:` transformer)
+
+Its image tag is inline in the Deployment(s) with no `images:` transformer, so no native manager can bump it. Move the tag to an `images:` block in the overlay.
+
+**Files:**
+- Modify: `apps/casdoor-sso-controller/base/deployment.yaml` (drop the `:0.2.5` tags → bare image), `apps/casdoor-sso-controller/overlays/librepod/kustomization.yaml` (add `images:`)
+
+**Interfaces:**
+- Produces: a `kustomize-images` archetype for this app.
+
+- [ ] **Step 1: Bare the image in the base Deployment (both occurrences)**
+
+Change `image: ghcr.io/librepod/casdoor-sso-controller:0.2.5` → `image: ghcr.io/librepod/casdoor-sso-controller` in `apps/casdoor-sso-controller/base/deployment.yaml` (2 places).
+
+- [ ] **Step 2: Add the `images:` transformer to the overlay**
+
+In `apps/casdoor-sso-controller/overlays/librepod/kustomization.yaml`, add:
+```yaml
+images:
+- name: ghcr.io/librepod/casdoor-sso-controller
+  newTag: "0.2.5"
+```
+
+- [ ] **Step 3: Verify the render is unchanged (same image:tag out)**
+
+Run:
+```bash
+nix-shell shell.nix --run 'kustomize build apps/casdoor-sso-controller/overlays/librepod' \
+  | grep 'image:.*casdoor-sso-controller'
+```
+Expected: still `ghcr.io/librepod/casdoor-sso-controller:0.2.5` on every line — behavior unchanged, tag now transformer-driven.
+
+- [ ] **Step 4: Re-run audit for this app**
+
+Run: `./scripts/audit-apps.sh 2>/dev/null | grep casdoor-sso-controller`
+Expected: archetype now includes `kustomize-images` (no longer `inline-image`/UNKNOWN).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/casdoor-sso-controller
+git commit -m "refactor(casdoor-sso-controller): move image tag to images: transformer for update tracking"
+```
+
+---
+
+### Task 10: Confirm remaining archetypes are trackable (nfs-provisioner remote-base, immich/step-certificates multi)
+
+Resolve the last non-native archetypes so every app has a documented, annotatable version source. No structural rewrite — just ensure the audit reports a known archetype and record the Renovate datasource each needs (used in D4).
+
+**Files:**
+- Modify (if needed): `apps/nfs-provisioner/base/kustomization.yaml` (only to make the git-ref annotatable — see Step 2)
+- No code change for immich/step-certificates; record their annotation target.
+
+**Interfaces:**
+- Produces: audit exits 0; a note in `docs/design/app-audit.md` (append) of each remaining app's Renovate datasource.
+
+- [ ] **Step 1: Confirm nfs-provisioner archetype detected**
+
+Run: `./scripts/audit-apps.sh 2>/dev/null | grep nfs-provisioner`
+Expected: archetype `remote-base-gitref` (from the `?ref=nfs-subdir-external-provisioner-4.0.18` URL). If it shows UNKNOWN, adjust the audit's detection in Task 1's script until it classifies correctly.
+
+- [ ] **Step 2: Record the datasource for the git-ref base**
+
+Append to `docs/design/app-audit.md` a "Renovate datasource notes" section:
+```
+- nfs-provisioner: github-tags, depName=kubernetes-sigs/nfs-subdir-external-provisioner,
+  extractVersion prefix "nfs-subdir-external-provisioner-" (the ?ref= tag in base/kustomization.yaml)
+- immich: docker, depName=<immich app image> for spec.version; chart tracked natively via base/ocirepository.yaml
+- step-certificates: annotate spec.version to the step-certificates image, not a sidecar
+```
+
+- [ ] **Step 3: Drive the audit to exit 0**
+
+Run: `./scripts/audit-apps.sh; echo "exit=$?"`
+Expected: `AUDIT: all apps conform.` and `exit=0`. If not, the remaining flagged app needs its schema/archetype fixed (loop back to Task 8/9) before proceeding.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add docs/design/app-audit.md apps/nfs-provisioner 2>/dev/null
+git commit -m "docs(audit): record Renovate datasources; all apps conform"
+```
+
+---
+
+# DELIVERABLE 4 — Renovate (pilot → full)
+
+### Task 11: Add `renovate.json5` scoped to the pilot apps
 
 **Files:**
 - Create: `renovate.json5`
+- Modify: `apps/gogs/metadata.yaml`, `apps/litellm/metadata.yaml`, `apps/whoami/metadata.yaml`
 
 **Interfaces:**
-- Consumes: sentinel-free `spec.version` (D1); the `validate-apps` gate (Task 6).
-- Produces: Renovate PRs for gogs/litellm/whoami.
+- Consumes: single `spec.version` (D2), clean archetypes (D3), the `validate-apps` gate (D1).
 
 - [ ] **Step 1: Create the config**
 
@@ -452,14 +642,10 @@ Create `renovate.json5`:
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   extends: ["config:recommended"],
   dependencyDashboard: true,
-  // Never touch system-app cluster-adoption manifests.
   ignorePaths: ["infrastructure/**"],
-  // Everything is reviewed by a human.
   automerge: false,
-  // Native managers that already understand our files.
   kustomize: { managerFilePatterns: ["/apps/.*/overlays/.*/kustomization\\.ya?ml/"] },
   flux: { managerFilePatterns: ["/apps/.*/base/ocirepository\\.ya?ml/"] },
-  // customManager: bump spec.version in metadata.yaml, driven by an annotation.
   customManagers: [
     {
       customType: "regex",
@@ -470,32 +656,24 @@ Create `renovate.json5`:
     },
   ],
   packageRules: [
-    // PILOT: only gogs, litellm, whoami are enabled for now.
     { matchFileNames: ["apps/**"], enabled: false },
-    {
-      matchFileNames: ["apps/gogs/**", "apps/litellm/**", "apps/whoami/**"],
-      enabled: true,
-    },
-    // One grouped PR per pilot app.
+    { matchFileNames: ["apps/gogs/**", "apps/litellm/**", "apps/whoami/**"], enabled: true },
     { matchFileNames: ["apps/gogs/**"], groupName: "gogs" },
     { matchFileNames: ["apps/litellm/**"], groupName: "litellm" },
     { matchFileNames: ["apps/whoami/**"], groupName: "whoami" },
-    // Majors get their own PR + the on-demand e2e label.
     { matchUpdateTypes: ["major"], addLabels: ["renovate-e2e"] },
   ],
 }
 ```
 
-- [ ] **Step 2: Add the `# renovate:` annotation above each pilot app's `version:` line**
-
-For each pilot app, insert a comment line directly above `version:` in `apps/<app>/metadata.yaml`:
+- [ ] **Step 2: Annotate each pilot app's `version:` line**
 
 - `apps/gogs/metadata.yaml`:
 ```yaml
   # renovate: datasource=docker depName=gogs/gogs
   version: "0.14.3"
 ```
-- `apps/litellm/metadata.yaml` (target the app image, NOT the alpine sidecar):
+- `apps/litellm/metadata.yaml` (app image, NOT the alpine sidecar):
 ```yaml
   # renovate: datasource=docker depName=litellm/litellm
   version: "v1.93.0"
@@ -511,13 +689,10 @@ For each pilot app, insert a comment line directly above `version:` in `apps/<ap
 Run: `npx --yes --package renovate -- renovate-config-validator renovate.json5`
 Expected: `Config validated successfully`.
 
-- [ ] **Step 4: Confirm the annotation regex matches (dry sanity, no network)**
+- [ ] **Step 4: Confirm audit still clean (annotations don't break schema)**
 
-Run:
-```bash
-grep -B1 '^  version:' apps/gogs/metadata.yaml apps/litellm/metadata.yaml apps/whoami/metadata.yaml
-```
-Expected: each shows the `# renovate: datasource=docker depName=...` line immediately above `version:`.
+Run: `./scripts/audit-apps.sh >/dev/null 2>&1; echo "exit=$?"`
+Expected: `exit=0`.
 
 - [ ] **Step 5: Commit**
 
@@ -528,44 +703,42 @@ git commit -m "feat: add Renovate config (pilot: gogs, litellm, whoami)"
 
 ---
 
-### Task 8: Roll out annotations to remaining apps + enable them
+### Task 12: Roll out annotations to all apps + enable them
 
-After the pilot proves out (Renovate opens a correct grouped PR that passes `validate-apps`), extend annotations to every remaining app and flip the pilot gate off.
+After the pilot proves out (Renovate opens a correct grouped PR that passes `validate-apps`), extend to every app and remove the pilot gate.
 
 **Files:**
 - Modify: `renovate.json5`; every remaining `apps/*/metadata.yaml`
 
-**Interfaces:**
-- Consumes: proven pilot config from Task 7.
+- [ ] **Step 1: Remove the pilot gate; add generic grouping**
 
-- [ ] **Step 1: Remove the pilot gate**
-
-In `renovate.json5`, delete the two pilot `packageRules` entries:
+In `renovate.json5`, delete:
 ```json5
     { matchFileNames: ["apps/**"], enabled: false },
     { matchFileNames: ["apps/gogs/**", "apps/litellm/**", "apps/whoami/**"], enabled: true },
 ```
-and replace the three per-app `groupName` rules with one generic rule so every app is grouped by its directory:
+and replace the three per-app `groupName` rules with:
 ```json5
     { matchFileNames: ["apps/*/**"], groupName: "{{packageFileDir}}" },
 ```
 
-- [ ] **Step 2: Add a `# renovate:` annotation above `version:` for every remaining app**
+- [ ] **Step 2: Annotate every remaining app's `version:` line**
 
-For each app not in the pilot, determine its primary upstream image/chart and add the annotation. Use the app's `overlays/*/kustomization.yaml` `images: name:` (docker datasource) or its `base/ocirepository.yaml` chart (for HelmRelease apps). For divergent apps (immich sidecar/patch, headscale/vaultwarden variants), annotate the **app image**, not the sidecar. Do one app per commit for reviewability.
+Per app, add `# renovate: datasource=<ds> depName=<pkg>` above `version:`, using its archetype from the audit:
+- `kustomize-images` apps → `datasource=docker`, `depName` = the `images: name:`.
+- `oci-chart`/`helmrelease` apps → chart tracked natively; annotate `spec.version` to the app image (`datasource=docker`).
+- `remote-base-gitref` (nfs-provisioner) → `datasource=github-tags depName=kubernetes-sigs/nfs-subdir-external-provisioner`.
+- Divergent apps (immich, headscale, vaultwarden, step-certificates) → annotate the **app image**, never a sidecar/variant. Do one app per commit for reviewability.
 
-Example (vaultwarden, image `vaultwarden/server`):
-```yaml
-  # renovate: datasource=docker depName=vaultwarden/server
-  version: "1.37.0"
+- [ ] **Step 3: Validate + audit**
+
+Run:
+```bash
+npx --yes --package renovate -- renovate-config-validator renovate.json5 && ./scripts/audit-apps.sh >/dev/null; echo "exit=$?"
 ```
+Expected: `Config validated successfully`; `exit=0`.
 
-- [ ] **Step 3: Validate**
-
-Run: `npx --yes --package renovate -- renovate-config-validator renovate.json5`
-Expected: `Config validated successfully`.
-
-- [ ] **Step 4: Commit (per app or in a batch)**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add renovate.json5 apps/*/metadata.yaml
@@ -577,14 +750,16 @@ git commit -m "feat(renovate): enable update tracking for all apps"
 ## Self-Review
 
 **Spec coverage:**
-- D1 de-dup (sentinel + generator + guards) → Tasks 1–3 ✅
-- marketplace-ui standardization → Task 4 ✅
-- kubeconform tooling gap → Task 5 ✅
-- validate-apps gate (build+kubeconform+flux) + on-demand e2e label → Task 6 ✅
-- Renovate config (native + customManager + ignore infra + group + no auto-merge) → Task 7 ✅
-- Pilot-first rollout → Task 7 (scoped) then Task 8 (full) ✅
-- Required check (decision A) → Task 6 Step 4 (manual, documented) ✅
+- Audit (re-runnable lint) → Task 1 ✅ (spec Goal + audit-findings section)
+- Validation gate built early → Tasks 2–3 ✅
+- De-dup `spec.version` (sentinel + generator + byte-identical proof) → Tasks 4–6 ✅
+- marketplace-ui standardization → Task 7 ✅
+- Normalize to canonical schema (scope B) → Task 8 ✅
+- Make non-native apps trackable (inline-image, remote-base, multi-archetype) → Tasks 9–10 ✅
+- Renovate config (native + customManager + ignore infra + group + no auto-merge) → Task 11 ✅
+- Pilot → full rollout → Tasks 11 (scoped) → 12 (full) ✅
+- Required check (decision A) → Task 3 Step 4 (manual, documented) ✅
 
-**Placeholder scan:** The only intentional stub is the `e2e` job body, explicitly flagged as a documented follow-up target (the label mechanism + skeleton ARE the D2 deliverable per spec's "C-on-demand"); the required `validate` job is fully functional. Task 8 Step 2 is per-app work that cannot be fully enumerated without inspecting each app, but gives the exact rule (use `images: name:` or chart, annotate app image not sidecar) and a worked example — acceptable as it's mechanical repetition of the Task 7 pattern.
+**Placeholder scan:** Intentional stubs: the `e2e` job body (flagged as documented follow-up; the label mechanism is the deliverable). Task 8 Step 3 and Task 12 Step 2 are per-app repetition of an explicit pattern with worked examples — acceptable (cannot enumerate every app's icon URL / depName without per-app lookup, but the rule + examples are exact). No "TBD"/"add error handling"/"similar to Task N" placeholders.
 
-**Type/name consistency:** Sentinel `__VERSION__` used identically in Tasks 1, 2, 4, and guards. `renovate-e2e` label consistent between Task 6 (`e2e` job condition) and Task 7 (`addLabels`). `validate` job name consistent between Task 6 and its required-check note.
+**Type/name consistency:** Sentinel `__VERSION__` identical in Tasks 4, 5, 6-guard, 7. `renovate-e2e` label consistent between Task 3 (`e2e` job) and Tasks 11/12 (`addLabels`). `validate` job name consistent (Task 3 + required-check note). `scripts/audit-apps.sh` archetype names (`kustomize-images`, `inline-image`, `remote-base-gitref`, `oci-chart`, `helmrelease`) consistent between Task 1's script and Tasks 9–12's references.

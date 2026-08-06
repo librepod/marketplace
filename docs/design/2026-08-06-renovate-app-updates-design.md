@@ -13,6 +13,10 @@ so a green check means "the manifests still build correctly."
 
 ## Goals
 
+- **Audit & normalize apps first** so every app follows the same
+  `metadata.yaml` schema and has a single, trackable version source, before
+  Renovate is configured. Inconsistent apps otherwise force per-app Renovate
+  hacks. A re-runnable `scripts/audit-apps.sh` doubles as a standing drift lint.
 - Renovate opens PRs for **every** app in `apps/` when an upstream image or
   Helm chart has a newer version.
 - Each PR is **complete**: it bumps the concrete image/chart tag **and** the
@@ -102,9 +106,48 @@ not re-derive them.
 | `overlays/*/kustomization.yaml` `images: newTag` | native **kustomize** manager | gogs `gogs/gogs:0.14.3`, litellm `v1.93.0` |
 | `base/ocirepository.yaml` chart `ref.semver`/`ref.tag` | native **flux** manager | immich chart `0.13.*` |
 | `overlays/*/patch-helmrelease.yaml` `image.tag` | **customManager** (it is a kustomize patch, not a Helm values file) | immich `main.image.tag: v3.0.3` |
+| Inline `image: repo:tag` in a Deployment (no `images:` transformer) | **normalize** → move to `images:` transformer, then native kustomize | casdoor-sso-controller `ghcr.io/librepod/casdoor-sso-controller:0.2.5` |
+| Remote kustomize base pinned by git ref in URL (`...?ref=<tag>`) | **customManager** + `github-tags`/`git-tags` datasource | nfs-provisioner `?ref=nfs-subdir-external-provisioner-4.0.18` |
 | `metadata.yaml` `spec.version` | **customManager** + per-app annotation | every app |
 
+## Canonical `metadata.yaml` schema (derived by frequency)
+
+- **Required (28/28 apps have it):** `name`, `displayName`, `description`,
+  `category`, `website`, `version`, `source`.
+- **Required, fix gaps:** `templates` (missing only marketplace-ui — fixed),
+  `dependencies` (missing casdoor-sso-controller, frp-operator, rustdesk),
+  `icon` (missing casdoor-sso-controller, frp-operator, rustdesk).
+- **Conditional / legitimately optional:** `params` (present when the app takes
+  install params), `secrets` (present when the app needs generated secrets).
+  Absence is NOT a defect.
+- **Outliers to remove:** `notes` (tailscale only), `appVersion` (marketplace-ui
+  only).
+
+## App-audit findings (2026-08-06)
+
+Notable inconsistencies the audit must track and normalization must fix:
+- `marketplace-ui`: `appVersion` dup + no `templates` (system app; standardized).
+- `tailscale`: stray `notes` key.
+- `casdoor-sso-controller`, `frp-operator`, `rustdesk-server-oss`: missing
+  `icon` (and `params`/`dependencies` for some).
+- `casdoor-sso-controller`: image tag inline in Deployment, no `images:`
+  transformer → not natively trackable until moved.
+- `nfs-provisioner`: no in-repo image at all; deploys from a remote GitHub
+  kustomize base pinned by git ref → distinct archetype needing an annotation.
+- `immich`, `step-certificates`: multi-archetype (chart + kustomize images +
+  patch) → `spec.version` annotation must target the app image, not a sidecar.
+
 ---
+
+## Deliverable sequencing (updated after the app audit)
+
+The implementation plan sequences the work as: **D0 audit** (re-runnable
+`scripts/audit-apps.sh` → report) → **validation gate** (kubeconform +
+`validate-apps.yaml`, built early so structural fixes are CI-checked) →
+**de-duplicate `spec.version`** (below) → **normalize apps to the canonical
+schema and a single trackable version source** (scope B, driven by the audit) →
+**Renovate** (pilot then full). The two sections below describe the de-dup and
+Renovate mechanics in detail; the plan file holds the task-by-task ordering.
 
 ## Deliverable 1 — De-duplicate `spec.version` (schema cleanup, no Renovate)
 
