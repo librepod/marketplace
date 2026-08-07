@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-08-07T07:10:16Z"
+  generatedAt: "2026-08-07T10:10:11Z"
 apps:
     - name: baikal
       version: "0.11.1-nginx"
@@ -1225,7 +1225,7 @@ apps:
       params:
             required: []
     - name: renovate
-      version: "44.14.1"
+      version: "44.14.3"
       displayName: "Renovate"
       description: "Self-hosted Renovate dependency-update bot. Runs on a schedule and opens pull requests on your Git repositories (GitHub, GitLab, Gitea, Bitbucket, GitHub Enterprise). Bring your own configuration: point it at your platform and repositories by editing the config.json ConfigMap, and supply a personal access token. No inbound networking is required — the bot only reaches out to your Git platform."
       category: "Development"
@@ -1246,7 +1246,7 @@ apps:
               interval: 10m
               url: oci://ghcr.io/librepod/marketplace/apps/renovate
               ref:
-                tag: "44.14.1"
+                tag: "44.14.3"
         release: |
             apiVersion: kustomize.toolkit.fluxcd.io/v1
             kind: Kustomization
