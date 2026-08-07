@@ -50,8 +50,16 @@
     },
 
     // --- One grouped PR per app: the image/chart bump + the spec.version bump
-    // land together, keyed by the app's directory (apps/<app>).
-    { matchFileNames: ["apps/*/**"], groupName: "{{packageFileDir}}" },
+    // land together, keyed by the app NAME (the segment after apps/).
+    //
+    // Do NOT key on {{packageFileDir}} here: an app declares the same image in
+    // two files at different depths — apps/<app>/metadata.yaml (dir = apps/<app>)
+    // and apps/<app>/overlays/librepod/kustomization.yaml (dir = apps/<app>/
+    // overlays/librepod). Grouping on the full dir gives those two files two
+    // different group names, so the same version bump opens TWO PRs per app.
+    // Extracting index 1 of the split path ("<app>") collapses every file under
+    // apps/<app>/ into one group → one PR per app.
+    { matchFileNames: ["apps/*/**"], groupName: "{{lookup (split packageFileDir '/') 1}}" },
 
     // --- Major bumps get the e2e label + their own PR.
     { matchUpdateTypes: ["major"], addLabels: ["renovate-e2e"] },
