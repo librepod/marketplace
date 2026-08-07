@@ -10,7 +10,7 @@ spec:
   website: "https://github.com/vrtmrz/obsidian-livesync"
 
   # renovate: datasource=docker depName=couchdb
-  version: "3.5.1"
+  version: "3.5.2"
 
   source:
     type: oci-kustomize
