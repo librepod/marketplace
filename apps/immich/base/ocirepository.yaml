@@ -8,5 +8,5 @@ spec:
   # https://immich-app.github.io/immich-charts/ repo was retired.
   url: oci://ghcr.io/immich-app/immich-charts/immich
   ref:
-    # Pin the chart minor (0.13.x) so patch updates flow in automatically.
-    semver: "0.13.*"
+    # Pinned chart tag; Renovate opens a PR to move it (no auto-merge).
+    tag: "0.13.1"
