@@ -10,7 +10,7 @@ spec:
   website: "https://traefik.io/"
 
   # renovate: datasource=docker depName=traefik
-  version: "v3.6.15"
+  version: "v3.7.10"
 
   source:
     type: oci-kustomize
