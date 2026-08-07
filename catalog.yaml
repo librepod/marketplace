@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-08-06T15:31:54Z"
+  generatedAt: "2026-08-07T07:10:16Z"
 apps:
     - name: baikal
       version: "0.11.1-nginx"
@@ -1224,6 +1224,90 @@ apps:
               - release.yaml
       params:
             required: []
+    - name: renovate
+      version: "44.14.1"
+      displayName: "Renovate"
+      description: "Self-hosted Renovate dependency-update bot. Runs on a schedule and opens pull requests on your Git repositories (GitHub, GitLab, Gitea, Bitbucket, GitHub Enterprise). Bring your own configuration: point it at your platform and repositories by editing the config.json ConfigMap, and supply a personal access token. No inbound networking is required — the bot only reaches out to your Git platform."
+      category: "Development"
+      icon: "https://docs.renovatebot.com/assets/images/logo.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/renovate"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-renovate
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "renovate"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/renovate
+              ref:
+                tag: "44.14.1"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-renovate
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "renovate"
+            spec:
+              dependsOn:
+                - name: storage
+              interval: 10m
+              retryInterval: 2m
+              timeout: 5m
+              targetNamespace: renovate
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-renovate
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+              postBuild:
+                substitute:
+                  LOG_LEVEL: "${LOG_LEVEL}"
+                substituteFrom:
+                  - kind: Secret
+                    name: renovate-config
+        secret: |
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: renovate-config
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "renovate"
+            type: Opaque
+            stringData:
+              RENOVATE_TOKEN: "${RENOVATE_TOKEN}"
+              RENOVATE_GITHUB_COM_TOKEN: "${RENOVATE_GITHUB_COM_TOKEN}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+      params:
+            optional:
+              - name: LOG_LEVEL
+                description: "Renovate log level (one of: trace, debug, info, warn, error, fatal)."
+                type: string
+                default: "info"
+                example: "debug"
+      secrets:
+            - name: RENOVATE_TOKEN
+              description: "Personal Access Token (or GitHub App installation token) for the target Git platform. Needs repo, pull-request, and issues scopes (issues = dependency dashboard)."
+              required: true
+            - name: RENOVATE_GITHUB_COM_TOKEN
+              description: "Optional PAT for github.com, used to fetch changelogs when the target platform is NOT github.com (e.g. GitLab/Gitea/GHE). Leave empty if targeting github.com — the main token is reused for changelogs."
+              required: false
     - name: rustdesk-server-oss
       version: "1.1.15"
       displayName: "RustDesk Server (OSS)"
