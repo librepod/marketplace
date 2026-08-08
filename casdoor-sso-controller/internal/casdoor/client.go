@@ -15,18 +15,20 @@ type Application = map[string]any
 // writes. Exported so the reconciler can address fields by typed constant
 // instead of re-declaring (and risking typos in) the string literals.
 const (
-	FieldName         = "name"
-	FieldOrganization = "organization"
-	FieldClientID     = "clientId"
-	FieldClientSecret = "clientSecret"
-	FieldRedirectUris = "redirectUris"
-	FieldScopes       = "scopes"
-	FieldGrantTypes   = "grantTypes"
-	FieldTokenFormat  = "tokenFormat"
-	FieldExpireHours  = "expireInHours"
-	FieldEnableSignUp = "enableSignUp"
-	FieldDisplayName  = "displayName"
-	FieldTitle        = "title"
+	FieldName                = "name"
+	FieldOrganization        = "organization"
+	FieldClientID            = "clientId"
+	FieldClientSecret        = "clientSecret"
+	FieldRedirectUris        = "redirectUris"
+	FieldScopes              = "scopes"
+	FieldGrantTypes          = "grantTypes"
+	FieldTokenFormat         = "tokenFormat"
+	FieldExpireHours         = "expireInHours"
+	FieldEnableSignUp        = "enableSignUp"
+	FieldEnableSigninSession = "enableSigninSession"
+	FieldEnableAutoSignin    = "enableAutoSignin"
+	FieldDisplayName         = "displayName"
+	FieldTitle               = "title"
 )
 
 // ManagedFields is the set of Casdoor Application keys the controller owns:
