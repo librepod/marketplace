@@ -16,4 +16,4 @@ components:
 # directly in helmrelease.yaml (spec.values.image.tag and extraInitContainers).
 images:
   - name: cr.smallstep.com/smallstep/step-ca
-    newTag: "0.29.0"
+    newTag: "0.30.2"
