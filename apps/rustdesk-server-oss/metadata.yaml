@@ -11,7 +11,7 @@ spec:
 
   # renovate: datasource=docker depName=rustdesk/rustdesk-server
   # serge: notesRepo=rustdesk/rustdesk-server
-  version: "1.1.15"
+  version: "1.1.16"
 
   source:
     type: oci-kustomize

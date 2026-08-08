@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: renovate-cache
+  namespace: renovate
+spec:
+  accessModes:
+    - ReadWriteMany
+  # No storageClassName here — patched in by overlays/librepod/patch-storage-class.yaml
+  resources:
+    requests:
+      storage: 5Gi

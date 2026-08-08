@@ -6,7 +6,7 @@
 #
 # 1.7.0 (appVersion 0.9.0) is the first release with the configurable frpc
 # image. Older tags (e.g. 0.0.0-pr.3) omit --frpc-default-image and fail every
-# Client with ImageUnresolved — the ~1.7.0 range keeps us on 1.7.x only.
+# Client with ImageUnresolved — so we pin 1.7.0 explicitly.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
 metadata:
@@ -15,5 +15,5 @@ spec:
   interval: 24h
   url: oci://ghcr.io/librepod/charts/frp-operator
   ref:
-    # Pin the 1.7.x minor; allow patch updates automatically.
-    semver: "~1.7.0"
+    # Pinned chart tag; Renovate opens a PR to move it (no auto-merge).
+    tag: "1.7.0"

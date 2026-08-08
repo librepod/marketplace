@@ -9,4 +9,4 @@ resources:
 
 images:
 - name: traefik/whoami
-  newTag: "v1.11.0"
+  newTag: "v1.12.0"
