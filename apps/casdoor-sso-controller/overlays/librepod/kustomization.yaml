@@ -4,4 +4,4 @@ resources:
   - ../../base
 images:
 - name: ghcr.io/librepod/casdoor-sso-controller
-  newTag: "0.2.5"
+  newTag: "0.2.6"
