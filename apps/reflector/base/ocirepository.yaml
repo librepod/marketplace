@@ -6,7 +6,7 @@ spec:
   interval: 24h
   url: oci://ghcr.io/emberstack/helm-charts/reflector
   ref:
-    semver: "10.0.*"
+    tag: "10.0.63"
   # layerSelector:
   #   mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
   #   operation: copy
