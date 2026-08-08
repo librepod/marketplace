@@ -10,6 +10,7 @@ spec:
   website: "https://github.com/open-webui/open-webui"
 
   # renovate: datasource=docker depName=ghcr.io/open-webui/open-webui
+  # serge: notesRepo=open-webui/open-webui
   version: "0.10.2"
 
   source:

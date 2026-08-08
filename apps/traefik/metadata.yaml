@@ -10,6 +10,7 @@ spec:
   website: "https://traefik.io/"
 
   # renovate: datasource=docker depName=traefik
+  # serge: notesRepo=traefik/traefik
   version: "v3.6.15"
 
   source:

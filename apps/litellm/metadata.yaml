@@ -10,6 +10,7 @@ spec:
   website: "https://github.com/BerriAI/litellm"
 
   # renovate: datasource=docker depName=litellm/litellm
+  # serge: notesRepo=BerriAI/litellm
   version: "v1.95.0"
 
   source:

@@ -1,0 +1,7 @@
+{
+  "title": "chore(deps): update injected-app",
+  "body": "",
+  "files": [
+    { "path": "apps/__context-script-test-injection__/metadata.yaml", "status": "modified", "additions": 1, "deletions": 1 }
+  ]
+}

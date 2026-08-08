@@ -10,6 +10,7 @@ spec:
   website: "https://fluxoperator.dev"
 
   # renovate: datasource=docker depName=ghcr.io/controlplaneio-fluxcd/charts/flux-operator-mcp
+  # serge: notesRepo=controlplaneio-fluxcd/flux-operator
   version: "0.44.0"
 
   source:

@@ -1,0 +1,198 @@
+#!/usr/bin/env sh
+# Serge context-script for LibrePod Marketplace.
+# Injects upstream release notes for Renovate version-bump PRs so the reviewer
+# can judge whether a bump is safe. Runs in the GitHub Actions runner (has
+# network + GITHUB_TOKEN). Contract: read Serge PR JSON on stdin, print
+# {"context": "..."} on stdout, ALWAYS exit 0.
+set -u
+
+MAX_NOTES_CHARS=12000
+
+# Emit a context payload and exit successfully. $1 = context string.
+emit() {
+  # jq -Rs turns arbitrary text into a safe JSON string.
+  printf '%s' "$1" | jq -Rs '{context: .}'
+  exit 0
+}
+
+# GET a URL with optional auth, no eval, no shell interpolation of the URL.
+# $1 = full URL. Always a single argv entry — never word-split or globbed.
+gh_get() {
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    curl -sSL -H "Authorization: Bearer $GITHUB_TOKEN" \
+      -H "Accept: application/vnd.github+json" "$1" 2>/dev/null
+  else
+    curl -sSL -H "Accept: application/vnd.github+json" "$1" 2>/dev/null
+  fi
+}
+
+# Plain GET (no Accept override) for arbitrary notesUrl hints. By the time
+# this is called, notes_url has already been validated (see below) to have
+# an allowlisted GitHub host — so it's always safe to attach the token here.
+# We never reach this function with a non-GitHub host.
+plain_get() {
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    curl -sSL -H "Authorization: Bearer $GITHUB_TOKEN" "$1" 2>/dev/null
+  else
+    curl -sSL "$1" 2>/dev/null
+  fi
+}
+
+# Extract the host (authority) from a validated https:// URL. POSIX-safe:
+# strip the "https://" scheme, then cut at the first '/', '?', or '#' to
+# isolate the authority component. $1 = full URL, assumed to already start
+# with "https://" (caller checks this first).
+url_host() {
+  rest=${1#https://}
+  # Cut at the first delimiter that ends the authority component.
+  host=$rest
+  host=${host%%/*}
+  host=${host%%\?*}
+  host=${host%%#*}
+  printf '%s' "$host"
+}
+
+# Allowlist of GitHub hosts the token (and any request) may be sent to.
+# notesUrl is attacker-controlled (PR content), so any host outside this
+# list must never see the Authorization header — and, per the maintainer's
+# decision, must be rejected outright rather than fetched unauthenticated.
+is_github_host() {
+  case "$1" in
+    api.github.com|raw.githubusercontent.com|objects.githubusercontent.com|github.com) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+input=$(cat)
+
+# Which metadata.yaml files changed? (Renovate bumps spec.version there.)
+metafiles=$(printf '%s' "$input" \
+  | jq -r '.files[]?.path // empty' \
+  | grep -E '^apps/[^/]+/metadata\.yaml$' || true)
+
+# Not a metadata bump → let Serge do a normal review with no extra context.
+[ -z "$metafiles" ] && emit ""
+
+# Resolve the base commit to read the pre-bump version from.
+base="${GITHUB_BASE_SHA:-}"
+if [ -z "$base" ]; then
+  base=$(git merge-base origin/master HEAD 2>/dev/null || echo "")
+fi
+
+out=""
+for f in $metafiles; do
+  app=$(printf '%s' "$f" | cut -d/ -f2)
+
+  new_ver=$(grep -E '^\s*version:' "$f" 2>/dev/null | head -1 \
+    | sed -E 's/.*version:\s*"?([^"[:space:]]+)"?.*/\1/')
+
+  old_ver=""
+  if [ -n "$base" ]; then
+    old_ver=$(git show "$base:$f" 2>/dev/null | grep -E '^\s*version:' | head -1 \
+      | sed -E 's/.*version:\s*"?([^"[:space:]]+)"?.*/\1/')
+  fi
+  [ -z "$old_ver" ] && old_ver="unknown"
+
+  header="$app bump ${old_ver}->${new_ver}"
+
+  # Resolution hint written next to the renovate comment.
+  notes_repo=$(grep -oE '# serge: notesRepo=\S+' "$f" 2>/dev/null | head -1 | sed 's/.*notesRepo=//')
+  notes_url=$(grep -oE '# serge: notesUrl=\S+' "$f" 2>/dev/null | head -1 | sed 's/.*notesUrl=//')
+
+  # Validate hints before ever touching them with curl. These come from
+  # attacker-controllable PR content (a changed apps/*/metadata.yaml), so a
+  # malformed/malicious hint must degrade to "not fetched", never be executed
+  # or otherwise treated as trusted input.
+  if [ -n "$notes_repo" ] && ! printf '%s' "$notes_repo" | grep -Eq '^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$'; then
+    notes_repo=""
+  fi
+
+  if [ -n "$notes_url" ]; then
+    case "$notes_url" in
+      https://*) : ;; # required scheme — fall through to the metachar check
+      *) notes_url="" ;;
+    esac
+  fi
+  if [ -n "$notes_url" ] && printf '%s' "$notes_url" | grep -Eq '[^A-Za-z0-9._~:/?#@!$&'"'"'()*+,;=%-]'; then
+    notes_url="" # contains a shell metachar, whitespace, or other disallowed byte
+  fi
+  if [ -n "$notes_url" ]; then
+    notes_host=$(url_host "$notes_url")
+    # Reject userinfo in the authority (e.g. https://api.github.com@evil.example/)
+    # and any host not on the GitHub allowlist. This is the security boundary
+    # that keeps GITHUB_TOKEN from ever reaching an attacker-controlled host —
+    # notesUrl comes straight from PR-controlled metadata.yaml content.
+    case "$notes_host" in
+      *@*) notes_url="" ;;
+      *)
+        if ! is_github_host "$notes_host"; then
+          notes_url=""
+        fi
+        ;;
+    esac
+  fi
+
+  if [ -z "$notes_repo" ] && [ -z "$notes_url" ]; then
+    out="${out}${header}
+
+WARNING: Release notes NOT auto-fetched (no '# serge:' hint in $f).
+Judge from the diff and default the verdict toward REVIEW.
+
+"
+    continue
+  fi
+
+  notes=""
+  if [ -n "$notes_repo" ]; then
+    # Fetch the release for the NEW tag; try both 'vX' and 'X' tag spellings,
+    # deduped (when new_ver already starts with 'v', "v${new_ver#v}" and
+    # "$new_ver" are identical — skip the repeat). Skip entirely if new_ver
+    # is empty (nothing to look up).
+    tried=""
+    if [ -n "$new_ver" ]; then
+      for tag in "$new_ver" "v${new_ver#v}" "${new_ver#v}"; do
+        case " $tried " in
+          *" $tag "*) continue ;; # already tried this exact tag spelling
+        esac
+        tried="$tried $tag"
+
+        body=$(gh_get "https://api.github.com/repos/$notes_repo/releases/tags/$tag")
+        got=$(printf '%s' "$body" | jq -r '.body // empty' 2>/dev/null)
+        if [ -n "$got" ]; then
+          notes="Release $tag:
+$got"
+          break
+        fi
+      done
+    fi
+    # Fallback: list recent releases so a range/notes still show up.
+    if [ -z "$notes" ]; then
+      notes=$(gh_get "https://api.github.com/repos/$notes_repo/releases?per_page=10" \
+        | jq -r '.[]? | "Release \(.tag_name):\n\(.body // "")\n"' 2>/dev/null)
+    fi
+  elif [ -n "$notes_url" ]; then
+    notes=$(plain_get "$notes_url")
+  fi
+
+  if [ -z "$notes" ]; then
+    out="${out}${header}
+
+WARNING: Release notes NOT auto-fetched (fetch from '${notes_repo}${notes_url}' returned nothing).
+Judge from the diff and default the verdict toward REVIEW.
+
+"
+    continue
+  fi
+
+  # Truncate to protect the model's context / max_diff_chars budget.
+  notes=$(printf '%s' "$notes" | cut -c1-"$MAX_NOTES_CHARS")
+
+  out="${out}${header}
+
+=== RELEASE NOTES (${notes_repo}${notes_url}) ===
+${notes}
+
+"
+done
+
+emit "$out"

@@ -12,6 +12,7 @@ spec:
   # Application version (the immich-server container image tag), NOT the Helm
   # chart version. Chart version is pinned internally in the OCIRepository.
   # renovate: datasource=docker depName=ghcr.io/immich-app/immich-server
+  # serge: notesRepo=immich-app/immich
   version: "v3.0.3"
 
   source:
