@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -750,3 +751,39 @@ var _ = Describe("SSOClient controller", func() {
 		})
 	})
 })
+
+// TestDrift_SelfHealsSessionFlags guards the fix for already-provisioned apps
+// (immich, open-webui, ...) that were created under the old default
+// (enableSigninSession=false, enableAutoSignin=false): drift() must report
+// drift so the next reconcile flips them to the new default (true), and must
+// treat an absent key the same as an explicit false (Casdoor may omit a
+// false-valued field in its response).
+func TestDrift_SelfHealsSessionFlags(t *testing.T) {
+	base := func(signinSession, autoSignin any) casdoor.Application {
+		return casdoor.Application{
+			casdoor.FieldRedirectUris:        []any{"https://a.example/cb"},
+			casdoor.FieldGrantTypes:          []any{"authorization_code"},
+			casdoor.FieldTokenFormat:         "JWT",
+			casdoor.FieldExpireHours:         float64(168),
+			casdoor.FieldOrganization:        "librepod",
+			casdoor.FieldEnableSignUp:        false,
+			casdoor.FieldEnableSigninSession: signinSession,
+			casdoor.FieldEnableAutoSignin:    autoSignin,
+		}
+	}
+	desired := base(true, true)
+
+	// Existing app provisioned under the old default -> must be seen as drift.
+	if !drift(base(false, false), desired) {
+		t.Fatal("existing app with session flags=false must drift toward desired=true")
+	}
+	// Casdoor response that OMITS the key (absent) also drifts toward true,
+	// because scalarEqual treats absent as the zero value (false) != true.
+	if !drift(base(nil, nil), desired) {
+		t.Fatal("existing app missing session flags must drift toward desired=true")
+	}
+	// Already-synced app must NOT drift (no UpdateApplication hot-loop).
+	if drift(base(true, true), desired) {
+		t.Fatal("app already at desired session flags must not drift")
+	}
+}

@@ -42,7 +42,8 @@ func TestDriftFieldsAreCasdoorConstants(t *testing.T) {
 	for _, k := range append(append([]string{}, driftSliceFields...), driftScalarFields...) {
 		switch k {
 		case casdoor.FieldRedirectUris, casdoor.FieldGrantTypes, casdoor.FieldTokenFormat,
-			casdoor.FieldExpireHours, casdoor.FieldOrganization, casdoor.FieldEnableSignUp:
+			casdoor.FieldExpireHours, casdoor.FieldOrganization, casdoor.FieldEnableSignUp,
+			casdoor.FieldEnableSigninSession, casdoor.FieldEnableAutoSignin:
 		default:
 			t.Fatalf("drift key %q is not a casdoor field constant", k)
 		}

@@ -477,7 +477,7 @@ func (r *SSOClientReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // field rename is a compile error, and so TestDriftFieldsAreCasdoorConstants can
 // guard the link.
 var driftSliceFields = []string{casdoor.FieldRedirectUris, casdoor.FieldGrantTypes}
-var driftScalarFields = []string{casdoor.FieldTokenFormat, casdoor.FieldExpireHours, casdoor.FieldOrganization, casdoor.FieldEnableSignUp}
+var driftScalarFields = []string{casdoor.FieldTokenFormat, casdoor.FieldExpireHours, casdoor.FieldOrganization, casdoor.FieldEnableSignUp, casdoor.FieldEnableSigninSession, casdoor.FieldEnableAutoSignin}
 
 func drift(existing, desired casdoor.Application, overrideKeys ...string) bool {
 	for _, k := range driftSliceFields {

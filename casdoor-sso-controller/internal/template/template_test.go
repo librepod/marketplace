@@ -188,3 +188,40 @@ func TestBuild_OverridesCannotTouchManagedFields(t *testing.T) {
 		t.Fatalf("non-managed logo should still apply, got %v", app["logo"])
 	}
 }
+
+// TestBuild_DefaultsEnableSigninSession guards the persistent-SSO default: a CR
+// that does not touch the session flags must inherit enableSigninSession=true
+// and enableAutoSignin=true from the template, so Casdoor keeps a login session
+// on the IdP and silently completes each app's OIDC flow (no re-login per app).
+func TestBuild_DefaultsEnableSigninSession(t *testing.T) {
+	app := Build(v1alpha1.SSOClientSpec{
+		ClientID:     "immich",
+		RedirectUris: []string{"https://i.example/cb"},
+	}, "")
+	if app["enableSigninSession"] != true {
+		t.Fatalf("enableSigninSession=%v, want true (persistent SSO default)", app["enableSigninSession"])
+	}
+	if app["enableAutoSignin"] != true {
+		t.Fatalf("enableAutoSignin=%v, want true (silent auto sign-in default)", app["enableAutoSignin"])
+	}
+}
+
+// TestBuild_SessionFlagsAreOverridable proves the flags are a DEFAULT, not a
+// forced policy: they are NOT in ManagedFields, so a CR can override them (e.g.
+// a security-sensitive app opting out of silent auto sign-in).
+func TestBuild_SessionFlagsAreOverridable(t *testing.T) {
+	app := Build(v1alpha1.SSOClientSpec{
+		ClientID:     "sensitive",
+		RedirectUris: []string{"https://s.example/cb"},
+		ApplicationOverrides: jsonOverrides(map[string]any{
+			"enableSigninSession": false,
+			"enableAutoSignin":    false,
+		}),
+	}, "")
+	if app["enableSigninSession"] != false {
+		t.Fatalf("enableSigninSession=%v, want false (CR override must win)", app["enableSigninSession"])
+	}
+	if app["enableAutoSignin"] != false {
+		t.Fatalf("enableAutoSignin=%v, want false (CR override must win)", app["enableAutoSignin"])
+	}
+}
