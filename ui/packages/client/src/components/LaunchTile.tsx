@@ -19,8 +19,8 @@ import { appUrl } from "@/lib/utils"
  */
 export function LaunchTile({ app, baseDomain }: { app: CatalogApp; baseDomain?: string }) {
   const status = app.installedStatus
-  const url = appUrl(app.name, baseDomain)
-  const canLaunch = status === "running" && !!url
+  const url = app.launchUrl ?? appUrl(app.name, baseDomain)
+  const canLaunch = status === "running" && app.launchable !== false && !!url
   const host = url?.replace(/^https:\/\//, "")
 
   const shell =
