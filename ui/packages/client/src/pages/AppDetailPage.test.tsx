@@ -174,6 +174,34 @@ describe('AppDetailPage', () => {
       })
     })
 
+    it('Open link prefers launchUrl over the computed URL', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ...mockApp, installedStatus: 'running', launchUrl: 'https://vaultwarden.libre.pod/ui' }),
+      } as Response)
+      render(<AppDetailPage />, { wrapper: createWrapper() })
+      await waitFor(() => {
+        const link = screen.getByRole('link', { name: /Open Vaultwarden/i })
+        expect(link).toHaveAttribute('href', 'https://vaultwarden.libre.pod/ui')
+      })
+    })
+
+    it('hides the Open link when launchable is false (non-launchable app)', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ...mockApp, installedStatus: 'running', launchable: false }),
+      } as Response)
+      render(<AppDetailPage />, { wrapper: createWrapper() })
+      // Uninstall is still offered for a running app...
+      await waitFor(() => {
+        expect(screen.getByText('Uninstall App')).toBeInTheDocument()
+      })
+      // ...but there is no Open launch link.
+      expect(screen.queryByRole('link', { name: /Open Vaultwarden/i })).not.toBeInTheDocument()
+    })
+
     it('shows disabled Installing... button when app is installing (D-07)', async () => {
       vi.spyOn(global, 'fetch').mockResolvedValueOnce({
         ok: true,

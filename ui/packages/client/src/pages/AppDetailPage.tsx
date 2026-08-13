@@ -112,7 +112,7 @@ export function AppDetailPage() {
   // time, so this URL matches the Traefik IngressRoute host the app runs under.
   // (HTTP apps only — non-HTTP apps are reached over the tailnet, not the web.)
   const { data: config } = useConfig()
-  const openUrl = name ? appUrl(name, config?.baseDomain) : undefined
+  const openUrl = data?.launchUrl ?? (name ? appUrl(name, config?.baseDomain) : undefined)
 
   if (!name) return <NotFoundPage title="App not found" description="This app doesn't exist in the catalog." />
   if (isPending) return <DetailSkeleton />
@@ -196,7 +196,7 @@ export function AppDetailPage() {
 
               {data.installedStatus === 'running' && (
                 <>
-                  {openUrl && (
+                  {openUrl && data.launchable !== false && (
                     <Button
                       render={<a href={openUrl} target="_blank" rel="noopener noreferrer" />}
                     >
