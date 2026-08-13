@@ -6,6 +6,7 @@ import { CatalogService } from '../catalog/catalog.service';
 import { GogsService } from './gogs.service';
 import { FluxStatusService } from './flux-status.service';
 import { SystemAppsService } from './system-apps.service';
+import { LaunchUrlService } from './launch-url.service';
 import type { CatalogApp, InstallResult } from '@librepod/shared';
 
 @Injectable()
@@ -19,6 +20,7 @@ export class InstalledService {
     private readonly flux: FluxStatusService,
     private readonly configService: ConfigService,
     private readonly systemApps: SystemAppsService,
+    private readonly launchUrl: LaunchUrlService,
   ) {}
 
   async enrich(apps: CatalogApp[]): Promise<CatalogApp[]> {
@@ -27,6 +29,17 @@ export class InstalledService {
       this.systemApps.getSystemApps(),
     ]);
     const installedSet = new Set(installedNames);
+
+    // Merge the launch resolution ({}/{url}/{launchable}) onto an app, stamping
+    // only present fields (mirrors the launchUrl/launchable tri-state contract).
+    const withLaunch = async (app: CatalogApp): Promise<CatalogApp> => {
+      const res = await this.launchUrl.resolve(app.name);
+      const extra: Partial<CatalogApp> = {};
+      if (res.url !== undefined) extra.launchUrl = res.url;
+      if (res.launchable !== undefined) extra.launchable = res.launchable;
+      return { ...app, ...extra };
+    };
+
     return Promise.all(
       apps.map(async (app) => {
         // System classification wins: a managed app's status comes from its
@@ -36,13 +49,13 @@ export class InstalledService {
         const systemKustomization = systemMap.get(app.name);
         if (systemKustomization) {
           const status = await this.flux.getStatusFor(app.name, { systemKustomization });
-          return { ...app, system: true, installedStatus: status };
+          return withLaunch({ ...app, system: true, installedStatus: status });
         }
         if (!installedSet.has(app.name)) {
           return { ...app, installedStatus: 'not_installed' as const };
         }
         const status = await this.flux.getStatusFor(app.name);
-        return { ...app, installedStatus: status };
+        return withLaunch({ ...app, installedStatus: status });
       }),
     );
   }

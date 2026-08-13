@@ -65,6 +65,7 @@ describe('InstalledService', () => {
     getSystemApps: ReturnType<typeof vi.fn>;
     isSystem: ReturnType<typeof vi.fn>;
   };
+  let mockLaunchUrlService: { resolve: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     mockGogsService = {
@@ -94,12 +95,15 @@ describe('InstalledService', () => {
       isSystem: vi.fn().mockResolvedValue(false),
     };
 
+    mockLaunchUrlService = { resolve: vi.fn().mockResolvedValue({}) };
+
     service = new InstalledService(
       mockCatalogService as unknown as CatalogService,
       mockGogsService as unknown as GogsService,
       mockFluxService as unknown as FluxStatusService,
       mockConfigService,
       mockSystemAppsService as unknown as SystemAppsService,
+      mockLaunchUrlService as unknown as import('./launch-url.service').LaunchUrlService,
     );
   });
 
@@ -147,6 +151,52 @@ describe('InstalledService', () => {
       await service.enrich(mockCatalogApps);
 
       expect(mockFluxService.getStatusFor).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('enrich() launch fields', () => {
+    it('stamps launchUrl when resolve returns { url }', async () => {
+      mockGogsService.getInstalledAppNames.mockResolvedValue(['vaultwarden']);
+      mockFluxService.getStatusFor.mockResolvedValue('running');
+      mockLaunchUrlService.resolve.mockResolvedValue({ url: 'https://vaultwarden.example.com/ui' });
+
+      const enriched = await service.enrich(mockCatalogApps);
+      const vw = enriched.find((a) => a.name === 'vaultwarden')!;
+
+      expect(vw.launchUrl).toBe('https://vaultwarden.example.com/ui');
+      expect(vw.launchable).toBeUndefined();
+    });
+
+    it('stamps launchable:false when resolve returns { launchable:false }', async () => {
+      mockGogsService.getInstalledAppNames.mockResolvedValue(['vaultwarden']);
+      mockFluxService.getStatusFor.mockResolvedValue('running');
+      mockLaunchUrlService.resolve.mockResolvedValue({ launchable: false });
+
+      const enriched = await service.enrich(mockCatalogApps);
+      const vw = enriched.find((a) => a.name === 'vaultwarden')!;
+
+      expect(vw.launchable).toBe(false);
+      expect(vw.launchUrl).toBeUndefined();
+    });
+
+    it('stamps neither field when resolve returns {}', async () => {
+      mockGogsService.getInstalledAppNames.mockResolvedValue(['vaultwarden']);
+      mockFluxService.getStatusFor.mockResolvedValue('running');
+      mockLaunchUrlService.resolve.mockResolvedValue({});
+
+      const enriched = await service.enrich(mockCatalogApps);
+      const vw = enriched.find((a) => a.name === 'vaultwarden')!;
+
+      expect(vw.launchUrl).toBeUndefined();
+      expect(vw.launchable).toBeUndefined();
+    });
+
+    it('does not resolve launch info for not-installed apps', async () => {
+      mockGogsService.getInstalledAppNames.mockResolvedValue([]);
+
+      await service.enrich(mockCatalogApps);
+
+      expect(mockLaunchUrlService.resolve).not.toHaveBeenCalled();
     });
   });
 
