@@ -5,7 +5,7 @@ kind: IngressRoute
 metadata:
   name: headplane
   annotations:
-    librepod.dev/launch: "/admin"
+    librepod.org/launch: "/admin"
 spec:
   entryPoints:
     - web

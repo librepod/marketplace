@@ -45,7 +45,7 @@ export interface CatalogApp {
   installedStatus?: AppStatus;
   system?: boolean; // runtime-derived, per-cluster; absent/false = user app
   // Axis A: runtime-enriched launch-URL override; present only when one of the
-  // app's IngressRoutes carries the `librepod.dev/launch` annotation.
+  // app's IngressRoutes carries the `librepod.org/launch` annotation.
   launchUrl?: string;
   // Axis B: runtime-enriched. `false` only when the app has NO IngressRoute (no
   // web UI). Absent (undefined) means "unknown" and is treated as launchable.

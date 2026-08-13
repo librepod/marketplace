@@ -3,7 +3,7 @@ kind: IngressRoute
 metadata:
   name: litellm
   annotations:
-    librepod.dev/launch: "/ui"
+    librepod.org/launch: "/ui"
 spec:
   entryPoints:
   - web

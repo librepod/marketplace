@@ -13,7 +13,7 @@ interface IngressRouteObject {
   spec?: { routes?: Array<{ match?: string }> };
 }
 
-const LAUNCH_ANNOTATION = 'librepod.dev/launch';
+const LAUNCH_ANNOTATION = 'librepod.org/launch';
 const HOST_RE = /Host\(`([^`]+)`\)/;
 
 @Injectable()

@@ -24,7 +24,7 @@ function ingressRoute(
     metadata: {
       name,
       ...(launchAnnotation !== undefined
-        ? { annotations: { 'librepod.dev/launch': launchAnnotation } }
+        ? { annotations: { 'librepod.org/launch': launchAnnotation } }
         : {}),
     },
     spec: { routes: [{ kind: 'Rule', match: `Host(\`${host}\`)` }] },
@@ -106,7 +106,7 @@ describe('LaunchUrlService', () => {
     mockListNamespacedCustomObject.mockResolvedValueOnce({
       items: [
         {
-          metadata: { name: 'x', annotations: { 'librepod.dev/launch': '/ui' } },
+          metadata: { name: 'x', annotations: { 'librepod.org/launch': '/ui' } },
           spec: { routes: [{ kind: 'Rule', match: 'PathPrefix(`/`)' }] },
         },
       ],
