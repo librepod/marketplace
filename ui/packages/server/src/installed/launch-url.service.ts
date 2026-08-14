@@ -102,9 +102,17 @@ export class LaunchUrlService implements OnModuleInit {
   }
 
   // Annotation value is a PATH. A bare "/" yields the host root (empty path).
-  // A value missing its leading slash gets one. Never an absolute/external URL.
+  // A value missing its leading slash gets one. The contract is enforced, not
+  // just documented: an absolute/external value ("https://…", "//host", a
+  // "javascript:" scheme) is rejected and collapses to the host root, so a
+  // stray annotation can never redirect the launch link off the app's own host.
   private normalisePath(value: string): string {
     if (value === '/' || value === '') return '';
+    // Any scheme ("http://", "javascript:") or scheme-relative "//host" is not a path.
+    if (/^[a-z][a-z0-9+.-]*:/i.test(value) || value.startsWith('//')) {
+      this.logger.warn(`Ignoring non-path ${LAUNCH_ANNOTATION} value "${value}"; using host root`);
+      return '';
+    }
     return value.startsWith('/') ? value : `/${value}`;
   }
 }

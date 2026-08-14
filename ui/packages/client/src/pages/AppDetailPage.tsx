@@ -1,7 +1,7 @@
 import { useParams, Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { apiFetch } from "@/lib/api"
-import { appUrl } from "@/lib/utils"
+import { launchUrlFor } from "@/lib/utils"
 import type { CatalogApp } from "@librepod/shared"
 import { AppIcon } from "@/components/AppIcon"
 import { Badge } from "@/components/ui/badge"
@@ -112,7 +112,9 @@ export function AppDetailPage() {
   // time, so this URL matches the Traefik IngressRoute host the app runs under.
   // (HTTP apps only — non-HTTP apps are reached over the tailnet, not the web.)
   const { data: config } = useConfig()
-  const openUrl = data?.launchUrl ?? (name ? appUrl(name, config?.baseDomain) : undefined)
+  // launchUrlFor folds in the tri-state guard (suppresses on launchable===false)
+  // and the launchUrl-over-computed preference — same rule LaunchTile applies.
+  const openUrl = data ? launchUrlFor(data, config?.baseDomain) : undefined
 
   if (!name) return <NotFoundPage title="App not found" description="This app doesn't exist in the catalog." />
   if (isPending) return <DetailSkeleton />
@@ -196,7 +198,7 @@ export function AppDetailPage() {
 
               {data.installedStatus === 'running' && (
                 <>
-                  {openUrl && data.launchable !== false && (
+                  {openUrl && (
                     <Button
                       render={<a href={openUrl} target="_blank" rel="noopener noreferrer" />}
                     >

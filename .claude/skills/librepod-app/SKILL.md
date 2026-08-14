@@ -410,6 +410,8 @@ The value is always a **path** (`/`, `/ui`, `/admin`) — never an absolute or e
 
 **Axis B — zero action for apps with no web UI.** An app with **no IngressRoute at all** is automatically treated as non-launchable — the marketplace infers this from live cluster state, no annotation or metadata flag needed. Its "My Apps" tile still shows, but routes to the app's detail page (Manage/details button) instead of a launch link. Example: `rustdesk-server-oss` has zero IngressRoutes and needs no changes for this behavior.
 
+> **Edge case:** Axis B fires only on *zero* IngressRoutes. An app that has **no web UI but still exposes an IngressRoute** for something non-browser-facing (a metrics scrape, a webhook receiver, an API-only endpoint) is treated as launchable and its tile opens that host — likely a dead page. If such an app should stay non-launchable, don't give it an IngressRoute (route the non-UI traffic another way, e.g. a plain `Service` on the tailnet); there is no annotation to force non-launchable while keeping a route.
+
 ### `overlays/librepod/patch-storage-class.yaml`
 
 The base PVC intentionally omits `storageClassName`. The overlay patches it in:

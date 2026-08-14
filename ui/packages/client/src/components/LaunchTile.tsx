@@ -3,7 +3,7 @@ import { Link } from "react-router-dom"
 import { ArrowUpRight, SlidersHorizontal } from "lucide-react"
 import { AppIcon } from "@/components/AppIcon"
 import { StatusBadge } from "@/components/StatusBadge"
-import { appUrl } from "@/lib/utils"
+import { launchUrlFor } from "@/lib/utils"
 
 /**
  * The control-plane launcher unit. On the daily path this is a live link: the
@@ -19,8 +19,8 @@ import { appUrl } from "@/lib/utils"
  */
 export function LaunchTile({ app, baseDomain }: { app: CatalogApp; baseDomain?: string }) {
   const status = app.installedStatus
-  const url = app.launchUrl ?? appUrl(app.name, baseDomain)
-  const canLaunch = status === "running" && app.launchable !== false && !!url
+  const url = launchUrlFor(app, baseDomain)
+  const canLaunch = status === "running" && !!url
   const host = url?.replace(/^https:\/\//, "")
 
   const shell =

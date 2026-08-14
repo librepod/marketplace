@@ -137,6 +137,27 @@ describe('LaunchUrlService', () => {
     expect(res).toEqual({ url: 'https://app.example.com' });
   });
 
+  it('rejects an absolute-URL annotation value and collapses to the host root', async () => {
+    mockListNamespacedCustomObject.mockResolvedValueOnce({
+      items: [ingressRoute('app', 'app.example.com', 'https://evil.example')],
+    });
+
+    const res = await service.resolve('app');
+
+    // The contract is "path only" — a scheme value must NOT redirect off-host.
+    expect(res).toEqual({ url: 'https://app.example.com' });
+  });
+
+  it('rejects a scheme-relative ("//host") annotation value', async () => {
+    mockListNamespacedCustomObject.mockResolvedValueOnce({
+      items: [ingressRoute('app', 'app.example.com', '//evil.example/x')],
+    });
+
+    const res = await service.resolve('app');
+
+    expect(res).toEqual({ url: 'https://app.example.com' });
+  });
+
   it('deterministically picks the name-sorted-first when multiple routes are annotated, and warns', async () => {
     const warn = vi.spyOn((service as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn');
     mockListNamespacedCustomObject.mockResolvedValueOnce({

@@ -198,6 +198,24 @@ describe('InstalledService', () => {
 
       expect(mockLaunchUrlService.resolve).not.toHaveBeenCalled();
     });
+
+    it('stamps launch fields on a system app too (system branch calls withLaunch)', async () => {
+      mockSystemAppsService.getSystemApps.mockResolvedValue(
+        new Map([['gogs', 'gogs']]),
+      );
+      // Not in Gogs — status must come from the system branch, which still
+      // resolves launch info (a managed app can carry a launch override).
+      mockGogsService.getInstalledAppNames.mockResolvedValue([]);
+      mockFluxService.getStatusFor.mockResolvedValue('running');
+      mockLaunchUrlService.resolve.mockResolvedValue({ url: 'https://gogs.example.com' });
+
+      const enriched = await service.enrich(mockCatalogApps);
+      const gogs = enriched.find((a) => a.name === 'gogs')!;
+
+      expect(gogs.system).toBe(true);
+      expect(mockLaunchUrlService.resolve).toHaveBeenCalledWith('gogs');
+      expect(gogs.launchUrl).toBe('https://gogs.example.com');
+    });
   });
 
   describe('getInstalled()', () => {
