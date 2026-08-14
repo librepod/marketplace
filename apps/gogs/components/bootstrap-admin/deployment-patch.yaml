@@ -81,7 +81,16 @@ spec:
                     # permanently masked by the marker.
                     echo "Ensuring Gogs admin user '${GOGS_USER}'..."
                     cd /app/gogs
-                    if ./gogs admin create-user \
+                    # `gogs admin` refuses to run when the current user differs
+                    # from app.ini's RUN_USER (git): it FATALs with "user
+                    # configured to run Gogs is 'git', but the current user is
+                    # 'root'". Since the 0.14.x crashloop fix starts this
+                    # container as ROOT (the s6 entrypoint su-execs to git
+                    # itself), create-user must be dropped to git the same way
+                    # the entrypoint does — via s6-setuidgid (shipped in the
+                    # image). Without this the admin is NEVER created on a fresh
+                    # cluster and marketplace-ui installs 500 forever.
+                    if s6-setuidgid git ./gogs admin create-user \
                       --name "$GOGS_USER" \
                       --password "$GOGS_PASS" \
                       --email "flux@libre.pod" \
