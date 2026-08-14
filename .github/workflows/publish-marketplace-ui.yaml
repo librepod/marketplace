@@ -32,11 +32,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get app version
+      - name: Get product version
         id: version
         run: |
-          VERSION=$(grep 'version:' apps/marketplace-ui/metadata.yaml \
-            | head -1 | sed 's/.*version: *//' | tr -d '"')
+          # Product version = what the code in ui/ IS. This drives the image
+          # tag and lives in the product tree (not the marketplace pin in
+          # apps/marketplace-ui/metadata.yaml). A bump here is a ui/** change,
+          # so this workflow's ui/** trigger always fires and the image is built.
+          VERSION=$(node -p "require('./ui/package.json').version")
+          test -n "$VERSION" && [ "$VERSION" != "undefined" ]
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build and push Docker image
