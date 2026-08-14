@@ -570,6 +570,25 @@ spec:
         # - secret.yaml   # Add if app has secrets
 ```
 
+> **Self-built apps (marketplace-ui, casdoor-sso-controller) have TWO versions.**
+> These two apps are built by LibrePod from source colocated in this monorepo
+> (`ui/`, `casdoor-sso-controller/`), not from a vendor image. They therefore
+> carry two independent versions:
+>
+> 1. **Product version** — what the code IS. Authored in the product tree
+>    (`ui/package.json` `"version"`; `casdoor-sso-controller/Makefile` `VERSION`).
+>    Drives the Docker **image** build + tag. A bump here is a change under the
+>    product's CI trigger path, so the image always gets built.
+> 2. **Marketplace pin** — `apps/<name>/metadata.yaml` `version:`. A deliberately
+>    promoted pointer to a *blessed, tested* product version. Drives the OCI
+>    **manifest** tag, `__VERSION__` substitution, the overlay's
+>    `images[].newTag`, and `infrastructure/system-apps/<name>.yaml` `ref.tag`.
+>    Bump it by hand only when promoting a build; it need not be the latest.
+>
+> When releasing one of these apps: bump the **product version** first (builds
+> the image), then bump the **pin** to that version once it's tested. CI guards
+> against pinning an image tag that was never built.
+
 **Key points about `metadata.yaml`:**
 - `templates.source` — the OCIRepository FluxCD creates to pull the app artifact
 - `templates.release` — the Kustomization FluxCD applies to install the app; `postBuild.substitute` injects `BASE_DOMAIN` and any secrets into the manifests at deploy time so that placeholders like `${BASE_DOMAIN:=libre.pod}` in `ingressroute.yaml` and `helmrelease.yaml` are resolved

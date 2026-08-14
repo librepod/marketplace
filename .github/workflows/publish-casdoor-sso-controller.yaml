@@ -39,13 +39,15 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: sigstore/cosign-installer@v4.1.1
         with: { cosign-release: 'v3.0.6' }
-      - name: Get app version
+      - name: Get product version
         id: version
         run: |
-          # Single source of truth: the manifest (apps/casdoor-sso-controller)
-          # pins the image by this version, so the built tag must match it.
-          VERSION=$(grep 'version:' apps/casdoor-sso-controller/metadata.yaml \
-            | head -1 | sed 's/.*version: *//' | tr -d '"')
+          # Product version = what this controller's code IS. Authored in the
+          # product tree (casdoor-sso-controller/Makefile), not the marketplace
+          # pin (apps/casdoor-sso-controller/metadata.yaml). A bump here is a
+          # casdoor-sso-controller/** change, so this workflow always fires.
+          VERSION=$(make -s -C casdoor-sso-controller print-version)
+          test -n "$VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Build & push
         id: img

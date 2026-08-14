@@ -116,6 +116,47 @@ jobs:
             | head -1 | sed 's/.*version: *//' | tr -d '"')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Guard — self-built app pin must reference an existing image
+        if: github.event_name != 'pull_request'
+        run: |
+          # marketplace-ui and casdoor-sso-controller are built by LibrePod from
+          # in-repo source; their metadata.yaml version is a PIN to an image tag
+          # this repo must have already built (via publish-marketplace-ui /
+          # publish-casdoor-sso-controller). If the pin names a tag that was never
+          # built, the overlay's images[].newTag / OCIRepository ref.tag point at
+          # a non-existent image → ImagePullBackOff on the cluster (the class of
+          # failure that broke Tier 2 on the 0.5.0 bump). Fail fast here instead.
+          #
+          # Upstream-image apps are skipped: their images are the vendor's, not
+          # ours to guarantee.
+          APP="${{ matrix.app }}"
+          case "$APP" in
+            marketplace-ui|casdoor-sso-controller) ;;
+            *) echo "Not a self-built app — skipping image-existence guard."; exit 0 ;;
+          esac
+
+          VERSION="${{ steps.version.outputs.version }}"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${APP}:${VERSION}"
+          echo "Verifying pinned image exists: ${IMAGE}"
+
+          # Retry with backoff: when a single PR bumps BOTH the product version
+          # (ui/package.json or Makefile) and this pin, the image-build workflow
+          # runs in parallel with this one. Image builds take ~40s; give it room.
+          attempts=6
+          delay=30
+          i=0
+          until docker manifest inspect "${IMAGE}" >/dev/null 2>&1; do
+            i=$((i + 1))
+            if [ "$i" -ge "$attempts" ]; then
+              echo "::error::${APP} metadata.yaml pins ${APP}:${VERSION} but no such image exists in GHCR after ${attempts} attempts."
+              echo "::error::Bump the product version (ui/package.json for marketplace-ui, casdoor-sso-controller/Makefile VERSION for the controller) so the image is built, or wait for its build to finish and re-run."
+              exit 1
+            fi
+            echo "Image not found yet (attempt ${i}/${attempts}); the image-build workflow may still be running. Retrying in ${delay}s..."
+            sleep "$delay"
+          done
+          echo "OK — ${IMAGE} exists."
+
       - name: Push and sign app artifact
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}

@@ -1,3 +1,14 @@
+# Product version — what THIS controller's code is. Drives the image tag
+# built by .github/workflows/publish-casdoor-sso-controller.yaml. It is the
+# product-version source, independent of the marketplace pin in
+# apps/casdoor-sso-controller/metadata.yaml (which is a blessed pointer,
+# bumped separately). Travels with this dir if it moves to its own repo.
+VERSION := 0.2.6
+
+.PHONY: print-version
+print-version:
+	@echo $(VERSION)
+
 CONTROLLER_GEN ?= $(shell pwd)/bin/controller-gen
 CRD_DST        := ../apps/casdoor-sso-controller/base
 
