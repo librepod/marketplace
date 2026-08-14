@@ -2,6 +2,8 @@ apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: litellm
+  annotations:
+    librepod.org/launch: "/ui"
 spec:
   entryPoints:
   - web

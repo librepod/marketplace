@@ -6,11 +6,12 @@ import { InstalledService } from './installed.service';
 import { GogsService } from './gogs.service';
 import { FluxStatusService } from './flux-status.service';
 import { SystemAppsService } from './system-apps.service';
+import { LaunchUrlService } from './launch-url.service';
 
 @Module({
   imports: [forwardRef(() => CatalogModule)],
   controllers: [InstalledController, SystemAppsController],
-  providers: [InstalledService, GogsService, FluxStatusService, SystemAppsService],
+  providers: [InstalledService, GogsService, FluxStatusService, SystemAppsService, LaunchUrlService],
   exports: [InstalledService],
 })
 export class InstalledModule {}

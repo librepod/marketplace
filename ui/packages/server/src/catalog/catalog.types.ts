@@ -19,6 +19,8 @@ export interface CatalogApp {
   sourceUrl: string;
   installedStatus?: AppStatus;
   system?: boolean; // runtime-derived, per-cluster; absent/false = user app
+  launchUrl?: string;
+  launchable?: boolean;
   templates?: AppTemplate;
   params?: { required?: AppParam[] };
   secrets?: AppSecretDef[];
