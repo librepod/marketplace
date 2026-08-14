@@ -32,3 +32,8 @@ configMapGenerator:
 
 patches:
   - path: deployment-auth-patch.yaml
+
+images:
+  - name: marketplace-ui
+    newName: ghcr.io/librepod/marketplace-ui
+    newTag: "0.5.0"
