@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-08-15T11:21:27Z"
+  generatedAt: "2026-08-15T14:17:39Z"
 apps:
     - name: baikal
       version: "0.11.1-nginx"
@@ -866,7 +866,7 @@ apps:
                 type: random
                 length: 40
     - name: marketplace-ui
-      version: "0.5.0"
+      version: "0.5.1"
       displayName: "Marketplace UI"
       description: "Web-based app marketplace for discovering, installing, and managing self-hosted apps on LibrePod clusters"
       category: "System"
@@ -887,7 +887,7 @@ apps:
               interval: 10m
               url: oci://ghcr.io/librepod/marketplace/apps/marketplace-ui
               ref:
-                tag: "0.5.0"
+                tag: "0.5.1"
         release: |
             apiVersion: kustomize.toolkit.fluxcd.io/v1
             kind: Kustomization
