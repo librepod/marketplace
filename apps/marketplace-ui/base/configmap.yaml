@@ -14,6 +14,12 @@ data:
   # Gogs API call (`fetch failed`) breaks and installs silently degrade to not_installed.
   # The trailing dot makes the name absolute, skipping the search list entirely.
   GOGS_URL: "http://gogs.gogs.svc.cluster.local.:80"
+  # The cluster's app zone, substituted by Flux postBuild (system-apps sets
+  # BASE_DOMAIN). The server reads this to build every launch link
+  # (https://<name>.<BASE_DOMAIN>); without it the server falls back to its
+  # own "libre.pod" default, so on any device whose domain is NOT libre.pod the
+  # "My Apps" launch tiles would point at the wrong host.
+  BASE_DOMAIN: "${BASE_DOMAIN:=libre.pod}"
   ALLOWED_ORIGINS: "https://marketplace.${BASE_DOMAIN:=libre.pod}"
   CASDOOR_ENDPOINT: "https://id.${BASE_DOMAIN:=libre.pod}"
   CASDOOR_ORG_NAME: "librepod"
