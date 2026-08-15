@@ -408,9 +408,22 @@ The value is always a **path** (`/`, `/ui`, `/admin`) — never an absolute or e
 - **litellm** (`apps/litellm/overlays/librepod/ingressroute.yaml`) — `librepod.org/launch: "/ui"`, same host, subpath.
 - **headscale → headplane** (`apps/headscale/components/headplane/ingressroute.yaml`) — `librepod.org/launch: "/admin"`. This is annotated on the *headplane* route, not the `headscale` API route — headplane serves its admin UI under `/admin`, so the launch link lands on headplane's host at `/admin`, bypassing the app's own `/` → `/admin` redirect middleware.
 
-**Axis B — zero action for apps with no web UI.** An app with **no IngressRoute at all** is automatically treated as non-launchable — the marketplace infers this from live cluster state, no annotation or metadata flag needed. Its "My Apps" tile still shows, but routes to the app's detail page (Manage/details button) instead of a launch link. Example: `rustdesk-server-oss` has zero IngressRoutes and needs no changes for this behavior.
+**Axis B — non-launchable, two ways.** An app is treated as non-launchable when *either*:
+- It has **no IngressRoute at all** — the marketplace infers "no web UI" from live cluster state, no annotation needed. Its "My Apps" tile still shows, but routes to the detail page (Manage) instead of a launch link. Example: `rustdesk-server-oss` has zero IngressRoutes and needs no changes.
+- It has an IngressRoute but that route is annotated `librepod.org/launch: "false"` — an explicit opt-out for a route that must exist for non-browser traffic (an API, a sync endpoint, a metrics scrape) yet serves no launchable UI. Use this when you *can't* just drop the route.
 
-> **Edge case:** Axis B fires only on *zero* IngressRoutes. An app that has **no web UI but still exposes an IngressRoute** for something non-browser-facing (a metrics scrape, a webhook receiver, an API-only endpoint) is treated as launchable and its tile opens that host — likely a dead page. If such an app should stay non-launchable, don't give it an IngressRoute (route the non-UI traffic another way, e.g. a plain `Service` on the tailnet); there is no annotation to force non-launchable while keeping a route.
+```yaml
+metadata:
+  name: <app-name>
+  annotations:
+    librepod.org/launch: "false"   # route stays, but no launch tile
+```
+
+A `"false"` opt-out on **any** of an app's routes suppresses the whole app's launch tile — it wins over a `"<path>"` opt-in on a sibling route. Worked example: **obsidian-livesync** (`apps/obsidian-livesync/overlays/librepod/ingressroute.yaml`) exposes only the raw CouchDB sync endpoint (port 5984, no browser UI), so its route is annotated `"false"`.
+
+> **Why this matters:** without the `"false"` opt-out, an app that has **no web UI but still exposes an IngressRoute** (a metrics scrape, a webhook receiver, an API-only endpoint) is treated as launchable and its tile opens that host — likely a dead page. So: drop the route entirely if the non-UI traffic can go another way (e.g. a plain `Service` on the tailnet), otherwise annotate it `"false"`.
+
+> **Prerequisite (both axes):** the launch resolution reads live `traefik.io/ingressroutes` via the marketplace-ui ServiceAccount. That SA's ClusterRole (`apps/marketplace-ui/base/serviceaccount.yaml`) **must** grant `get/list/watch` on `traefik.io/ingressroutes` — without it the read is denied, the service silently returns "no opinion", and *every* app falls back to launching `https://<name>.<domain>` (both axes become inert).
 
 ### `overlays/librepod/patch-storage-class.yaml`
 

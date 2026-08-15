@@ -14,6 +14,11 @@ interface IngressRouteObject {
 }
 
 const LAUNCH_ANNOTATION = 'librepod.org/launch';
+// Opt-out value: a route may exist for non-browser traffic (an API, a sync
+// endpoint, a metrics scrape) yet serve no launchable web UI. Annotating that
+// route "false" suppresses the tile — the one signal Axis B's zero-route rule
+// cannot express while the route has to stay.
+const LAUNCH_SUPPRESS_VALUE = 'false';
 const HOST_RE = /Host\(`([^`]+)`\)/;
 
 @Injectable()
@@ -66,6 +71,16 @@ export class LaunchUrlService implements OnModuleInit {
 
     // Axis B — decided BEFORE Axis A. A successful empty read = no web UI.
     if (items.length === 0) {
+      return { launchable: false };
+    }
+
+    // Axis B (explicit) — any route annotated "false" opts the whole app out of
+    // launching, even if another route opts in with a path. An explicit "do not
+    // launch" is a strong signal and wins over a path override.
+    const suppressed = items.some(
+      (r) => r.metadata?.annotations?.[LAUNCH_ANNOTATION] === LAUNCH_SUPPRESS_VALUE,
+    );
+    if (suppressed) {
       return { launchable: false };
     }
 
