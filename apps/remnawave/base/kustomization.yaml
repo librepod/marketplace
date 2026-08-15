@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: remnawave
+
+labels:
+- includeSelectors: true
+  includeTemplates: true
+  pairs:
+    app.kubernetes.io/name: remnawave
+
+configMapGenerator:
+- name: remnawave-env
+  envs:
+  - remnawave.env
+
+resources:
+- namespace.yaml
+- service.yaml
+- deployment.yaml
