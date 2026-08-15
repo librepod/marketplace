@@ -3,6 +3,13 @@ kind: IngressRoute
 metadata:
   name: obsidian-livesync
   namespace: obsidian-livesync
+  annotations:
+    # This route exposes the raw CouchDB sync endpoint (port 5984) for the
+    # Obsidian LiveSync plugin — there is no browser UI here (the host root
+    # serves CouchDB's JSON API, and CORS is locked to the Obsidian app). Opt
+    # out of the marketplace launch tile so it doesn't open a dead page; the app
+    # is still managed from its detail page.
+    librepod.org/launch: "false"
 spec:
   entryPoints:
     - web

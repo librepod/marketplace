@@ -173,6 +173,32 @@ describe('LaunchUrlService', () => {
     expect(warn).toHaveBeenCalled();
   });
 
+  it('returns { launchable: false } for a route annotated "false" (headless endpoint, obsidian-livesync)', async () => {
+    mockListNamespacedCustomObject.mockResolvedValueOnce({
+      items: [ingressRoute('obsidian-livesync', 'obsidian-livesync.example.com', 'false')],
+    });
+
+    const res = await service.resolve('obsidian-livesync');
+
+    // A route that exists but serves no browser UI: suppress the tile rather
+    // than launch into a dead/JSON endpoint.
+    expect(res).toEqual({ launchable: false });
+  });
+
+  it('lets a "false" route suppress launch even when another route opts in with a path', async () => {
+    mockListNamespacedCustomObject.mockResolvedValueOnce({
+      items: [
+        ingressRoute('api', 'api.example.com', 'false'),
+        ingressRoute('ui', 'ui.example.com', '/ui'),
+      ],
+    });
+
+    const res = await service.resolve('mixed');
+
+    // An explicit "do not launch" is a strong signal and wins over a path opt-in.
+    expect(res).toEqual({ launchable: false });
+  });
+
   it('scopes the list to the app namespace and the traefik IngressRoute plural', async () => {
     mockListNamespacedCustomObject.mockResolvedValueOnce({ items: [] });
 
