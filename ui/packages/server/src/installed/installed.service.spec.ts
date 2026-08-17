@@ -58,6 +58,7 @@ describe('InstalledService', () => {
     getFileContents: ReturnType<typeof vi.fn>;
     addToRootKustomization: ReturnType<typeof vi.fn>;
     removeFromRootKustomization: ReturnType<typeof vi.fn>;
+    ensureWritableToken: ReturnType<typeof vi.fn>;
   };
   let mockFluxService: { getStatusFor: ReturnType<typeof vi.fn> };
   let mockCatalogService: { findAll: ReturnType<typeof vi.fn>; findOne: ReturnType<typeof vi.fn> };
@@ -74,6 +75,7 @@ describe('InstalledService', () => {
       getFileContents: vi.fn(),
       addToRootKustomization: vi.fn().mockResolvedValue(undefined),
       removeFromRootKustomization: vi.fn().mockResolvedValue(undefined),
+      ensureWritableToken: vi.fn().mockResolvedValue('mock-token'),
     };
     mockFluxService = { getStatusFor: vi.fn() };
     mockCatalogService = {
@@ -265,6 +267,31 @@ describe('InstalledService', () => {
       mockGogsService.getInstalledAppNames.mockResolvedValue(['vaultwarden']);
 
       await expect(service.install('vaultwarden')).rejects.toThrow();
+    });
+
+    it('waits for a Gogs write token before touching the repo (first-click race)', async () => {
+      mockGogsService.getInstalledAppNames.mockResolvedValue([]);
+
+      await service.install('vaultwarden');
+
+      // ensureWritableToken must run before any repo read/write, so a fresh
+      // cluster's slow flux-user provisioning is absorbed rather than 500ing.
+      expect(mockGogsService.ensureWritableToken).toHaveBeenCalled();
+      const tokenOrder = mockGogsService.ensureWritableToken.mock.invocationCallOrder[0];
+      const firstWriteOrder = mockGogsService.createFile.mock.invocationCallOrder[0];
+      expect(tokenOrder).toBeLessThan(firstWriteOrder);
+    });
+
+    it('fails cleanly without writing any files if the token never becomes available', async () => {
+      mockGogsService.getInstalledAppNames.mockResolvedValue([]);
+      mockGogsService.ensureWritableToken.mockRejectedValueOnce(
+        new Error('Gogs API token unavailable after 5 attempts'),
+      );
+
+      await expect(service.install('vaultwarden')).rejects.toThrow(/token unavailable/i);
+      // No partial write: we bail before the first createFile.
+      expect(mockGogsService.createFile).not.toHaveBeenCalled();
+      expect(mockGogsService.addToRootKustomization).not.toHaveBeenCalled();
     });
 
     it('throws NotFoundException if app not in catalog (INST-01)', async () => {

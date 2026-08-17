@@ -95,6 +95,12 @@ export class InstalledService {
       }
       if (!app.templates) throw new InternalServerErrorException(`App "${appName}" has no install templates`);
 
+      // Ensure a Gogs write token before any repo interaction. On a fresh cluster
+      // Gogs may still be creating the flux admin user; this waits (bounded)
+      // rather than letting the first install 500. Placed after the cheap
+      // validations so bad input fails fast without waiting.
+      await this.gogs.ensureWritableToken();
+
       // 2. Check not already installed
       const installed = await this.gogs.getInstalledAppNames();
       if (installed.includes(appName)) throw new ConflictException(`${app.displayName} is already installed`);
@@ -154,6 +160,9 @@ export class InstalledService {
           `${app.displayName} is managed by the platform and cannot be uninstalled`,
         );
       }
+
+      // Ensure a Gogs write token before touching the repo (see install()).
+      await this.gogs.ensureWritableToken();
 
       // 2. Check is installed
       const installed = await this.gogs.getInstalledAppNames();
