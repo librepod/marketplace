@@ -55,6 +55,46 @@ describe('GogsService', () => {
         }),
       );
     });
+
+    it('re-acquires the token on a later write when boot-time bootstrap 403s (Tier 2 install-500 flake)', async () => {
+      // On a fresh cluster the flux user may not exist yet when onModuleInit runs,
+      // so the token POST 403s. The old one-shot bootstrap left apiToken empty for
+      // the container's whole lifetime → every install 500'd. ensureToken must
+      // retry on the next authenticated call so the write succeeds once Gogs
+      // catches up, instead of wedging.
+      const svc = new GogsService(mockConfigService);
+
+      // 1) boot-time bootstrap fails (flux user not ready) → token stays empty.
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({ ok: false, status: 403 } as Response);
+      await svc.onModuleInit();
+      vi.restoreAllMocks();
+
+      // 2) a later createFile: token POST now succeeds (Gogs caught up), then the
+      //    PUT write goes through with the freshly acquired token — no 500.
+      const fetchSpy = vi
+        .spyOn(global, 'fetch')
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ sha1: 'late-token' }) } as Response)
+        .mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({}) } as Response);
+
+      await expect(
+        svc.createFile('apps/baikal/source.yaml', 'content', 'install: add baikal'),
+      ).resolves.not.toThrow();
+
+      // the retry re-POSTed for a token, then wrote with `token late-token`.
+      expect(fetchSpy).toHaveBeenNthCalledWith(
+        1,
+        'http://mock-gogs.test/api/v1/users/mock-user/tokens',
+        expect.objectContaining({ method: 'POST' }),
+      );
+      expect(fetchSpy).toHaveBeenNthCalledWith(
+        2,
+        'http://mock-gogs.test/api/v1/repos/flux/user-apps/contents/apps/baikal/source.yaml',
+        expect.objectContaining({
+          method: 'PUT',
+          headers: expect.objectContaining({ Authorization: 'token late-token' }),
+        }),
+      );
+    });
   });
 
   describe('createFile()', () => {

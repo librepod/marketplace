@@ -37,8 +37,28 @@ export class GogsService implements OnModuleInit {
   }
 
   async onModuleInit(): Promise<void> {
-    const tokensUrl = `${this.gogsUrl}/api/v1/users/${this.gogsUsername}/tokens`;
+    // Best-effort warm-up so the first request is fast and the happy path logs a
+    // clear "token created" line. NOT the single point of failure: token
+    // acquisition is retried lazily at each call site (see ensureToken) because
+    // on a fresh cluster Gogs may not have created the flux admin user yet when
+    // this runs — a one-shot bootstrap here would 403 and leave apiToken empty
+    // for the container's whole lifetime, 500ing every install until a pod
+    // restart. That is the Tier 2 install-500 flake.
+    await this.ensureToken();
+  }
 
+  /**
+   * Return a valid Gogs API token, bootstrapping one if we don't have it yet.
+   * Idempotent: once a token is held it is returned without a network call.
+   * Called before every authenticated request so a failed boot-time bootstrap
+   * (e.g. the flux user not existing yet) self-heals on a later call instead of
+   * wedging the container. Returns '' if bootstrap still fails, letting callers
+   * apply their existing degradation (getInstalledAppNames → [], writes → throw).
+   */
+  private async ensureToken(): Promise<string> {
+    if (this.apiToken) return this.apiToken;
+
+    const tokensUrl = `${this.gogsUrl}/api/v1/users/${this.gogsUsername}/tokens`;
     try {
       const tokenName = `marketplace-ui-${crypto.randomUUID().slice(0, 8)}`;
       const res = await fetch(tokensUrl, {
@@ -55,19 +75,26 @@ export class GogsService implements OnModuleInit {
         this.apiToken = data.sha1;
         this.logger.log('Created Gogs API token for write operations');
       } else {
-        this.logger.error(`Failed to create Gogs API token: ${res.status}`);
+        // 403 here is the expected "flux user not ready yet" case on a fresh
+        // cluster; leave apiToken empty so the next call retries.
+        this.logger.warn(
+          `Gogs API token not yet available (HTTP ${res.status}); will retry on next request`,
+        );
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Gogs API token init failed: ${message}`);
+      this.logger.warn(`Gogs API token bootstrap failed: ${message}; will retry on next request`);
     }
+
+    return this.apiToken;
   }
 
   async getInstalledAppNames(): Promise<string[]> {
     const url = `${this.gogsUrl}/api/v1/repos/flux/user-apps/raw/master/kustomization.yaml`;
     try {
+      const token = await this.ensureToken();
       const res = await fetch(url, {
-        headers: { Authorization: `token ${this.apiToken}` },
+        headers: { Authorization: `token ${token}` },
       });
       if (!res.ok) return [];
       const parsed = yaml.load(await res.text()) as { resources?: string[] } | null;
@@ -87,10 +114,11 @@ export class GogsService implements OnModuleInit {
 
   async createFile(path: string, content: string, message: string): Promise<void> {
     const url = `${this.gogsUrl}/api/v1/repos/flux/user-apps/contents/${path}`;
+    const token = await this.ensureToken();
     const res = await fetch(url, {
       method: 'PUT',
       headers: {
-        Authorization: `token ${this.apiToken}`,
+        Authorization: `token ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -105,8 +133,9 @@ export class GogsService implements OnModuleInit {
 
   async getFileContents(path: string): Promise<{ content: string; sha: string } | null> {
     const url = `${this.gogsUrl}/api/v1/repos/flux/user-apps/contents/${path}`;
+    const token = await this.ensureToken();
     const res = await fetch(url, {
-      headers: { Authorization: `token ${this.apiToken}` },
+      headers: { Authorization: `token ${token}` },
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { content: string; sha: string };
