@@ -11,6 +11,36 @@ spec:
       securityContext:
         fsGroup: 1000
         fsGroupChangePolicy: OnRootMismatch
+      initContainers:
+        # On a genuinely empty volume (real bare-metal first-boot), the app.ini
+        # subPath mount at /data/gogs/conf/app.ini makes the kubelet pre-create
+        # the parents /data/gogs and /data/gogs/conf as root:root before the
+        # entrypoint runs. The image's start.sh only chowns /data when the
+        # top-level /data isn't already git-owned; the nfs-subdir provisioner
+        # (reclaim Retain) leaves /data git-owned, so that guard is false and the
+        # recursive chown is skipped — /data/gogs stays root:root. gogs then runs
+        # as git and cannot `mkdir /data/gogs/log` → FATAL, crashlooping before it
+        # ever creates the DB. Deterministically chown /data/gogs as root here so
+        # the main container's first boot succeeds regardless of the image guard.
+        - name: fix-data-ownership
+          image: gogs/gogs
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              # chown by name — the git user (uid 1000, gid 102) exists in this
+              # image. Pre-create the subfolders the entrypoint needs so the
+              # /app/gogs/log -> /data/gogs/log symlink resolves once gogs starts.
+              mkdir -p /data/gogs/log /data/gogs/data
+              chown -R git:git /data/gogs
+          securityContext:
+            # Must run as root to chown the root-owned subPath parents.
+            runAsUser: 0
+          volumeMounts:
+            - name: data
+              mountPath: /data
       containers:
         - name: gogs
           image: gogs/gogs
