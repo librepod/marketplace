@@ -97,6 +97,47 @@ describe('GogsService', () => {
     });
   });
 
+  describe('ensureWritableToken()', () => {
+    it('retries until Gogs provisions the flux user, then returns the token (first-click race)', async () => {
+      // Fresh cluster: the first N token POSTs 403 (flux user not ready), then one
+      // succeeds. ensureWritableToken must wait through the 403s so the first
+      // install click succeeds instead of 500ing. Fake timers so the backoff
+      // sleeps don't slow the test.
+      vi.useFakeTimers();
+      const svc = new GogsService(mockConfigService);
+      vi.spyOn(global, 'fetch')
+        .mockResolvedValueOnce({ ok: false, status: 403 } as Response)
+        .mockResolvedValueOnce({ ok: false, status: 403 } as Response)
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ sha1: 'ready-token' }) } as Response);
+
+      const promise = svc.ensureWritableToken();
+      await vi.runAllTimersAsync();
+      await expect(promise).resolves.toBe('ready-token');
+      vi.useRealTimers();
+    });
+
+    it('throws after exhausting retries when Gogs never provisions the user', async () => {
+      vi.useFakeTimers();
+      const svc = new GogsService(mockConfigService);
+      vi.spyOn(global, 'fetch').mockResolvedValue({ ok: false, status: 403 } as Response);
+
+      const promise = svc.ensureWritableToken();
+      // Attach the rejection expectation before advancing timers so the rejection
+      // is never unhandled.
+      const assertion = expect(promise).rejects.toThrow(/token unavailable/i);
+      await vi.runAllTimersAsync();
+      await assertion;
+      vi.useRealTimers();
+    });
+
+    it('returns immediately without retrying when a token is already held', async () => {
+      // service (from beforeEach) already has a token; must not POST again.
+      const fetchSpy = vi.spyOn(global, 'fetch');
+      await expect(service.ensureWritableToken()).resolves.toBe(MOCK_API_TOKEN);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('createFile()', () => {
     it('calls PUT with token auth and base64 content (INST-01)', async () => {
       vi.spyOn(global, 'fetch').mockResolvedValueOnce({

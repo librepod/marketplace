@@ -89,6 +89,38 @@ export class GogsService implements OnModuleInit {
     return this.apiToken;
   }
 
+  /**
+   * Like ensureToken() but for the WRITE path: bounded retry-with-backoff so the
+   * first install/uninstall on a fresh cluster waits for Gogs to finish creating
+   * the flux admin user instead of 500ing on the first click. ensureToken() alone
+   * only self-heals across separate requests (the container stops wedging, but the
+   * first click still 500s until the user retries) — this closes that first-click
+   * race for the user-triggered action. Reads deliberately do NOT call this: they
+   * use the single-shot ensureToken() and degrade instantly when Gogs is down, so
+   * the UI never blocks on the retry budget during page load.
+   *
+   * Throws if no token can be obtained within the budget, so install() fails
+   * before writing any files (a clean, meaningful error rather than a partial
+   * write + generic 500).
+   */
+  async ensureWritableToken(): Promise<string> {
+    const attempts = 5;
+    const delayMs = 2000; // ~5 tries over ~8s of backoff-free waiting
+    for (let i = 0; i < attempts; i++) {
+      const token = await this.ensureToken();
+      if (token) return token;
+      if (i < attempts - 1) {
+        this.logger.warn(
+          `Gogs API token not ready (write path, attempt ${i + 1}/${attempts}); retrying in ${delayMs}ms`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+    throw new Error(
+      `Gogs API token unavailable after ${attempts} attempts — Gogs may still be provisioning`,
+    );
+  }
+
   async getInstalledAppNames(): Promise<string[]> {
     const url = `${this.gogsUrl}/api/v1/repos/flux/user-apps/raw/master/kustomization.yaml`;
     try {
