@@ -8,7 +8,7 @@ resources:
 
 images:
 - name: ghcr.io/wg-easy/wg-easy
-  newTag: "15.3"
+  newTag: "15.4"
 
 components:
   - ../../components/frp-upstreams
