@@ -79,6 +79,13 @@ reconciliation — see @docs/FLUX_WORKFLOW.md
 - **Do not parse the entire `./apps/` folder** unless explicitly asked to. Each app is self-contained — only dive into the specific app you're working on.
 - **Do not create namespaces manually** - Apps are responsible for creating their own namespaces
 - **Testing**: Uses Kustomize build command
+- **`catalog.yaml` is regenerated in CI — do NOT regenerate it manually.** Both
+  `catalog.yaml` (root) and `apps/marketplace-ui/base/catalog.yaml` are generated from
+  `apps/*/metadata.yaml` by CI. When bumping an app version, edit only the source of truth
+  (`metadata.yaml` `spec.version`, plus the overlay image tag and the `ref.tag` in
+  `infrastructure/system-apps/<app>.yaml`); let CI regenerate the catalog on merge. Running
+  `scripts/generate-catalog.sh` locally reorders every app (its output depends on the shell's
+  glob/locale collation, which differs from CI), producing a large, misleading diff — don't.
 - **Commit, PR & public-doc hygiene**: never reference specific device or cluster hostnames (e.g. `librepod-dev`, `librepod-beelink`) in commit messages, PR titles/descriptions, or public-facing docs (READMEs). Use abstract environment pointers instead — `dev`, `prod`, `staging`. (Internal dev workflow docs like `docs/FLUX_WORKFLOW.md` may keep the operational cluster name.)
 
 ### PVC/PV Deletion with NFS Storage

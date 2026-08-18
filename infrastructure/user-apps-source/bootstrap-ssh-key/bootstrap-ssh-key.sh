@@ -12,19 +12,23 @@
 # Secret with Reflector annotations.
 #
 # AUTH NOTE: this Job authenticates every Gogs API call with HTTP Basic auth
-# (flux:password) against the /api/v1/admin/* and /api/v1/repos/* endpoints. It
-# does NOT use API tokens: on the pinned image (gogs 0.14.3, the CVE-2026-25119
-# fix release) token-based API auth is broken — every "Authorization: token
-# <sha1>" call returns 403 "Only authenticated user is allowed to call APIs",
-# even for a freshly minted, valid token and even from loopback. Basic auth on
-# the admin/repos endpoints still works, so we use that throughout:
+# (flux:password) against the /api/v1/admin/* and /api/v1/repos/* endpoints it
+# uses. Auth on gogs 0.14.3 (the pinned CVE-2026-25119 fix release) is
+# ENDPOINT-SPECIFIC — do not read this as "token auth is broken." Live-verified
+# on the pinned build (issue #180):
+#   - token bootstrap: POST /api/v1/users/<u>/tokens        → Basic auth: 201 OK
+#   - raw / contents : GET/PUT/DELETE /api/v1/repos/.../{raw,contents}/...
+#                                                           → token <sha1>: 200/201/204 OK
+#   - the /api/v1/user/* SELF endpoints reject Basic auth (401)
+# So `token <sha1>` DOES work for repo file ops (the marketplace-ui server relies
+# on exactly that and is correct). This Job simply stays on Basic auth for the
+# admin-scoped provisioning endpoints it needs (repo/key create, repo metadata),
+# which is sufficient and avoids a token-mint round-trip here:
 #   - repo create : POST /api/v1/admin/users/<flux>/repos
 #   - key register: POST /api/v1/admin/users/<flux>/keys
 #   - repo exists : GET  /api/v1/repos/<flux>/user-apps (also yields "empty")
-# The /api/v1/user/* SELF endpoints reject Basic auth (401), which is why we use
-# the admin-scoped equivalents. Idempotency comes from the Secret early-exit
-# (below) plus the repo GET-guard — not from key-list-by-title, since key listing
-# also returns nothing usable on this build.
+# Idempotency comes from the Secret early-exit (below) plus the repo GET-guard —
+# not from key-list-by-title, since key listing returns nothing usable on this build.
 #
 # Runs as root (runAsUser: 0) ONLY because alpine's apk needs root to install
 # openssh-client/curl/jq/git. One-shot bootstrap pod, not a long-running service.
@@ -94,8 +98,8 @@ fi
 # and its branch name (master, to match the GitRepository ref). Idempotent: GET
 # first (200 = exists, 404 = missing) and only create on 404 — POSTing to an
 # existing repo 500s. Create via the admin endpoint with Basic auth (the
-# /api/v1/user/repos self endpoint requires a token, which is broken — see the
-# AUTH NOTE).
+# /api/v1/user/repos self endpoint needs a token; we use the admin-scoped
+# equivalent with the Basic creds already in hand — see the AUTH NOTE).
 #
 # REPO_EMPTY drives the seed step below. We read it from the repo object's
 # "empty" field (GET /repos/<flux>/user-apps returns "empty":true/false) rather

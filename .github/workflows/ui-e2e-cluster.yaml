@@ -70,3 +70,16 @@ jobs:
           name: playwright-test-results-cluster
           path: ui/packages/e2e/test-results
           retention-days: 7
+
+      # Cluster/app post-mortem (issue #180). run-tier2.sh writes this dir from its
+      # test-failure path BEFORE the EXIT trap runs `k3d cluster delete` — the dump
+      # cannot live in a workflow step because by the time one runs the cluster (and
+      # the orchestrator's isolated kubeconfig) is already gone. This step only uploads.
+      - name: Upload Tier 2 cluster diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: tier2-cluster-diagnostics
+          path: ui/packages/e2e/tier2-diagnostics
+          retention-days: 14
+          if-no-files-found: warn
