@@ -15,52 +15,15 @@ spec:
         app.kubernetes.io/name: marketplace-ui
     spec:
       serviceAccountName: marketplace-ui
-      initContainers:
-        # Gate the server on the Gogs `flux` admin USER existing, not just on the
-        # gogs pod answering on :3000. The gogs Deployment becomes Ready (TCP
-        # :3000) before its postStart hook finishes `gogs admin create-user`, so
-        # `dependsOn: gogs` alone leaves a window where the user is absent. The
-        # server bootstraps its API token ONCE at startup (Basic-auth POST to
-        # /users/<user>/tokens) and never retries — if it boots in that window
-        # the token is empty for the pod's whole life and every install 500s.
-        # Poll the exact call the server makes so success here guarantees the
-        # server's onModuleInit succeeds. Best-effort: after the bound we still
-        # start (the server logs its own failure) rather than block forever.
-        - name: wait-for-gogs-user
-          image: alpine:3.19
-          command: ["/bin/sh", "-c"]
-          env:
-            - name: GOGS_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: marketplace-ui-env
-                  key: GOGS_URL
-            - name: GOGS_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: gogs-auth
-                  key: username
-            - name: GOGS_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: gogs-auth
-                  key: password
-          args:
-            - |
-              AUTH="$(printf '%s:%s' "$GOGS_USERNAME" "$GOGS_TOKEN" | base64 | tr -d '\n')"
-              i=0
-              until wget -q -O /dev/null \
-                  --header="Authorization: Basic $AUTH" \
-                  "$GOGS_URL/api/v1/users/$GOGS_USERNAME/tokens"; do
-                i=$((i + 1))
-                if [ "$i" -ge 60 ]; then
-                  echo "WARN: gogs user '$GOGS_USERNAME' not authenticating after 300s; starting anyway (server will log the token-bootstrap result)." >&2
-                  exit 0
-                fi
-                echo "Waiting for gogs user '$GOGS_USERNAME' to exist and authenticate ($i/60)..."
-                sleep 5
-              done
-              echo "gogs user '$GOGS_USERNAME' authenticates; server token bootstrap will succeed."
+      # NOTE: the `wait-for-gogs-user` initContainer that used to live here was
+      # removed (issue #180). It polled a Gogs-only endpoint (the flux admin
+      # USER) and never gated on the seeded flux/user-apps REPO, so the server
+      # could still become Ready against a commitless repo and the first install
+      # would 500. Repo readiness is now enforced provider-neutrally by the
+      # marketplace-ui Kustomization's `dependsOn: user-apps` (a Flux Kustomization
+      # that is Ready ⇔ the repo is cloned+applied — works for Gogs/GitHub/GitLab
+      # alike). The server also self-heals its token lazily (GogsService.ensureToken).
+      # The CA-merge initContainer is added by overlays/librepod/deployment-auth-patch.yaml.
       containers:
         - name: marketplace-ui
           image: marketplace-ui

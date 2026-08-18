@@ -7,7 +7,7 @@ spec:
   interval: 10m
   url: oci://ghcr.io/librepod/marketplace/apps/marketplace-ui
   ref:
-    tag: "0.5.2"
+    tag: "0.5.3"
   verify:
     provider: cosign
     secretRef:
@@ -23,6 +23,14 @@ spec:
     - name: gogs
     - name: cert-manager
     - name: casdoor-sso-controller
+    # Gate on the user-apps Kustomization: Ready ⇔ Flux cloned a seeded
+    # flux/user-apps repo and applied it — a provider-neutral "repo is seeded and
+    # writable" signal (identical semantics for Gogs, GitHub, or GitLab). Without
+    # this the server can become Ready while the repo is still commitless, and the
+    # first install PUTs to a commitless repo → Gogs 500 (issue #180). dependsOn
+    # can only target Kustomizations, not the user-apps-source GitRepository, so
+    # this is the correct gate. user-apps dependsOn nothing → acyclic.
+    - name: user-apps
   interval: 1m
   retryInterval: 2m
   timeout: 5m

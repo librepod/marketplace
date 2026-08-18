@@ -10,6 +10,71 @@ NS="marketplace-ui"
 PF_PORT="${LIBREPOD_E2E_PORT:-3101}" # not 3000 — a stray dev server can sit there
 PF_PID=""
 KUBECONFIG_FILE="$(mktemp -t e2e-kubeconfig.XXXXXX)"
+# Where the on-failure diagnostics dump lands. Written BEFORE teardown (the EXIT
+# trap deletes the cluster AND removes $KUBECONFIG_FILE, so nothing outside this
+# script can reach the cluster afterwards); the workflow uploads this dir.
+DIAG_DIR="${LIBREPOD_E2E_DIAG_DIR:-$E2E/tier2-diagnostics}"
+
+# Collect cluster + app state for post-mortem of a Tier 2 failure (issue #180: the
+# first install 500s on a cold cluster). MUST run while the cluster and its isolated
+# kubeconfig still exist — i.e. from the test-failure path below, never from the EXIT
+# trap after `k3d cluster delete`. Every command is best-effort (never fail the run).
+dump_diagnostics() {
+  echo "==> Capturing Tier 2 diagnostics to $DIAG_DIR"
+  mkdir -p "$DIAG_DIR" || return 0
+  {
+    # marketplace-ui server — the log that shows the 500 at install time.
+    kubectl logs deploy/marketplace-ui -n "$NS" --all-containers --tail=-1 \
+      > "$DIAG_DIR/marketplace-ui.log" 2>&1 || true
+    # Previous instance too, in case it restarted (e.g. CrashLoop hid the first boot).
+    kubectl logs deploy/marketplace-ui -n "$NS" --all-containers --tail=-1 --previous \
+      > "$DIAG_DIR/marketplace-ui.previous.log" 2>&1 || true
+    kubectl describe pod -n "$NS" -l app.kubernetes.io/name=marketplace-ui \
+      > "$DIAG_DIR/marketplace-ui.describe.txt" 2>&1 || true
+
+    # Gogs server + its bootstrap Jobs (postStart creates the flux user; the ssh-key
+    # Job seeds flux/user-apps — the repo-seeding race is between these and the UI).
+    kubectl logs deploy/gogs -n gogs --all-containers --tail=-1 \
+      > "$DIAG_DIR/gogs.log" 2>&1 || true
+    kubectl logs job/gogs-bootstrap-ssh-key -n gogs --tail=-1 \
+      > "$DIAG_DIR/gogs-bootstrap-ssh-key.job.log" 2>&1 || true
+    kubectl logs job/marketplace-ui-bootstrap-session -n "$NS" --tail=-1 \
+      > "$DIAG_DIR/marketplace-ui-bootstrap-session.job.log" 2>&1 || true
+
+    # Flux reconcile state across the board — did user-apps reach Ready before the UI?
+    flux get kustomizations -A > "$DIAG_DIR/flux-kustomizations.txt" 2>&1 || true
+    flux get sources git -A   > "$DIAG_DIR/flux-sources-git.txt" 2>&1 || true
+    kubectl get gitrepository,kustomization,ocirepository -n flux-system -o wide \
+      > "$DIAG_DIR/flux-objects.txt" 2>&1 || true
+
+    # Broad pod snapshot — anything not Running is a suspect.
+    kubectl get pods -A -o wide > "$DIAG_DIR/pods.txt" 2>&1 || true
+  } || true
+
+  # The flux/user-apps repo state — the crux (empty/commitless ⇒ install 500). Reached
+  # via the running server pod (has node + creds + in-cluster Gogs URL), same calls as
+  # GogsService: Basic-auth token bootstrap, then GET raw/master/kustomization.yaml.
+  local pod
+  pod="$(kubectl get pods -n "$NS" -l app.kubernetes.io/name=marketplace-ui \
+    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+  if [ -n "$pod" ]; then
+    kubectl exec -n "$NS" "$pod" -c marketplace-ui -- node -e '
+      const G=(process.env.GOGS_URL||"http://gogs.gogs.svc.cluster.local:80").replace(/\/$/,"");
+      const U=process.env.GOGS_USERNAME,P=process.env.GOGS_TOKEN;
+      (async()=>{
+        const t=await fetch(`${G}/api/v1/users/${U}/tokens`,{method:"POST",
+          headers:{Authorization:"Basic "+Buffer.from(`${U}:${P}`).toString("base64"),"Content-Type":"application/json"},
+          body:JSON.stringify({name:"diag-"+Math.random().toString(16).slice(2,8)})});
+        console.log("token bootstrap ->",t.status);
+        const tok=t.ok?(await t.json()).sha1:"";
+        const r=await fetch(`${G}/api/v1/repos/flux/user-apps/raw/master/kustomization.yaml`,{headers:{Authorization:`token ${tok}`}});
+        console.log("GET raw/master/kustomization.yaml ->",r.status);
+        console.log("body:\n"+(await r.text()));
+      })().catch(e=>console.log("probe error:",e.message));
+    ' > "$DIAG_DIR/user-apps-repo-state.txt" 2>&1 || true
+  fi
+  echo "==> Diagnostics written: $(ls -1 "$DIAG_DIR" 2>/dev/null | wc -l) file(s)"
+}
 
 cleanup() {
   echo "==> Tearing down"
@@ -82,4 +147,11 @@ set +e
 E2E_BASE_URL="http://localhost:${PF_PORT}" npx playwright test --config projects/tier2.config.ts "$@"
 TEST_RC=$?
 set -e
+
+# On failure, dump cluster/app state NOW — the EXIT trap below deletes the cluster and
+# removes $KUBECONFIG_FILE, so this is the last moment either is reachable (issue #180).
+if [ "$TEST_RC" -ne 0 ]; then
+  dump_diagnostics || true
+fi
+
 exit "$TEST_RC"
