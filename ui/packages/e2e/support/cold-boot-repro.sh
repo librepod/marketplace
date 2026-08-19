@@ -191,7 +191,18 @@ EOF
 # We hold user-apps NotReady deterministically: the seed Job has no ttl and only
 # re-runs on an explicit `flux reconcile ks user-apps-source`, so after wiping the repo
 # and deleting the ssh-key Secret + Job we simply do NOT reconcile user-apps-source —
-# user-apps stays NotReady until release_seed_and_wait_ready() releases it.
+# user-apps stays un-seeded until release_seed_and_wait_ready() releases it.
+#
+# CRITICAL (learned the hard way on a warm cluster): wiping the gogs repo is NOT enough
+# to make user-apps NotReady. Flux's source-controller RETAINS the last-good
+# GitRepository artifact across a failed re-clone, so user-apps keeps reporting
+# Ready=True on the stale tarball even though the repo is now commitless — and the
+# dependsOn gate never engages (a false GATE=OPEN). A genuinely fresh cluster never had
+# an artifact to retain, which is why the Tier 2 k3d nightly reproduces the gate and a
+# warm-cluster wipe alone does not. To match the fresh-cluster precondition we must
+# EVICT that cached artifact: deleting the GitRepository object drops it, user-apps then
+# has no source and goes NotReady, and the parent user-apps-source Kustomization
+# recreates the GitRepository on release.
 force_cold_boot() {
   log "Forcing a cold boot that HOLDS flux/user-apps un-seeded (to exercise the dependsOn gate)"
 
@@ -215,8 +226,10 @@ force_cold_boot() {
   kubectl scale deploy/gogs -n "$GOGS_NS" --replicas=1 >/dev/null 2>&1 || true
   kubectl rollout status deploy/gogs -n "$GOGS_NS" --timeout=300s >/dev/null 2>&1 || warn "gogs rollout slow"
 
-  info "5) force user-apps to observe the un-seeded state NOW (source clone fails ⇒ user-apps NotReady)"
-  flux_request_reconcile gitrepository user-apps-source
+  info "5) evict the retained GitRepository artifact (delete the object) — a wiped repo alone leaves user-apps Ready on the cached tarball"
+  kubectl delete gitrepository user-apps-source -n "$FLUX_NS" --ignore-not-found >/dev/null 2>&1 || true
+
+  info "6) force user-apps to observe the un-seeded state NOW (no source artifact ⇒ user-apps NotReady)"
   flux_request_reconcile kustomization user-apps
   local w=0
   while [ "$w" -lt 120 ]; do
@@ -269,9 +282,16 @@ assert_gate() {
 
 # ── release the held seed: reseed the repo, wait user-apps Ready, let Flux apply MUI ─
 release_seed_and_wait_ready() {
-  log "Releasing the seed: reconcile user-apps-source (re-runs the bootstrap Job → reseeds repo + ssh key)"
+  log "Releasing the seed: reconcile user-apps-source (recreates the GitRepository + re-runs the bootstrap Job → reseeds repo + ssh key)"
   flux reconcile kustomization user-apps-source -n "$FLUX_NS" --with-source >/dev/null 2>&1 || true
+  # the parent Kustomization recreates the GitRepository object we deleted during the
+  # hold; wait for it to exist before we reconcile the source below
   local w=0
+  while [ "$w" -lt 60 ]; do
+    kubectl get gitrepository user-apps-source -n "$FLUX_NS" >/dev/null 2>&1 && break
+    sleep 3; w=$((w+3))
+  done
+  w=0
   while [ "$w" -lt 180 ]; do
     if [ "$(kubectl get job gogs-bootstrap-ssh-key -n "$GOGS_NS" -o jsonpath='{.status.succeeded}' 2>/dev/null)" = "1" ]; then break; fi
     sleep 5; w=$((w+5))
