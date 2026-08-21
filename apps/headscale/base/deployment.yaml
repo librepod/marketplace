@@ -17,6 +17,42 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             - serve
+          env:
+            # Bind the embedded DERP STUN listener to a SPECIFIC address instead
+            # of the 0.0.0.0 in config.yaml. headscale loads its config through
+            # viper with AutomaticEnv and the prefix HEADSCALE_, so this env var
+            # overrides derp.server.stun_listen_addr.
+            #
+            # Why it is required: a UDP socket bound to the wildcard address does
+            # not remember which local address a request arrived on — the kernel
+            # re-selects the source of every reply by routing to the destination.
+            # For a client inside the cluster that means the reply leaves with the
+            # CNI bridge address (e.g. 10.42.0.1) instead of the ClusterIP or node
+            # address the client sent to. conntrack cannot reverse-NAT a packet
+            # whose source it never saw, so the reply arrives from an unexpected
+            # peer and the kernel drops it on any CONNECTED UDP socket — which is
+            # what frp's UDP proxy dials, so a tunnelled STUN endpoint is a black
+            # hole even though every hop reports itself healthy. Symptom: STUN
+            # times out with no errors logged anywhere, the embedded DERP region
+            # never gets a latency measurement, and no client ever picks it as its
+            # home relay (netcheck only ranks regions it could measure).
+            #
+            # Binding to a single address pins the reply source to that address,
+            # so the path through the Service NATs symmetrically.
+            #
+            # status.podIP, not status.hostIP: the two are equal while this pod
+            # uses hostNetwork, but podIP is also correct if hostNetwork is ever
+            # dropped, whereas hostIP would then be unassignable inside the pod
+            # and headscale log.Fatal()s when the STUN listener fails to bind.
+            # The port must stay in sync with config.yaml — headscale advertises
+            # it as STUNPort in the DERP map. $(VAR) is expanded by the kubelet;
+            # Flux only substitutes ${VAR}, so this survives postBuild.substitute.
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: HEADSCALE_DERP_SERVER_STUN_LISTEN_ADDR
+              value: "$(POD_IP):3478"
           volumeMounts:
             - name: config
               mountPath: /etc/headscale/config.yaml

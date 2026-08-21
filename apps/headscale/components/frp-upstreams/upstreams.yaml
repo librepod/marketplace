@@ -37,17 +37,42 @@ spec:
       useEncryption: true
       useCompression: true
 
-# ---
-# apiVersion: frp.zufardhiyaulhaq.com/v1alpha1
-# kind: Upstream
-# metadata:
-#   name: headscale-derp-stun
-# spec:
-#   client: librepod
-#   udp:
-#     # DERP STUN has no Kubernetes Service — reach it on the node's host network
-#     # where headscale binds 0.0.0.0:3478 via hostNetwork: true.
-#     host: 192.168.2.180
-#     port: 3478
-#     server:
-#       port: 8031
+---
+# Embedded DERP STUN endpoint (UDP).
+#
+# Without this proxy the DERP region headscale advertises has no reachable STUN
+# endpoint, and Tailscale clients then never assign it a latency: netcheck
+# measures DERP latency with UDP STUN probes and only falls back to HTTPS/ICMP
+# when UDP is blocked for *every* region. Regions without a latency are not
+# candidates for a client's home DERP, so the embedded relay stays unused and
+# every device picks the nearest Tailscale DERP instead.
+#
+# server.port must be 3478 — it is the public port clients probe, and headscale
+# advertises STUNPort in the DERP map from derp.server.stun_listen_addr.
+#
+# Requires headscale's STUN socket to be bound to a single address — see
+# HEADSCALE_DERP_SERVER_STUN_LISTEN_ADDR in base/deployment.yaml. With the
+# wildcard bind this proxy is a black hole that looks perfectly healthy: frpc
+# reports the proxy `running`, frps receives the datagrams, headscale answers —
+# but the answer leaves with the CNI bridge as its source address, conntrack
+# cannot un-NAT it, and frpc's connected UDP socket drops it without logging.
+#
+# Caveat: frp's UDP proxy does not preserve the client's source address, so the
+# XOR-MAPPED-ADDRESS in the STUN reply is the frpc pod's address rather than the
+# client's public one. That is fine for latency measurement (which is what
+# selects the region), but clients will see the mapped address disagree with the
+# one Tailscale's own DERPs report and mark the mapping as varying by
+# destination. For a topologically better relay path — and honest STUN — run a
+# standalone derper on a host with a public IP and point derp.paths/derp.urls at
+# it instead of using the embedded server.
+apiVersion: frp.zufardhiyaulhaq.com/v1alpha1
+kind: Upstream
+metadata:
+  name: headscale-derp-stun
+spec:
+  client: libreport
+  udp:
+    host: headscale.headscale.svc.cluster.local
+    port: 3478
+    server:
+      port: 3478
