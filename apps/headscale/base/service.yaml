@@ -21,7 +21,11 @@ spec:
     #
     # The port must stay 3478: headscale advertises STUNPort in the DERP map
     # from derp.server.stun_listen_addr, and the public port has to match it.
-    # Published publicly by components/frp-upstreams.
+    #
+    # NOT published publicly by this app — see components/frp-upstreams for why
+    # STUN belongs on the edge host rather than in an FRP tunnel. This port is
+    # kept for reaching the endpoint from inside the cluster and for setups that
+    # front it with something that preserves client source addresses.
     - port: 3478
       targetPort: derp-stun
       protocol: UDP
