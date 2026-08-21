@@ -14,6 +14,12 @@
 #   dns.nameservers    → 1.1.1.1 only (defaults include v6 Cloudflare too)
 #   disable_check_updates → true (not useful in containers)
 #
+# NOTE: clients only ever select this embedded region as their home DERP if its
+# STUN endpoint (UDP, stun_listen_addr's port) answers on the public server_url
+# host. Tailscale measures DERP latency with UDP STUN and only falls back to
+# HTTPS when UDP is blocked everywhere, and unmeasured regions are never chosen.
+# components/frp-upstreams publishes both the HTTPS relay and UDP 3478.
+#
 # Variables like ${BASE_DOMAIN} are substituted by FluxCD postBuild.substitute.
 # For local testing: export BASE_DOMAIN=libre.pod && kustomize build ... | envsubst
 
@@ -39,6 +45,14 @@ derp:
     region_id: 999
     region_code: "headscale"
     region_name: "Headscale Embedded DERP"
+    # The BIND ADDRESS here is overridden at runtime by
+    # HEADSCALE_DERP_SERVER_STUN_LISTEN_ADDR in deployment.yaml, which pins it to
+    # the pod's own address: a wildcard-bound UDP socket answers with a
+    # route-selected source address, which breaks STUN for every client reaching
+    # it through a Service. See the long comment on that env var. Only the PORT
+    # here is authoritative — headscale advertises it as STUNPort in the DERP
+    # map, so it must match the env var and the public port published by
+    # components/frp-upstreams.
     stun_listen_addr: "0.0.0.0:3478"
     private_key_path: /var/lib/headscale/derp_server_private.key
   urls:
