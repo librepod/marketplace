@@ -9,7 +9,7 @@ images:
   # matching spec.version bump is driven by the # renovate: comment in
   # metadata.yaml; both share depName=renovate/renovate → one grouped PR.
   - name: renovate/renovate
-    newTag: "44.14.1"
+    newTag: "44.37.1"
 
 patches:
   - path: ./patch-storage-class.yaml
