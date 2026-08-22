@@ -35,14 +35,25 @@ automatically — no restarts, no marketplace involvement.
              - "[STATUS] == 200"
    ```
 
-2. Reference the file in your repo's root `kustomization.yaml`:
+2. Kustomize requires every directory listed in the root kustomization to
+   have its own `kustomization.yaml` — create one next to the ConfigMap:
+
+   ```yaml
+   # apps/gatus-user/kustomization.yaml
+   apiVersion: kustomize.config.k8s.io/v1beta1
+   kind: Kustomization
+   resources:
+     - configmap.yaml
+   ```
+
+3. Reference the directory in your repo's root `kustomization.yaml`:
 
    ```yaml
    resources:
      - apps/gatus-user
    ```
 
-3. Commit and push. Within a couple of minutes (Flux reconcile + volume
+4. Commit and push. Within a couple of minutes (Flux reconcile + volume
    sync) the endpoints appear on your dashboard — gatus hot-reloads.
 
 ## Rules and guardrails
