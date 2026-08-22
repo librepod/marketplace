@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-08-22T14:32:33Z"
+  generatedAt: "2026-08-22T14:58:25Z"
 apps:
     - name: baikal
       version: "0.11.1-nginx"
@@ -468,6 +468,68 @@ apps:
             - name: FRP_AUTH_TOKEN
               description: "Authentication token matching the FRP server configuration"
               required: true
+    - name: gatus
+      version: "v5.36.0"
+      displayName: "Gatus"
+      description: "Automated service health dashboard — uptime monitoring and status page with OIDC login"
+      category: "Monitoring"
+      icon: "https://raw.githubusercontent.com/TwiN/gatus/a1c8422c2ff2b9d0a6f184c99e4dc728d3f2cd75/web/static/logo-192x192.png"
+      sourceType: oci-kustomize
+      sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/gatus"
+      templates:
+        source: |
+            apiVersion: source.toolkit.fluxcd.io/v1
+            kind: OCIRepository
+            metadata:
+              name: marketplace-gatus
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "gatus"
+            spec:
+              interval: 10m
+              url: oci://ghcr.io/librepod/marketplace/apps/gatus
+              ref:
+                tag: "v5.36.0"
+        release: |
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: marketplace-gatus
+              namespace: flux-system
+              labels:
+                marketplace.io/managed: "true"
+                marketplace.io/app: "gatus"
+            spec:
+              dependsOn:
+                - name: traefik              # IngressRoute
+                - name: storage              # nfs-client PVC (chart-managed)
+                - name: casdoor-sso-controller   # SSOClient CRD + controller (not bare casdoor-sso)
+              force: true                    # Force instructs the controller to recreate resources when patching fails due to an immutable field change.
+              interval: 1h
+              retryInterval: 2m
+              timeout: 5m
+              sourceRef:
+                kind: OCIRepository
+                name: marketplace-gatus
+              path: ./overlays/librepod
+              prune: true
+              wait: true
+              postBuild:
+                substitute:
+                  BASE_DOMAIN: "${BASE_DOMAIN}"
+        kustomization: |
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources:
+              - source.yaml
+              - release.yaml
+      params:
+            required:
+              - name: BASE_DOMAIN
+                description: "Base domain (app will be at gatus.BASE_DOMAIN)"
+                type: string
+                example: "example.com"
     - name: gogs
       version: "0.14.3"
       displayName: "Gogs"
