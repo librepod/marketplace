@@ -36,4 +36,4 @@ patches:
 images:
   - name: marketplace-ui
     newName: ghcr.io/librepod/marketplace-ui
-    newTag: "0.5.3"
+    newTag: "0.6.0"

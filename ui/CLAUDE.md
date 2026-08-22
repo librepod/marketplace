@@ -8,7 +8,8 @@ This is the **marketplace installer UI/API** (Phase 2 of LibrePod) — a single 
 that lets users browse the app catalog and install/uninstall apps on their cluster with
 one click. It is a subdirectory of the `marketplace` git repo (this dir is **not** its own
 repo; `git` root is `../`). It does **not** run kubectl against the cluster during installs —
-it commits to the on-cluster private Gogs repo and lets FluxCD reconcile.
+it commits to the app-store git repo (`flux/user-apps`, hosted by the on-cluster Gogs by
+default) and lets FluxCD reconcile.
 
 Read the parent `marketplace/CLAUDE.md` for cluster/GitOps conventions. The authoritative
 design spec is `../docs/marketplace-for-self-hosted-apps-design.md` §5 — **but the code
@@ -83,9 +84,19 @@ Conventions and gotchas:
   `compose up → readiness check → playwright → compose down -v`, so each run starts from a
   clean seed. The catalog is `packages/e2e/fixtures/catalog.fixture.yaml` (3 user-facing apps
   + 3 Infrastructure; `vaultwarden`/`litellm` have install `templates`).
-- **`GOGS_TOKEN` is the Gogs user's *password*** (Basic auth during token bootstrap), not a
-  bearer token. Seeded creds: `GOGS_USERNAME=flux` / `GOGS_TOKEN=pass@w0rd`
-  (from `apps/gogs/components/repo-init/secret.env`).
+- **Tier 1 drives the real production credential path.** `tier1.config.ts` sets
+  `USER_APPS_GIT_URL=http://127.0.0.1:43000/flux/user-apps.git` +
+  `USER_APPS_GIT_USERNAME=flux` / `USER_APPS_GIT_PASSWORD=pass@w0rd` — the same `http`
+  transport the cluster uses, since #182. The URL override is required because Tier 1 has
+  no cluster to discover the GitRepository from. One gap it CANNOT cover: its port (43000)
+  is non-default, so the `http://…:80` credential-entry bug is invisible here — that guard
+  lives in `git-remote.service.spec.ts`.
+- **Tier 1 starts in the PRE-#182 repo layout on purpose** (root `kustomization.yaml` +
+  an orphaned `apps/orphan-probe/`), so the boot-time migration is covered end-to-end by
+  `tests/app-level/repo-layout.spec.ts`.
+- **Read repo contents over git, not the Gogs tree API.** This release ignores
+  `?recursive=1` on `git/trees/<ref>` and returns only the top level, so path assertions
+  built on it are silently vacuous.
 - **`KUBECONFIG` is pinned to a closed-port fixture** (`packages/e2e/support/kubeconfig.closed.yaml`)
   in `projects/tier1.config.ts`. With no cluster, `FluxStatusService.loadFromDefault()` would
   otherwise read the host's `~/.kube/config` and query a real cluster; the closed port makes
@@ -105,7 +116,8 @@ Conventions and gotchas:
   out non-required first, then flip to a required status check once green.
 - **Bug found by this suite:** `GogsService.getInstalledAppNames` only stripped a trailing
   slash, leaving the `apps/` prefix from root-kustomization entries — so installs were never
-  detected. Fixed (with a regression test in `gogs.service.spec.ts`).
+  detected. Both the bug and its service are gone since #182 (the installed set is now
+  directory names under `apps/`), but it is why that path has e2e coverage at all.
 - **SPA fallback already works:** `@nestjs/serve-static` v5 serves `index.html` for unmatched
   non-API routes, so deep-link reload does not 404 and no `connect-history-api-fallback` is
   needed.
@@ -171,10 +183,20 @@ Nest server (port 3000) serves both the SPA and the API; the client calls relati
 In dev the two run separately and Vite proxies `/api` to `:3000`.
 
 ### No database — Git is the source of truth
-"Installed" is defined entirely by the Gogs repo `flux/user-apps` root `kustomization.yaml`'s
-`resources:` list (each entry is `apps/<name>`). `GogsService.getInstalledAppNames()` reads
-that file; if Gogs is unreachable it returns `[]` (everything shows `not_installed`) — this
-**graceful degradation** is intentional and tested.
+"Installed" means **`apps/<name>/` exists in the app-store repo's tree**. There is no root
+`kustomization.yaml` any more (#182): Flux auto-generates one from the whole tree, so an
+app's presence IS its declaration. `UserAppsRepoService.listInstalledApps()` reads the
+directory names out of a shallow git working copy refreshed on a 10s freshness window.
+
+Degradation is layered, and the distinction matters:
+- **git unreachable, working copy present** → the cached list is served **stale but true**.
+  Reporting `not_installed` for a running app would be worse than reporting a slightly old
+  answer.
+- **cold start, no working copy** → `[]`, i.e. everything reads `not_installed`.
+- **working copy unreadable by git** (not merely a dead remote) → discarded and re-cloned,
+  so a corrupt tree cannot wedge every future read.
+- **any write** with an unreachable remote → throws. A write must never silently apply to a
+  stale tree.
 
 ### Request flow
 - `GET /api/apps` → `CatalogService.findAll()` (in-memory, hot-reloaded from `catalog.yaml`)
@@ -190,14 +212,16 @@ that file; if Gogs is unreachable it returns `[]` (everything shows `not_install
 2. Refuse if already in the installed set.
 3. Build a `vars` map: `BASE_DOMAIN` from config + one generated secret per
    `secrets[].generate` (crypto hex).
-4. **Write per-app files to Gogs first** (`apps/<name>/{source,release,secret,kustomization}.yaml`,
-   rendered via `${VAR}` regex substitution).
-5. **Update root `kustomization.yaml` last** — append `apps/<name>` to `resources:`.
+4. Render `apps/<name>/{source,release,secret,kustomization}.yaml` (via `${VAR}` regex
+   substitution) and write them all as **one commit** (`UserAppsRepoService.writeApp`).
 
-Steps 4-before-5 is **"Pitfall 3"** (referenced in code comments): if the root kustomization
-references an app dir before the files exist, Flux errors on reconcile. Uninstall is the
-mirror: it edits the root first (removes the entry) and does **not** delete per-app files —
-Flux pruning garbage-collects the live resources.
+**"Pitfall 3" is retired.** It was a write-ORDERING rule — app files before the root
+`kustomization.yaml`, so Flux never saw an entry naming a directory that did not exist yet.
+There is no root file and no second write, so atomicity comes from the commit instead.
+
+Uninstall is the true mirror now: `removeApp` **deletes the whole `apps/<name>/`
+directory** in one commit. Pre-#182 it only edited the root file and left the files behind,
+because the provider's contents API has no DELETE route.
 
 ### Catalog (`CatalogService`)
 Reads `catalog.yaml` (path from `CATALOG_PATH`, default `../../../catalog.yaml` relative to
@@ -206,12 +230,42 @@ cwd — i.e. the **`marketplace/` root** when running from `packages/server`). H
 apps** — those are system apps, not user-installable. The catalog file itself is generated by
 CI from `apps/*/metadata.yaml` (do not hand-edit; see parent CLAUDE.md).
 
-### Gogs auth (`GogsService`)
-On module init it **bootstraps an API token**: POSTs to `/api/v1/users/<user>/tokens` with
-HTTP Basic auth (username + password), stores the returned `sha1`, then uses
-`token <sha1>` for all repo writes. Writes go through the Gogs **contents API** (base64-encoded,
-PUT per file). Root-kustomization edits are read-modify-write (fetch `sha`, dump YAML,
-re-PUT).
+### App-store repo (`UserAppsRepoService`)
+Three units replaced `GogsService` (#182), split by what they know:
+
+- **`GitClient`** — mechanical git in a working directory (`clone`/`fetchAndReset`/`stageAll`/
+  `removePath`/`commit`/`push`). The only place that spawns `git`, so the safety rules live
+  there: `execFile` not `exec`, `GIT_TERMINAL_PROMPT=0`, and `GIT_CONFIG_NOSYSTEM` +
+  `GIT_CONFIG_GLOBAL=/dev/null` so no ambient config can shadow the per-invocation one.
+  Knows nothing about apps or Kubernetes.
+- **`GitRemoteService`** — *where* the repo is and *how* to authenticate. The URL and branch
+  are **discovered from `GitRepository/user-apps-source`**, the same object Flux reads, so
+  the installer can never commit to a repo Flux is not reconciling; repointing that object
+  at GitHub/GitLab needs no code change (but does need a pod restart — the resolved remote
+  is cached for the process lifetime). The GitRepository's `secretRef` is deliberately NOT
+  read: its name is dynamic, so RBAC could not scope it and the server would need
+  `get secrets` across all of `flux-system`. The credential is **mounted** instead, as
+  `username`/`password` files, and written to a `0600` `.git-credentials` consumed via
+  `credential.helper=store` — never embedded in the remote URL, where it would leak into
+  `git remote -v`, the reflog and error messages.
+- **`UserAppsRepoService`** — app-level semantics (`listInstalledApps`/`writeApp`/`removeApp`)
+  plus the one-time layout migration.
+
+**git is not optional.** This Gogs release has **no DELETE route on its contents API**
+(live-probed: all three request shapes return an unrouted HTML 404), so uninstall could
+never delete an app's files over REST. git is also what makes the repo pluggable.
+
+**Transport: `http(s)` only.** An `ssh://` remote is rejected at resolution with a named
+error telling you to repoint the GitRepository — it is not a second supported path. See
+`docs/design/2026-08-19-per-app-flux-isolation-design.md` §3.
+
+**Layout migration** (`migrateLayout`, run from `onModuleInit`): deletes orphaned
+`apps/<name>/` directories — present in the tree but absent from the old root file's
+allow-list, so not deployed today and would spring to life once it is removed — and then
+the root `kustomization.yaml` itself, in that order, as one commit. It **must not throw**
+out of `onModuleInit`: a one-shot bootstrap that fails on a cold cluster leaves the
+container broken for its whole lifetime (the #176 failure mode). It logs and re-attempts on
+the next write.
 
 ### Flux status (`FluxStatusService`)
 Reads Flux CRDs via `@kubernetes/client-node` `CustomObjectsApi`: lists
@@ -231,11 +285,11 @@ on k8s-unreachable degrades to the last-known set (empty on cold start).
 `getSystemApps()` returns `Map<catalogName, fluxKustomizationName>` (note the
 name can differ, e.g. `nfs-provisioner` → `storage`).
 
-In `enrich`, system classification wins over the Gogs "installed?" check, and
+In `enrich`, system classification wins over the app-store "installed?" check, and
 status is derived via `FluxStatusService.getStatusFor(name, { systemKustomization })`
 (queries the Kustomization by name, not the `marketplace.io/app` label). This is
 why a system app like frp-operator reads `running` instead of a forever-`installing`
-badge even when it also has a stale entry in the Gogs user-apps repo.
+badge even when it also has a stale directory in the user-apps repo.
 
 `CatalogApp.system` is a runtime-enriched boolean (not in `catalog.yaml`).
 `/api/apps` excludes system apps; `/api/system-apps` lists them; install/uninstall
@@ -268,11 +322,17 @@ Restart / Users) marked with `SoonTag`. All status dots read from the single
 | `PORT` | `3000` | server listen port |
 | `ALLOWED_ORIGINS` | `http://localhost:5173` | comma-separated CORS origins |
 | `CATALOG_PATH` | `cwd/../../../catalog.yaml` | default assumes cwd = `packages/server` |
-| `GOGS_URL` | `http://gogs.gogs.svc.cluster.local:80` | on-cluster Gogs |
-| `GOGS_USERNAME` | (empty) | user whose token is bootstrapped |
-| `GOGS_TOKEN` | (empty) | ⚠ used as the **password** for Basic auth during token bootstrap (name is misleading — it is not used as a bearer token) |
+| `USER_APPS_GIT_URL` | (empty) | **test seam only.** Normally the remote is discovered from `GitRepository/user-apps-source`; setting this bypasses discovery (Tier 1 has no cluster). Do not set it in cluster manifests — the installer would commit to a repo Flux may not be reading. |
+| `USER_APPS_GIT_BRANCH` | `master` | only consulted alongside `USER_APPS_GIT_URL`; otherwise from `spec.ref.branch` |
+| `USER_APPS_GIT_USERNAME` | (empty) | overrides the `username` file in the credentials dir |
+| `USER_APPS_GIT_PASSWORD` | (empty) | overrides the `password` file in the credentials dir |
+| `USER_APPS_GIT_CREDENTIALS_DIR` | `/etc/user-apps-git` | mounted Secret with `username`/`password` files (Reflector-populated) |
+| `USER_APPS_WORK_DIR` | `/var/lib/user-apps` | working copy (`repo/`) + the generated `0600 .git-credentials`; disposable emptyDir |
 | `BASE_DOMAIN` | `libre.pod` | `${BASE_DOMAIN}` substituted into templates |
 | `KUBERNETES_SERVICE_HOST` | — | presence switches FluxStatusService to in-cluster config |
+
+The transport is **`http(s)` only** — an `ssh://` remote is rejected at resolution rather
+than silently attempted, so don't debug it as a working alternative.
 
 There is no `.env` file committed; `ConfigModule` reads `process.env` directly.
 
@@ -297,7 +357,7 @@ There is no `.env` file committed; `ConfigModule` reads `process.env` directly.
 - **Ticket IDs in comments** (e.g. `D-02`, `BACK-02`, `STAT-01`, `INST-03`, "Pitfall 3") trace
   to the design doc / a decisions log, not to files in this dir.
 - **Testing pattern:** e2e tests point `CATALOG_PATH` at `test/fixtures/catalog.fixture.yaml`
-  and `GOGS_URL` at a dead port so Gogs is "unreachable" — exercising the graceful-degradation
-  path. Mirror this when adding e2e tests; don't hit real Gogs/k8s.
+  and `USER_APPS_GIT_URL` at a dead port so the app-store repo is "unreachable" — exercising
+  the graceful-degradation path. Mirror this when adding e2e tests; don't hit real Gogs/k8s.
 - **Commit/PR hygiene** (inherited from parent): never reference concrete device/cluster
   hostnames in commits, PRs, or public docs — use `dev`/`prod`/`staging`.

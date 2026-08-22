@@ -9,7 +9,7 @@ spec:
   category: "System"
   website: "https://github.com/librepod/marketplace"
   # renovate: datasource=docker depName=ghcr.io/librepod/marketplace-ui
-  version: "0.5.3"
+  version: "0.6.0"
   source:
     type: oci-kustomize
     url: "oci://ghcr.io/librepod/marketplace/apps/marketplace-ui"

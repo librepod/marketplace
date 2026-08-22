@@ -153,7 +153,9 @@ The script extracts templates from `spec.templates`, substitutes `${BASE_DOMAIN}
 and secret variables, overrides the OCI tag in the source template, and writes
 rendered YAML to the output directory.
 
-**Resulting directory structure**:
+**Resulting directory structure** — this is exactly what lands at `apps/<app-name>/`
+in the user-apps repo. There is no root `kustomization.yaml`: Flux auto-generates one
+from the whole tree, so the directory's presence IS the installation (#182).
 ```
 /tmp/verify-app/<app-name>/
 ├── kustomization.yaml   (references source.yaml, release.yaml, [secret.yaml])
@@ -180,12 +182,16 @@ git clone http://flux:pass%40w0rd@localhost:3000/flux/user-apps.git /tmp/verify-
 ```
 
 **4c. Add the app manifests**:
-1. Copy the rendered directory into the repo:
+1. Copy the rendered directory into the repo, under `apps/`:
    ```bash
-   cp -r /tmp/verify-app/<app-name> /tmp/verify-app/user-apps/<app-name>
+   mkdir -p /tmp/verify-app/user-apps/apps
+   cp -r /tmp/verify-app/<app-name> /tmp/verify-app/user-apps/apps/<app-name>
    ```
-2. Update the root `kustomization.yaml` in the repo to include the new app
-   directory. If none exists, create one; if one exists, append `- <app-name>/`.
+2. **Nothing else to edit.** Committing `apps/<app-name>/` IS the install — Flux
+   generates the root kustomization from the tree. Do NOT create a root
+   `kustomization.yaml`: it would be an allow-list that suppresses every app not
+   named in it, and the next marketplace-ui boot deletes it anyway
+   (`UserAppsRepoService.migrateLayout`).
 3. Commit and push using `git -C` to avoid changing working directory:
    ```bash
    git -C /tmp/verify-app/user-apps add .
@@ -286,11 +292,11 @@ Ask the user whether to clean up after the test. Default to cleaning up to avoid
 leaving test resources on the cluster.
 
 If yes:
-1. Remove the app directory from the Gogs repo using `git -C` to avoid CWD drift:
+1. Delete the app directory from the Gogs repo using `git -C` to avoid CWD drift.
+   Deleting the directory is the whole uninstall — there is no root
+   `kustomization.yaml` entry to remove:
    ```bash
-   rm -rf /tmp/verify-app/user-apps/<app-name>
-   # Remove from root kustomization.yaml
-   git -C /tmp/verify-app/user-apps add .
+   git -C /tmp/verify-app/user-apps rm -r --quiet apps/<app-name>
    git -C /tmp/verify-app/user-apps commit -m "test: remove <app-name>"
    git -C /tmp/verify-app/user-apps push origin master
    ```

@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import * as path from 'node:path';
+import * as os from 'node:os';
 import cookieParser from 'cookie-parser';
 import { AppModule } from '../src/app.module';
 import { SessionService } from '../src/auth/session.service';
@@ -12,9 +13,23 @@ process.env.CATALOG_PATH = path.resolve(
   __dirname,
   'fixtures/catalog.fixture.yaml',
 );
-// GogsService will call Gogs API — return [] gracefully when unreachable in test env
-process.env.GOGS_URL = 'http://localhost:9999'; // non-existent port → fetch throws → GogsService returns []
-process.env.GOGS_TOKEN = 'test-token';
+// The app-store repo must be UNREACHABLE here — these specs assert the graceful
+// degradation path (everything reads not_installed). Point the remote at a dead
+// port so `git clone` fails fast, and set the credentials inline so the resolve
+// step gets far enough to attempt it.
+//
+// USER_APPS_GIT_URL is load-bearing beyond the assertion: without it
+// GitRemoteService would DISCOVER the remote from GitRepository/user-apps-source
+// via loadFromDefault() — i.e. the developer's own kubeconfig — and a suite that
+// can reach a real cluster could clone a real app-store repo. The override keeps
+// this hermetic (#182).
+process.env.USER_APPS_GIT_URL = 'http://localhost:9999/flux/user-apps.git';
+process.env.USER_APPS_GIT_USERNAME = 'flux';
+process.env.USER_APPS_GIT_PASSWORD = 'test-password';
+process.env.USER_APPS_WORK_DIR = path.join(
+  os.tmpdir(),
+  `marketplace-e2e-user-apps-${process.pid}`,
+);
 // Auth (global AuthGuard gates /api/* — mint a session cookie in beforeAll)
 process.env.SESSION_SECRET = 'e2e-secret-long-and-random';
 process.env.CASDOOR_ENDPOINT = 'https://id.example.com';
@@ -154,13 +169,14 @@ describe('Catalog API (e2e)', () => {
       });
     });
 
-    it('all apps are not_installed when Gogs is unreachable (graceful degradation, BACK-02)', async () => {
+    it('all apps are not_installed when the app-store repo is unreachable (graceful degradation, BACK-02)', async () => {
       const response = await request(app.getHttpServer())
         .get('/api/apps')
         .set('Cookie', authCookie)
         .expect(200);
 
-      // GOGS_URL points to non-existent port → GogsService returns [] → all not_installed
+      // USER_APPS_GIT_URL points at a dead port → clone fails, no working copy
+      // → listInstalledApps() returns [] → all not_installed
       response.body.forEach((app: Record<string, unknown>) => {
         expect(app.installedStatus).toBe('not_installed');
       });
@@ -177,8 +193,9 @@ describe('Catalog API (e2e)', () => {
       expect(Array.isArray(response.body)).toBe(true);
     });
 
-    it('returns empty array when Gogs is unreachable (graceful degradation, INST-03)', async () => {
-      // GOGS_URL points to non-existent port → GogsService returns [] → getInstalled returns []
+    it('returns empty array when the app-store repo is unreachable (graceful degradation, INST-03)', async () => {
+      // USER_APPS_GIT_URL points at a dead port → listInstalledApps() returns []
+      // → getInstalled returns []
       const response = await request(app.getHttpServer())
         .get('/api/installed')
         .set('Cookie', authCookie)

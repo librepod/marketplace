@@ -134,23 +134,16 @@ info "Gogs PVC=$GOGS_PVC PV=$GOGS_PV  NFS export path=$NFS_PATH"
 log "Snapshot of current state"
 SNAP_ROOT="$(mktemp -d -t cold-boot-snap.XXXXXX)"
 kubectl get kustomization -n "$FLUX_NS" -o wide > "$SNAP_ROOT/kustomizations.before.txt" 2>&1 || true
-info "installed apps (root kustomization resources), before wipe:"
+# Read the app-store tree off the git working copy the server maintains (#182).
+# The old REST probe here used GOGS_URL/GOGS_USERNAME/GOGS_TOKEN and read the root
+# kustomization.yaml — all four are gone, so it would have silently printed nothing.
+info "installed apps (apps/<name> directories in the repo), before wipe:"
 mui_pod() { kubectl get pods -n "$MUI_NS" -l app.kubernetes.io/name=marketplace-ui \
   -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true; }
 POD="$(mui_pod)"
 if [ -n "$POD" ]; then
-  kubectl exec -n "$MUI_NS" "$POD" -c marketplace-ui -- node -e '
-    const G=(process.env.GOGS_URL||"http://gogs.gogs.svc.cluster.local:80").replace(/\/$/,"");
-    const U=process.env.GOGS_USERNAME,P=process.env.GOGS_TOKEN;
-    (async()=>{
-      const t=await fetch(`${G}/api/v1/users/${U}/tokens`,{method:"POST",
-        headers:{Authorization:"Basic "+Buffer.from(`${U}:${P}`).toString("base64"),"Content-Type":"application/json"},
-        body:JSON.stringify({name:"snap-"+Math.random().toString(16).slice(2,8)})});
-      const tok=t.ok?(await t.json()).sha1:"";
-      const r=await fetch(`${G}/api/v1/repos/flux/user-apps/raw/master/kustomization.yaml`,{headers:{Authorization:`token ${tok}`}});
-      console.log("      GET raw ->",r.status,"\n"+(await r.text()).split("\n").map(l=>"      | "+l).join("\n"));
-    })().catch(e=>console.log("      snapshot probe error:",e.message));
-  ' 2>&1 | sed 's/^/  /' || true
+  kubectl exec -n "$MUI_NS" "$POD" -c marketplace-ui -- \
+    git -C /var/lib/user-apps/repo ls-tree -r --name-only HEAD 2>&1 | sed 's/^/      | /' || true
 fi
 info "snapshot dir: $SNAP_ROOT"
 

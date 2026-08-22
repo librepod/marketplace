@@ -106,7 +106,10 @@ kubectl --kubeconfig ./librepod-dev.config describe pod -n gogs -l app=gogs
 
 **Common causes**:
 - Gogs service not running (pod crashed or not deployed)
-- Authentication secret `user-apps-source-auth` expired or missing
+- Authentication secret `user-apps-source-auth` expired or missing — since #182 this is
+  the HTTP basic credential BOTH Flux and the marketplace-ui installer authenticate
+  with (the installer gets a Reflector-mirrored copy mounted at `/etc/user-apps-git`),
+  so a bad value breaks reconciliation and installs together
 - Port-forward disconnected during testing (if using local port-forward)
 
 ### user-apps Kustomization Not Creating App Resources
@@ -126,7 +129,13 @@ flux get source git user-apps-source --kubeconfig ./librepod-dev.config
 ```
 
 **Common causes**:
-- Root `kustomization.yaml` in user-apps repo doesn't reference the app directory
+- A malformed YAML file ANYWHERE in the user-apps tree. Since #182 Flux auto-generates
+  the root kustomization from the whole tree, so it decodes every file in it: one bad
+  file fails the build for every app, and `user-apps` reports the error. (#182 buys
+  HEALTH isolation — one unhealthy app no longer degrades shared objects — not build
+  isolation.) Check `flux get kustomization user-apps` for the offending path.
+- Two apps declaring the same resource ID (same group/kind/namespace/name) — also a
+  whole-tree build failure, not a per-app one
 - App's `kustomization.yaml` references wrong filenames
 - YAML syntax error in rendered templates
 
