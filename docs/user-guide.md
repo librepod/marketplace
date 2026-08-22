@@ -97,6 +97,9 @@ flux pull artifact oci://ghcr.io/librepod/marketplace/catalog:latest --output=/t
 cat /tmp/catalog
 ```
 
+The artifact contains both `catalog.yaml` and the `kustomization.yaml` that renders it
+into the `marketplace-ui-catalog` ConfigMap on each cluster.
+
 Each app has:
 - `name`: Technical identifier (used in filenames)
 - `displayName`: Human-friendly name
