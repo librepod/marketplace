@@ -1,0 +1,38 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: gatus
+spec:
+  interval: 12h
+  install:
+    strategy:
+      name: RetryOnFailure      # On failure: retry the install as an upgrade after retryInterval
+      retryInterval: 2m         # (alternative to remediation which uninstalls between retries)
+  upgrade:
+    strategy:
+      name: RetryOnFailure      # On failure: retry the upgrade after retryInterval
+      retryInterval: 3m
+  chart:
+    spec:
+      chart: gatus
+      sourceRef:
+        kind: HelmRepository
+        name: gatus-helm-charts
+      interval: 12h
+  values:
+    deployment:
+      strategy: Recreate        # single replica on a ReadWriteOnce PVC
+    persistence:
+      enabled: true
+      size: 1Gi
+    # The Gatus configuration is supplied as an external ConfigMap (generated in
+    # the overlay) rather than inline `config:` values: the generator needs the
+    # Flux substitute-disabled annotation, because the config's ${VAR}
+    # placeholders are expanded by Gatus at runtime — see
+    # overlays/librepod/config.yaml.
+    #
+    # The ConfigMap MUST be named exactly "gatus" (the chart's release fullname):
+    # the chart hardcodes `envFrom: configMapRef: <fullname>` even when
+    # externalConfigMap is set, so one name has to serve both the /config
+    # volume and the envFrom reference.
+    externalConfigMap: gatus

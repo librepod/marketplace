@@ -1,0 +1,97 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: gatus
+spec:
+  chart:
+    spec:
+      chart: gatus
+      version: "~1.5.0"          # HTTP Helm repo: pin chart minor here (base can't semver-pin)
+      sourceRef:
+        kind: HelmRepository
+        name: gatus-helm-charts
+      interval: 12h
+  values:
+    image:
+      tag: "v5.36.0"             # chart appVersion is v5.34.0; override with latest upstream
+    persistence:
+      storageClassName: nfs-client
+    # ${BASE_DOMAIN:=libre.pod} placeholders below are Flux-substituted inside
+    # this HelmRelease manifest; the values then reach Gatus as plain env vars.
+    env:
+      GATUS_OIDC_ISSUER_URL: "https://id.${BASE_DOMAIN:=libre.pod}"
+      GATUS_OIDC_REDIRECT_URL: "https://gatus.${BASE_DOMAIN:=libre.pod}/authorization-code/callback"
+      GATUS_SELF_URL: "https://gatus.${BASE_DOMAIN:=libre.pod}"
+      # Gatus is Go: point it at the merged CA bundle so OIDC calls to
+      # id.<BASE_DOMAIN> (private LibrePod CA) verify.
+      SSL_CERT_FILE: "/etc/ssl/certs/ca-certificates.crt"
+      # Directory config composition: gatus deep-merges every *.yaml in
+      # /config AND its subdirectories (endpoint arrays append). The platform
+      # fragment is /config/config.yaml; user fragments live in /config/user/.
+      GATUS_CONFIG_PATH: "/config"
+    # OIDC client credentials, written at runtime by casdoor-sso-controller.
+    envFrom:
+    - secretRef:
+        name: gatus-sso
+    # Fuse the LibrePod root CA into the pod trust bundle (replicated into this
+    # namespace by the Reflector stub in kustomization.yaml). Chart quirk used
+    # here: extraVolumeMounts entries with existingConfigMap/emptydir
+    # auto-create the pod volumes — the chart has no extraVolumes key.
+    extraInitContainers:
+    - name: merge-ca-bundle
+      image: alpine:3.19
+      command: ["/bin/sh", "-c"]
+      args:
+      - |
+        set -e
+        cat /etc/ssl/certs/ca-certificates.crt > /mnt/merged-ca/ca-certificates.crt
+        echo "" >> /mnt/merged-ca/ca-certificates.crt
+        echo "# LibrePod Root CA" >> /mnt/merged-ca/ca-certificates.crt
+        cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+      volumeMounts:
+      - name: root-ca-cert
+        mountPath: /mnt/root-ca
+        readOnly: true
+      - name: merged-ca-bundle
+        mountPath: /mnt/merged-ca
+    extraVolumeMounts:
+    - name: root-ca-cert
+      mountPath: /mnt/root-ca
+      readOnly: true
+      existingConfigMap: step-certificates-certs
+    - name: merged-ca-bundle
+      mountPath: /etc/ssl/certs/ca-certificates.crt
+      subPath: ca-certificates.crt
+      readOnly: true
+    # User-owned endpoints (see docs/user-endpoints.md): mounted into the
+    # composed config directory. The ConfigMap is created manually by the
+    # user in their user-apps repo — the volume is optional (postRenderers
+    # patch below) so a fresh install runs before the user adds anything.
+    - name: gatus-user-config
+      mountPath: /config/user
+      readOnly: true
+      existingConfigMap: gatus-user-config
+  # The chart's extraVolumeMounts auto-created volumes expose no `optional`
+  # flag, and a ConfigMap volume referencing a missing ConfigMap blocks pod
+  # creation. Patch helm's output so gatus-user-config is optional: mounts as
+  # an empty volume until the user creates it. Strategic-merge volumes by
+  # name key — no index brittleness.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+              name: gatus
+            patch: |-
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: gatus
+              spec:
+                template:
+                  spec:
+                    volumes:
+                      - name: gatus-user-config
+                        configMap:
+                          name: gatus-user-config
+                          optional: true

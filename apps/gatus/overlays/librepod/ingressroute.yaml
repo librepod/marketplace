@@ -1,0 +1,17 @@
+# No oauth2-proxy middlewares: Gatus handles authentication natively via OIDC
+# (security.oidc in config.yaml).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: gatus
+spec:
+  entryPoints:
+  - web
+  - websecure
+  routes:
+  - kind: Rule
+    match: Host(`gatus.${BASE_DOMAIN:=libre.pod}`)
+    priority: 1
+    services:
+    - name: gatus
+      port: 80
