@@ -1,40 +1,47 @@
 name: Publish Catalog
 
+# Generates catalog.yaml from apps/*/metadata.yaml and pushes it — wrapped with
+# the configMapGenerator template in apps/catalog-artifact/ — as a cosign-signed
+# OCI artifact. Clusters consume it via
+# infrastructure/system-apps/marketplace-catalog.yaml, which renders the
+# ConfigMap/marketplace-ui-catalog that marketplace-ui mounts. catalog.yaml is
+# never committed to git. NOTE: this workflow must NOT push with GITHUB_TOKEN
+# content-write — pushes made with GITHUB_TOKEN don't trigger other workflows,
+# which is fine here because nothing downstream consumes a git copy anymore.
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Publish App Artifacts"]
-    types: [completed]
   push:
     branches: [master]
     paths:
       - 'apps/*/metadata.yaml'
+      - 'apps/catalog-artifact/**'
       - 'scripts/generate-catalog.sh'
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.workflow_run.conclusion == 'success'
     permissions:
       packages: write
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v6
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
 
       - name: Generate catalog
         run: ./scripts/generate-catalog.sh
 
-      - name: Commit catalog if changed
+      - name: Stage and validate artifact
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet catalog.yaml apps/marketplace-ui/base/catalog.yaml; then
-            echo "No catalog changes"
-          else
-            git add catalog.yaml apps/marketplace-ui/base/catalog.yaml
-            git commit -m "chore: regenerate catalog.yaml"
-            git push
-          fi
+          mkdir catalog-artifact
+          cp apps/catalog-artifact/kustomization.yaml catalog-artifact/
+          cp catalog.yaml catalog-artifact/
+          # Render gate: a malformed generation must fail before it ships.
+          nix-shell shell.nix --run '
+            kustomize build catalog-artifact > /dev/null
+          '
 
       - uses: fluxcd/flux2/action@main
 
@@ -75,7 +82,7 @@ jobs:
           echo "Pushing dated artifact and capture its digest..."
           DIGEST_D=$(flux push artifact \
             oci://ghcr.io/${{ github.repository_owner }}/marketplace/catalog:${DATE} \
-            --path=./catalog.yaml \
+            --path=./catalog-artifact \
             --source="$(git config --get remote.origin.url)" \
             --revision="$(git rev-parse HEAD)" \
             --output json | jq -r '.repository + "@" + .digest')
@@ -86,7 +93,7 @@ jobs:
           echo "Pushing latest artifact and capture its digest..."
           DIGEST_L=$(flux push artifact \
             oci://ghcr.io/${{ github.repository_owner }}/marketplace/catalog:latest \
-            --path=./catalog.yaml \
+            --path=./catalog-artifact \
             --source="$(git config --get remote.origin.url)" \
             --revision="$(git rev-parse HEAD)" \
             --output json | jq -r '.repository + "@" + .digest')
