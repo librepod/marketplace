@@ -421,7 +421,7 @@ Three GitHub Actions workflows handle OCI artifact publishing:
 |----------|---------|-------------------|----------|
 | `publish-bootstrap.yaml` | Push to master (changes in `clusters/` or `infrastructure/`) | `clusters/` + `infrastructure/` | `oci://ghcr.io/<owner>/marketplace/bootstrap` |
 | `publish-apps.yaml` | Push to master (changes in `apps/*/base/`, `overlays/`, `metadata.yaml`) | Each `apps/<name>/` individually | `oci://ghcr.io/<owner>/marketplace/apps/<name>` |
-| `publish-catalog.yaml` | Push to master (`apps/*/metadata.yaml`, `apps/catalog-artifact/**`, generator script) | `{kustomization.yaml, catalog.yaml}` staged by CI (never committed) | `oci://ghcr.io/<owner>/marketplace/catalog` |
+| `publish-catalog.yaml` | workflow_dispatch, or push to master (`apps/*/metadata.yaml`, `apps/catalog-artifact/**`, generator script) | `{kustomization.yaml, catalog.yaml}` staged by CI (never committed) | `oci://ghcr.io/<owner>/marketplace/catalog` |
 
 All three use `flux push artifact` to publish and `cosign sign` to sign both
 versioned and `latest` tags.

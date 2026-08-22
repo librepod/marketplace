@@ -27,8 +27,8 @@ spec:
   interval: 5m
   # No dependsOn: on a fresh cluster the first apply races the marketplace-ui
   # namespace creation and 404s — the retry resolves it. dependsOn:
-  # marketplace-ui would deadlock (the app pod waits on this ConfigMap volume,
-  # so the app Kustomization can never be Ready first).
+  # A dependsOn: marketplace-ui would deadlock (the app pod waits on this
+  # ConfigMap volume, so the app Kustomization can never be Ready first).
   retryInterval: 30s
   timeout: 1m
   sourceRef:
