@@ -63,10 +63,17 @@ automatically — no restarts, no marketplace involvement.
 - Platform keys (`storage`, `security`) are already defined by the
   platform — defining them in a fragment is a config conflict and the
   update is **skipped** (the old config keeps running; gatus logs why).
+  (Nested *additions* under these keys — e.g. `security.oidc.allowed-subjects` —
+  can still merge; conflicts fire only on keys defined twice.)
 - A fragment with invalid YAML is likewise skipped, never crashes the
   pod: check the gatus logs for
   `The configuration file was updated, but it is not valid.`
-- Deleting the ConfigMap removes your endpoints; the platform defaults
-  remain.
+- To remove your endpoints, delete the ConfigMap or empty its `data`.
+  Kubernetes does not guarantee mounted files disappear promptly after a
+  ConfigMap *deletion* — if your endpoints linger, restart the gatus pod.
+  The platform defaults always remain.
+- The fragment requires namespace `gatus` to exist: add `apps/gatus-user`
+  only after gatus is installed, and remove it when you uninstall gatus —
+  otherwise your user-apps repository stops reconciling.
 - Full endpoint syntax (conditions, alerts, client config, groups):
   https://raw.githubusercontent.com/TwiN/gatus/master/README.md#endpoints
