@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { readdir, mkdir, access, rm, writeFile } from 'node:fs/promises';
+import { readdir, mkdir, access, rm, writeFile, readFile } from 'node:fs/promises';
+import * as yaml from 'js-yaml';
 import { join } from 'node:path';
 import { GitClient } from './git-client';
 import { GitRemoteService, type GitRemote } from './git-remote.service';
@@ -16,9 +17,10 @@ const FRESHNESS_MS = 10_000;
  * shallow clone refreshed on a freshness window; writes always fetch first.
  */
 @Injectable()
-export class UserAppsRepoService {
+export class UserAppsRepoService implements OnModuleInit {
   private readonly logger = new Logger(UserAppsRepoService.name);
   private lastFetchMs = 0;
+  private migrated = false;
 
   constructor(
     private readonly config: ConfigService,
@@ -161,7 +163,71 @@ export class UserAppsRepoService {
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 
+  /**
+   * Best-effort at boot. MUST NOT throw: a one-shot bootstrap that fails on a
+   * cold cluster would leave the container broken for its whole lifetime — that
+   * is exactly the #176 failure mode. Writes re-attempt it (see ensureMigrated).
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.migrateLayout();
+    } catch (error: unknown) {
+      this.logger.warn(
+        'app-store layout migration deferred: ' +
+          (error instanceof Error ? error.message : String(error)),
+      );
+    }
+  }
+
+  private async ensureMigrated(): Promise<void> {
+    if (!this.migrated) await this.migrateLayout();
+  }
+
+  /**
+   * Move an old-shape repo to the auto-generated layout, as one commit:
+   *   1. orphaned apps/<name>/ dirs (present but absent from resources[]) — the
+   *      root file used to be an allow-list, so these are NOT deployed today and
+   *      would spring to life the moment it is removed;
+   *   2. the root kustomization.yaml itself.
+   * Orphans first: deleting the root file first would briefly make them live.
+   * Idempotent — absent root file means nothing to do and no commit.
+   */
+  async migrateLayout(): Promise<void> {
+    await this.commitAndPush('chore: migrate to per-app layout (#182)', async () => {
+      const rootFile = join(this.repoDir, 'kustomization.yaml');
+      let raw: string;
+      try {
+        raw = await readFile(rootFile, 'utf8');
+      } catch {
+        return; // already migrated
+      }
+
+      const parsed = yaml.load(raw) as { resources?: string[] } | null;
+      const listed = new Set(
+        (parsed?.resources ?? []).map((r) => r.replace(/^apps\//, '').replace(/\/$/, '')),
+      );
+
+      let present: string[] = [];
+      try {
+        const entries = await readdir(join(this.repoDir, 'apps'), { withFileTypes: true });
+        present = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+      } catch {
+        present = [];
+      }
+
+      for (const name of present) {
+        if (!listed.has(name)) {
+          this.logger.log(`migration: dropping orphaned app directory apps/${name}`);
+          await this.git.removePath(this.repoDir, `apps/${name}`);
+        }
+      }
+      await this.git.removePath(this.repoDir, 'kustomization.yaml');
+    });
+    this.migrated = true;
+  }
+
   async writeApp(name: string, files: Record<string, string>): Promise<void> {
+    await this.ensureMigrated();
     await this.commitAndPush(`install ${name}`, async () => {
       const dir = join(this.repoDir, 'apps', name);
       await mkdir(dir, { recursive: true });
@@ -172,6 +238,7 @@ export class UserAppsRepoService {
   }
 
   async removeApp(name: string): Promise<void> {
+    await this.ensureMigrated();
     await this.commitAndPush(`uninstall ${name}`, async () => {
       await this.git.removePath(this.repoDir, `apps/${name}`);
     });

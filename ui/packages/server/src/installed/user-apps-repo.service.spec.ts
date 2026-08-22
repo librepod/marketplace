@@ -206,3 +206,90 @@ describe('UserAppsRepoService writes', () => {
     ).rejects.toThrow(/app-store repo unavailable/);
   });
 });
+
+describe('UserAppsRepoService.migrateLayout', () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'user-apps-migrate-spec-'));
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+    vi.restoreAllMocks();
+  });
+
+  const OLD_ROOT = [
+    'apiVersion: kustomize.config.k8s.io/v1beta1',
+    'kind: Kustomization',
+    'resources:',
+    '  - apps/baikal',
+    '',
+  ].join('\n');
+
+  it('deletes the root kustomization.yaml AND orphaned app dirs, keeping listed apps', async () => {
+    const origin = await seedOrigin(root, {
+      'kustomization.yaml': OLD_ROOT,
+      'apps/baikal/release.yaml': 'kind: Kustomization\n',
+      // uninstalled earlier: files were left behind, not in resources[]
+      'apps/ghost/release.yaml': 'kind: Kustomization\n',
+    });
+    const svc = makeService(root, origin);
+
+    await svc.migrateLayout();
+
+    const { stdout } = await new GitClient().run(origin, ['ls-tree', '-r', '--name-only', 'master']);
+    expect(stdout).not.toContain('apps/ghost');
+    expect(stdout.split('\n')).not.toContain('kustomization.yaml');
+    expect(stdout).toContain('apps/baikal/release.yaml');
+  });
+
+  it('is a no-op on an already-migrated repo (no empty commit)', async () => {
+    const origin = await seedOrigin(root, { 'apps/baikal/release.yaml': 'kind: Kustomization\n' });
+    const svc = makeService(root, origin);
+    const before = (await new GitClient().run(origin, ['rev-parse', 'master'])).stdout.trim();
+
+    await svc.migrateLayout();
+    await svc.migrateLayout();
+
+    const after = (await new GitClient().run(origin, ['rev-parse', 'master'])).stdout.trim();
+    expect(after).toBe(before);
+  });
+
+  it('tolerates a trailing slash in resources entries when classifying orphans', async () => {
+    const origin = await seedOrigin(root, {
+      'kustomization.yaml': OLD_ROOT.replace('- apps/baikal', '- apps/baikal/'),
+      'apps/baikal/release.yaml': 'kind: Kustomization\n',
+    });
+    const svc = makeService(root, origin);
+
+    await svc.migrateLayout();
+
+    const { stdout } = await new GitClient().run(origin, ['ls-tree', '-r', '--name-only', 'master']);
+    expect(stdout).toContain('apps/baikal/release.yaml');
+  });
+
+  it('onModuleInit does NOT throw when the remote is unreachable (issue #176 lesson)', async () => {
+    const svc = makeService(root, join(root, 'never-existed.git'));
+    await expect(svc.onModuleInit()).resolves.toBeUndefined();
+  });
+
+  it('a later write self-heals the migration that failed at boot', async () => {
+    const origin = await seedOrigin(root, {
+      'kustomization.yaml': OLD_ROOT,
+      'apps/baikal/release.yaml': 'kind: Kustomization\n',
+    });
+    const svc = makeService(root, origin);
+
+    // Boot-time attempt fails.
+    vi.spyOn(GitClient.prototype, 'clone').mockRejectedValueOnce(new Error('git down'));
+    await svc.onModuleInit();
+    vi.restoreAllMocks();
+
+    await svc.writeApp('litellm', { 'release.yaml': 'kind: Kustomization\n' });
+
+    const { stdout } = await new GitClient().run(origin, ['ls-tree', '-r', '--name-only', 'master']);
+    expect(stdout.split('\n')).not.toContain('kustomization.yaml'); // migrated on the way
+    expect(stdout).toContain('apps/litellm/release.yaml');
+  });
+});
