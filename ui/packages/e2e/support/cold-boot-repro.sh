@@ -5,8 +5,11 @@
 # It forces a cold boot that HOLDS flux/user-apps un-seeded, deletes the marketplace-ui
 # Deployment, then makes Flux RE-APPLY marketplace-ui and asserts what happens while
 # user-apps is NotReady:
-#   • POST-FIX (dependsOn: user-apps)  → GATE=HELD: marketplace-ui Kustomization sits at
-#       DependencyNotReady and NO pod is created; then we release the seed, user-apps
+#   • POST-FIX (dependsOn: user-apps-source) → GATE=HELD: marketplace-ui sits at
+#       DependencyNotReady and NO pod is created. user-apps-source is Ready ⇔ a
+#       selective healthCheck on GitRepository/user-apps-source passes, i.e. Flux
+#       cloned a SEEDED repo. Unlike the old `user-apps` gate this cannot be held
+#       down by a broken user app (issue #182). Then we release the seed, the gate
 #       goes Ready, marketplace-ui applies, and the first install succeeds (2xx).
 #   • PRE-FIX (no dependsOn)           → GATE=OPEN: marketplace-ui applies and a pod comes
 #       up against the un-seeded repo; the first install 500s (race reproduced).
@@ -26,10 +29,11 @@
 # repeatable dev-cluster proof the issue demands, and a regression harness for any
 # future Gogs-seeding race.
 #
-# THE FIX IT VERIFIES: marketplace-ui.Kustomization gains `dependsOn: user-apps` (a
-# provider-neutral "repo is seeded & reconcilable" gate — user-apps Ready ⇔ the
-# GitRepository resolved a commit on master ⇔ repo seeded, identical for Gogs/GitHub/
-# GitLab) and the Gogs-only `wait-for-gogs-user` initContainer is deleted. This script
+# THE FIX IT VERIFIES: marketplace-ui.Kustomization gains `dependsOn: user-apps-source`
+# (a provider-neutral "repo is seeded" gate — that Kustomization carries a selective
+# healthCheck on GitRepository/user-apps-source, which is Ready ⇔ the GitRepository
+# resolved a commit on master ⇔ repo seeded, identical for Gogs/GitHub/GitLab) and the
+# Gogs-only `wait-for-gogs-user` initContainer is deleted. This script
 # AUTO-DETECTS which state the cluster is in (reads the live dependsOn) and labels the
 # run PRE-FIX / POST-FIX.
 #
@@ -109,7 +113,7 @@ fi
 # ── detect PRE-FIX vs POST-FIX from the live dependsOn ──────────────────────────
 DEPS="$(kubectl get kustomization marketplace-ui -n "$FLUX_NS" \
   -o jsonpath='{.spec.dependsOn[*].name}' 2>/dev/null || true)"
-if echo "$DEPS" | grep -qw "user-apps"; then
+if echo "$DEPS" | grep -qw "user-apps-source"; then
   MODE="POST-FIX"
 else
   MODE="PRE-FIX"
@@ -188,10 +192,15 @@ EOF
 # a state where its Deployment does NOT exist AND user-apps is NotReady — never to
 # `kubectl scale` an already-applied Deployment (that starts a pod regardless of the
 # gate: a false negative, which is why the first version of this script mis-reported).
-# We hold user-apps NotReady deterministically: the seed Job has no ttl and only
-# re-runs on an explicit `flux reconcile ks user-apps-source`, so after wiping the repo
-# and deleting the ssh-key Secret + Job we simply do NOT reconcile user-apps-source —
-# user-apps stays un-seeded until release_seed_and_wait_ready() releases it.
+# We hold the gate NotReady deterministically, and since #182 the gate IS
+# `user-apps-source` — the very Kustomization that owns the seeding Job. So the hold
+# can no longer be "never reconcile it": we must reconcile it for its healthCheck to
+# observe the un-seeded source at all. What keeps the reconcile from also RESEEDING is
+# the Job's own idempotency guard: bootstrap-ssh-key.sh exits immediately when
+# Secret/user-apps-ssh-key exists, BEFORE it would recreate the repo. Hence the Secret
+# is deliberately left in place during the hold and deleted only at release time —
+# the reverse of the pre-#182 ordering. Deleting it here instead would let the
+# re-applied Job reseed the repo and silently open the gate mid-assertion.
 #
 # CRITICAL (learned the hard way on a warm cluster): wiping the gogs repo is NOT enough
 # to make user-apps NotReady. Flux's source-controller RETAINS the last-good
@@ -200,11 +209,13 @@ EOF
 # dependsOn gate never engages (a false GATE=OPEN). A genuinely fresh cluster never had
 # an artifact to retain, which is why the Tier 2 k3d nightly reproduces the gate and a
 # warm-cluster wipe alone does not. To match the fresh-cluster precondition we must
-# EVICT that cached artifact: deleting the GitRepository object drops it, user-apps then
-# has no source and goes NotReady, and the parent user-apps-source Kustomization
-# recreates the GitRepository on release.
+# EVICT that cached artifact: deleting the GitRepository object drops it. The
+# user-apps-source Kustomization recreates it on the next reconcile, where it fails to
+# clone the wiped repo — so its healthCheck fails and the GATE goes NotReady — while
+# `user-apps`, now sourceless, goes NotReady too.
 force_cold_boot() {
   log "Forcing a cold boot that HOLDS flux/user-apps un-seeded (to exercise the dependsOn gate)"
+  # NOTE: Secret/user-apps-ssh-key is NOT deleted here — see the block comment above.
 
   info "1) suspend marketplace-ui Kustomization + delete its Deployment (no pod; Flux won't re-apply while suspended)"
   flux suspend kustomization marketplace-ui -n "$FLUX_NS" >/dev/null 2>&1 || true
@@ -216,38 +227,38 @@ force_cold_boot() {
   kubectl wait --for=delete pod -n "$GOGS_NS" -l app.kubernetes.io/name=gogs --timeout=120s >/dev/null 2>&1 || true
   wipe_gogs_nfs
 
-  info "3) delete the user-apps ssh-key Secret (all namespaces) + the seed Job — held un-seeded"
-  kubectl delete secret user-apps-ssh-key -n "$GOGS_NS" --ignore-not-found >/dev/null 2>&1 || true
-  kubectl delete secret user-apps-ssh-key -n "$FLUX_NS" --ignore-not-found >/dev/null 2>&1 || true
-  kubectl delete secret user-apps-ssh-key -n "$MUI_NS" --ignore-not-found >/dev/null 2>&1 || true
+  info "3) delete the completed seed Job, KEEPING Secret/user-apps-ssh-key — the Secret is the Job's early-exit guard, so the re-applied Job no-ops instead of reseeding"
   kubectl delete job gogs-bootstrap-ssh-key -n "$GOGS_NS" --ignore-not-found >/dev/null 2>&1 || true
 
-  info "4) scale gogs back up (postStart re-creates the flux user); repo stays commitless — we do NOT reconcile user-apps-source yet"
+  info "4) scale gogs back up (postStart re-creates the flux user); the repo stays absent"
   kubectl scale deploy/gogs -n "$GOGS_NS" --replicas=1 >/dev/null 2>&1 || true
   kubectl rollout status deploy/gogs -n "$GOGS_NS" --timeout=300s >/dev/null 2>&1 || warn "gogs rollout slow"
 
-  info "5) evict the retained GitRepository artifact (delete the object) — a wiped repo alone leaves user-apps Ready on the cached tarball"
+  info "5) evict the retained GitRepository artifact (delete the object) — a wiped repo alone leaves the source Ready on the cached tarball"
   kubectl delete gitrepository user-apps-source -n "$FLUX_NS" --ignore-not-found >/dev/null 2>&1 || true
 
-  info "6) force user-apps to observe the un-seeded state NOW (no source artifact ⇒ user-apps NotReady)"
+  info "6) force the gate to observe the un-seeded state NOW (no source artifact ⇒ NotReady)"
   flux_request_reconcile kustomization user-apps
+  flux_request_reconcile kustomization user-apps-source
+  # Wait on user-apps-source: since #182 that is the object marketplace-ui gates on.
   local w=0
-  while [ "$w" -lt 120 ]; do
-    if [ "$(kubectl get kustomization user-apps -n "$FLUX_NS" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)" = "False" ]; then break; fi
+  while [ "$w" -lt 180 ]; do
+    if [ "$(kubectl get kustomization user-apps-source -n "$FLUX_NS" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)" = "False" ]; then break; fi
     sleep 3; w=$((w+3))
   done
-  info "user-apps Ready=$(kubectl get kustomization user-apps -n "$FLUX_NS" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)  (want False = un-seeded)"
+  info "user-apps-source Ready=$(kubectl get kustomization user-apps-source -n "$FLUX_NS" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)  (want False = un-seeded; this is the GATE)"
+  info "user-apps        Ready=$(kubectl get kustomization user-apps -n "$FLUX_NS" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)  (informational — no longer the gate)"
 }
 
-# ── the CORE assertion: while user-apps is NotReady, does marketplace-ui apply? ───
+# ── the CORE assertion: while user-apps-source is NotReady, does marketplace-ui apply? ─
 # Prints GATE=HELD (post-fix: DependencyNotReady, Deployment absent), GATE=OPEN
 # (pre-fix: marketplace-ui applied and a pod is coming up despite the un-seeded repo),
 # or GATE=UNKNOWN. All diagnostics go to stderr so stdout is exactly the GATE= line.
 assert_gate() {
-  log "Asserting the dependsOn gate while user-apps is NotReady" >&2
+  log "Asserting the dependsOn gate while user-apps-source is NotReady" >&2
 
   # Disambiguation: the OTHER deps must be Ready, else a DependencyNotReady could be
-  # about them rather than user-apps.
+  # about them rather than user-apps-source.
   local d rr others=""
   for d in gogs cert-manager casdoor-sso-controller; do
     rr="$(kubectl get kustomization "$d" -n "$FLUX_NS" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo '?')"
@@ -273,16 +284,23 @@ assert_gate() {
     if [ "$mui_ready" = "False" ] && echo "$mui_reason $mui_msg" | grep -qiE "dependenc"; then verdict="HELD"; break; fi
     sleep 3; w=$((w+3))
   done
-  ua_ready="$(kubectl get kustomization user-apps -n "$FLUX_NS" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo '?')"
+  ua_ready="$(kubectl get kustomization user-apps-source -n "$FLUX_NS" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo '?')"
 
-  info "user-apps Ready=$ua_ready | marketplace-ui Ready=$mui_ready reason=$mui_reason deploy=$deploy_exists → $verdict" >&2
+  info "user-apps-source Ready=$ua_ready | marketplace-ui Ready=$mui_ready reason=$mui_reason deploy=$deploy_exists → $verdict" >&2
   info "  marketplace-ui msg: ${mui_msg:0:170}" >&2
   echo "GATE=$verdict"
 }
 
 # ── release the held seed: reseed the repo, wait user-apps Ready, let Flux apply MUI ─
 release_seed_and_wait_ready() {
-  log "Releasing the seed: reconcile user-apps-source (recreates the GitRepository + re-runs the bootstrap Job → reseeds repo + ssh key)"
+  log "Releasing the seed: drop the Job's early-exit guard, then reconcile user-apps-source (recreates the GitRepository + re-runs the bootstrap Job → reseeds repo + ssh key)"
+  # Deleting Secret/user-apps-ssh-key is what turns the Job from a no-op back into a
+  # real seeder (bootstrap-ssh-key.sh exits early while the Secret exists). It is
+  # deleted here, not during the hold, precisely so the hold stays deterministic.
+  kubectl delete secret user-apps-ssh-key -n "$GOGS_NS" --ignore-not-found >/dev/null 2>&1 || true
+  kubectl delete secret user-apps-ssh-key -n "$FLUX_NS" --ignore-not-found >/dev/null 2>&1 || true
+  kubectl delete secret user-apps-ssh-key -n "$MUI_NS" --ignore-not-found >/dev/null 2>&1 || true
+  kubectl delete job gogs-bootstrap-ssh-key -n "$GOGS_NS" --ignore-not-found >/dev/null 2>&1 || true
   flux reconcile kustomization user-apps-source -n "$FLUX_NS" --with-source >/dev/null 2>&1 || true
   # the parent Kustomization recreates the GitRepository object we deleted during the
   # hold; wait for it to exist before we reconcile the source below
