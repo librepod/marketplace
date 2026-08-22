@@ -1,7 +1,7 @@
 #!/bin/sh
 # Seeds a bare Gogs for the Tier 1 e2e: creates the flux admin (gogs admin
-# create-user, like the prod postStart hook), the user-apps repo, and an empty
-# root kustomization.yaml. Run as a one-shot after `gogs web` is up. Lives in a
+# create-user, like the prod postStart hook), the user-apps repo, and the
+# PRE-#182 repo layout the server migrates away from at boot. Run as a one-shot after `gogs web` is up. Lives in a
 # file (not inline in the compose YAML) so docker-compose does NOT interpolate
 # the shell's $VAR references. Called by docker-compose.e2e.yml's gogs-seed.
 #
@@ -56,7 +56,7 @@ curl -sf -o /dev/null "$GOGS/api/v1/admin/users/$USERNAME/repos" \
 #    password (@ -> %40) for the embedded basic creds. gogs-ready.mjs verifies
 #    the result; on an idempotent re-run the clone carries the existing file and
 #    `git push` is a no-op (already up to date).
-echo "gogs-seed: seeding root kustomization.yaml..."
+echo "gogs-seed: seeding the pre-#182 repo layout..."
 cd /tmp
 rm -rf user-apps
 PWD_ENC="$(printf '%s' "$PASSWORD" | sed 's/@/%40/g')"
@@ -66,10 +66,26 @@ if ! git clone --quiet "http://$USERNAME:$PWD_ENC@gogs:3000/$USERNAME/user-apps.
   exit 1
 fi
 cd user-apps
+# Tier 1 starts in the PRE-#182 layout on purpose: a root kustomization.yaml
+# allow-list plus an orphaned app dir left behind by an "earlier uninstall".
+# The server migrates this at boot (UserAppsRepoService.migrateLayout), and
+# tests/app-level/repo-layout.spec.ts asserts the result — so the migration path
+# is covered end-to-end, not just in unit tests.
 printf 'apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources: []\n' > kustomization.yaml
-git add kustomization.yaml
-git -c user.email="flux@libre.pod" -c user.name="flux" commit -q -m "seed root kustomization" 2>/dev/null \
-  || echo "gogs-seed: nothing to commit (kustomization already present)"
+# README.md survives the migration (only the root kustomization and orphaned app
+# dirs are removed), so it is the spec's proof that migrateLayout deleted exactly
+# what it should and nothing else. Production seeds the same file.
+printf '# LibrePod user apps\n\nSeeded by the Tier 1 e2e harness.\n' > README.md
+# An app dir deliberately ABSENT from resources[] above — i.e. left behind by an
+# earlier uninstall, which the pre-#182 code could not delete. migrateLayout()
+# must drop it, otherwise Flux's auto-generated kustomization would resurrect it.
+# `orphan-probe` is not in fixtures/catalog.fixture.yaml, so no other spec can
+# observe it.
+mkdir -p apps/orphan-probe
+printf 'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: orphan-probe\n' > apps/orphan-probe/release.yaml
+git add kustomization.yaml README.md apps/orphan-probe
+git -c user.email="flux@libre.pod" -c user.name="flux" commit -q -m "seed pre-#182 repo layout" 2>/dev/null \
+  || echo "gogs-seed: nothing to commit (layout already present)"
 git push --quiet origin HEAD:master 2>&1 | grep -viE "remote:|^To http|->|.up.to.date" || true
 cd /
 rm -rf /tmp/user-apps

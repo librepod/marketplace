@@ -52,9 +52,16 @@ export default defineConfig({
       ...serverEnv,
       PORT,
       CATALOG_PATH: `${process.cwd()}/packages/e2e/fixtures/catalog.fixture.yaml`,
-      GOGS_URL: "http://127.0.0.1:43000",
-      GOGS_USERNAME: "flux",
-      GOGS_TOKEN: "pass@w0rd", // NB: used as the Basic-auth PASSWORD by GogsService
+      // The installer performs repo mutations over git, not the provider API.
+      // Tier 1 has no cluster, so GitRepository discovery is impossible — this
+      // override is the documented test seam. Same transport as production (http);
+      // the compose maps only 43000 → gogs:3000 and there is no port 22.
+      USER_APPS_GIT_URL: "http://127.0.0.1:43000/flux/user-apps.git",
+      USER_APPS_GIT_BRANCH: "master",
+      USER_APPS_GIT_USERNAME: "flux",
+      USER_APPS_GIT_PASSWORD: "pass@w0rd",
+      USER_APPS_WORK_DIR: `${process.cwd()}/packages/e2e/.tmp/user-apps-work`,
+      USER_APPS_GIT_CREDENTIALS_DIR: `${process.cwd()}/packages/e2e/.tmp/user-apps-creds`,
       BASE_DOMAIN: "libre.pod",
       ALLOWED_ORIGINS: ORIGIN,
       // Auth boot deps (stubs — the minted session cookie authenticates tests;
