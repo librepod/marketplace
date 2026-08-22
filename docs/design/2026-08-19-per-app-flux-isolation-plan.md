@@ -17,9 +17,10 @@
 - **Version bump goes in four places or the release is a no-op:** `apps/marketplace-ui/metadata.yaml` `spec.version`, `apps/marketplace-ui/overlays/librepod/kustomization.yaml` `newTag`, `infrastructure/system-apps/marketplace-ui.yaml` `ref.tag`, and `ui/package.json` `version`. Target version: **`0.6.0`** (from `0.5.3`).
 - **Commit/PR hygiene:** never name concrete device or cluster hostnames in commit messages, PR text, or public docs. Use `dev`/`prod`/`staging`.
 - **All `npm` commands run from `ui/`** (the workspace root), not from `ui/packages/server`.
-- **Do not disable SSH host-key checking** anywhere. The bootstrap Job provides `known_hosts`; if it is missing, fail loudly.
-- **Never put git credentials in a remote URL** — they leak into `git remote -v`, the reflog, and error messages. Use `GIT_SSH_COMMAND` (ssh) or a `0600` credentials file via `credential.helper` (http/https).
-- **Use the discovered URL verbatim.** Do *not* "helpfully" append a trailing dot to the host for FQDN resolution: `known_hosts` is keyed to the exact hostname `ssh-keyscan` used, so a rewritten host fails host-key verification. Flux clones this same URL successfully from a pod today, which is the evidence that resolution works.
+- **One transport: `http(s)`. Do not write SSH code.** The installer's `ssh://` branch is deferred (design §3, Non-Goals). If you find yourself reaching for `GIT_SSH_COMMAND`, `ssh-keyscan`, `known_hosts` or a 0600 identity copy, stop — the correct behaviour for an `ssh://` URL in this release is a *loud rejection*, implemented in Task 2. Reason: Tier 1 has no port 22 (design F11), so SSH would ship as the only transport no hermetic test covers, and its original "no baked-in credential" rationale no longer holds (F12).
+- **Never put git credentials in a remote URL** — they leak into `git remote -v`, the reflog, and error messages. Use a `0600` credentials file via `credential.helper`.
+- **Use the discovered URL verbatim** — no rewriting, no scheme translation, no host normalisation. The point of discovery is that the installer and Flux cannot diverge. The **trailing-dot FQDN belongs in the manifest**, not in code: `infrastructure/user-apps-source/gitrepository.yaml` carries `gogs.gogs.svc.cluster.local.` (Task 8), so both sides read the same absolute name. Do not "helpfully" add or strip that dot in `GitRemoteService`. (Design F13 records an unresolved contradiction here: `configmap.yaml`'s `GOGS_URL` comment says the dot is production-load-bearing, while the dev cluster — whose pod search lists carry no app zone — cannot reproduce the failure either way. The absolute form is the option that is correct under both readings, which is why it goes in the manifest. Verify on a device per Task 8 Step 5.)
+- **Never mount a Secret the pod's startup depends on without a placeholder.** Reflector-populated Secrets can be briefly absent — `cold-boot-repro.sh` deletes this one in all three namespaces. A plain `secret:` volume then fails to mount and the container never starts, so `/api/health` never answers and an open gate looks held. Declare an empty `secretGenerator` and let Reflector fill it (Task 7), exactly as `gogs-auth` does today.
 - **Nothing may throw out of `onModuleInit` when git is unreachable.** That is the #176 failure mode: a one-shot bootstrap that fails leaves the container broken for its whole lifetime. Log and self-heal lazily on the next call.
 
 ---
@@ -30,18 +31,18 @@
 | File | Responsibility |
 |---|---|
 | `ui/packages/server/src/installed/git-client.ts` | Mechanical git operations in a working directory. No knowledge of apps or Kubernetes. |
-| `ui/packages/server/src/installed/git-remote.service.ts` | Resolves *where* the repo is and *how* to authenticate: env override → `GitRepository/user-apps-source`; credential materialisation. No knowledge of apps or git commands. |
+| `ui/packages/server/src/installed/git-remote.service.ts` | Resolves *where* the repo is and *how* to authenticate: env override → `GitRepository/user-apps-source`; credential materialisation for `http(s)`, loud rejection for `ssh://`. No knowledge of apps or git commands. |
 | `ui/packages/server/src/installed/user-apps-repo.service.ts` | App-level semantics: list/write/remove `apps/<name>/`, and the one-time layout migration. Uses the two above. |
 
 **Deleted (server):** `gogs.service.ts`, `gogs.service.spec.ts`.
 
 **Modified (server):** `installed.service.ts`, `installed.service.spec.ts`, `installed.module.ts`, `rbac-manifest.spec.ts`.
 
-**Modified (manifests):** `apps/marketplace-ui/base/{serviceaccount,deployment,configmap}.yaml`, `apps/marketplace-ui/overlays/librepod/kustomization.yaml`, `apps/marketplace-ui/metadata.yaml`, `infrastructure/user-apps-source/user-apps.yaml`, `infrastructure/user-apps-source/bootstrap-ssh-key/bootstrap-ssh-key.sh`, `infrastructure/system-apps/marketplace-ui.yaml`, `clusters/{librepod,librepod-dev,librepod-k3d}/user-apps-source.yaml`, `ui/Dockerfile`, `ui/package.json`.
+**Modified (manifests):** `apps/marketplace-ui/base/{serviceaccount,deployment,configmap,kustomization}.yaml`, `apps/marketplace-ui/overlays/librepod/kustomization.yaml`, `apps/marketplace-ui/metadata.yaml`, `infrastructure/user-apps-source/gitrepository.yaml`, `infrastructure/user-apps-source/user-apps.yaml`, `infrastructure/user-apps-source/bootstrap-ssh-key/bootstrap-ssh-key.sh`, `infrastructure/system-apps/marketplace-ui.yaml`, `clusters/{librepod,librepod-dev,librepod-k3d}/user-apps-source.yaml`, `ui/Dockerfile`, `ui/package.json`.
 
-**Modified (tests):** `ui/packages/e2e/projects/tier1.config.ts`, `ui/packages/e2e/support/gogs/seed.sh`, `ui/packages/e2e/support/cold-boot-repro.sh`, plus new specs under `ui/packages/e2e/tests/`.
+**Modified (tests):** `ui/packages/e2e/projects/tier1.config.ts`, `ui/packages/e2e/support/gogs/seed.sh`, `ui/packages/e2e/support/cold-boot-repro.sh`, `ui/packages/e2e/support/run-tier2.sh`, plus new specs under `ui/packages/e2e/tests/`.
 
-**Modified (docs):** `ui/CLAUDE.md`, `docs/user-guide.md`, `docs/DECISIONS_LOG.md`.
+**Modified (docs):** `ui/CLAUDE.md`, `docs/user-guide.md`, `docs/DECISIONS_LOG.md`, `.claude/skills/verify-app/SKILL.md`, `.claude/skills/verify-app/references/troubleshooting.md`.
 
 ---
 
@@ -80,7 +81,18 @@ import { GitClient } from './git-client';
 
 const NO_AUTH = { env: {}, configArgs: [] };
 
-/** A bare repo with one commit on `master`, to act as the "remote". */
+/**
+ * Address the fixture origin as a URL, never as a bare path.
+ *
+ * `git clone --depth 1 /some/path` SILENTLY IGNORES --depth ("--depth is ignored
+ * in local clones"), so a bare path would make every test here exercise a full
+ * clone and leave the two shallow behaviours production depends on completely
+ * uncovered: `fetch --depth 1` advancing refs/remotes/origin/<branch>, and
+ * pushing from a shallow clone. `file://` forces the real transport.
+ */
+const fileUrl = (path: string): string => `file://${path}`;
+
+/** A bare repo with one commit on `master`, to act as the "remote". Returns its PATH. */
 async function makeOriginWithSeed(root: string): Promise<string> {
   const origin = join(root, 'origin.git');
   const seed = join(root, 'seed');
@@ -112,7 +124,7 @@ describe('GitClient', () => {
     const origin = await makeOriginWithSeed(root);
     const work = join(root, 'work');
 
-    await git.clone(origin, work, 'master', NO_AUTH);
+    await git.clone(fileUrl(origin), work, 'master', NO_AUTH);
     expect(await readFile(join(work, 'README.md'), 'utf8')).toContain('user apps');
 
     await mkdir(join(work, 'apps', 'demo'), { recursive: true });
@@ -123,14 +135,14 @@ describe('GitClient', () => {
 
     // A second, independent clone must observe the pushed commit.
     const verify = join(root, 'verify');
-    await git.clone(origin, verify, 'master', NO_AUTH);
+    await git.clone(fileUrl(origin), verify, 'master', NO_AUTH);
     expect(await readFile(join(verify, 'apps/demo/release.yaml'), 'utf8')).toContain('Kustomization');
   });
 
   it('commit() returns false when the tree is clean, so callers can stay idempotent', async () => {
     const origin = await makeOriginWithSeed(root);
     const work = join(root, 'work');
-    await git.clone(origin, work, 'master', NO_AUTH);
+    await git.clone(fileUrl(origin), work, 'master', NO_AUTH);
 
     await git.stageAll(work);
     expect(await git.commit(work, 'no-op')).toBe(false);
@@ -139,7 +151,7 @@ describe('GitClient', () => {
   it('removePath deletes a directory from the index and the worktree', async () => {
     const origin = await makeOriginWithSeed(root);
     const work = join(root, 'work');
-    await git.clone(origin, work, 'master', NO_AUTH);
+    await git.clone(fileUrl(origin), work, 'master', NO_AUTH);
     await mkdir(join(work, 'apps', 'gone'), { recursive: true });
     await writeFile(join(work, 'apps', 'gone', 'release.yaml'), 'kind: Kustomization\n');
     await git.stageAll(work);
@@ -154,7 +166,7 @@ describe('GitClient', () => {
   it('fetchAndReset discards local mess and matches the origin exactly', async () => {
     const origin = await makeOriginWithSeed(root);
     const work = join(root, 'work');
-    await git.clone(origin, work, 'master', NO_AUTH);
+    await git.clone(fileUrl(origin), work, 'master', NO_AUTH);
 
     await writeFile(join(work, 'README.md'), 'locally corrupted\n');
     await writeFile(join(work, 'stray.yaml'), 'kind: Stray\n');
@@ -165,9 +177,32 @@ describe('GitClient', () => {
     expect(stdout.trim()).toBe(''); // untracked stray removed too
   });
 
+  it('fetchAndReset OBSERVES a new upstream commit', async () => {
+    // The discard test above passes even if `fetch` never advances
+    // refs/remotes/origin/<branch> — `reset --hard` would just re-pin the same
+    // commit. That bug's production symptom is reads that are stale forever, so
+    // it needs its own test: a second writer pushes, and our working copy must
+    // see it.
+    const origin = await makeOriginWithSeed(root);
+    const work = join(root, 'work');
+    await git.clone(fileUrl(origin), work, 'master', NO_AUTH);
+
+    const other = join(root, 'other');
+    await git.clone(fileUrl(origin), other, 'master', NO_AUTH);
+    await mkdir(join(other, 'apps', 'late'), { recursive: true });
+    await writeFile(join(other, 'apps/late/release.yaml'), 'kind: Kustomization\n');
+    await git.stageAll(other);
+    await git.commit(other, 'landed after our clone');
+    await git.push(other, 'master', NO_AUTH);
+
+    await git.fetchAndReset(work, 'master', NO_AUTH);
+
+    expect(await readFile(join(work, 'apps/late/release.yaml'), 'utf8')).toContain('Kustomization');
+  });
+
   it('surfaces git failures as errors carrying stderr', async () => {
     await expect(
-      git.clone(join(root, 'does-not-exist.git'), join(root, 'work'), 'master', NO_AUTH),
+      git.clone(fileUrl(join(root, 'does-not-exist.git')), join(root, 'work'), 'master', NO_AUTH),
     ).rejects.toThrow(/does-not-exist/);
   });
 });
@@ -185,6 +220,7 @@ Create `ui/packages/server/src/installed/git-client.ts`:
 ```ts
 import { Injectable, Logger } from '@nestjs/common';
 import { execFile } from 'node:child_process';
+import { dirname } from 'node:path';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -223,6 +259,11 @@ export class GitClient {
           ...process.env,
           // Never block a request thread waiting on an interactive prompt.
           GIT_TERMINAL_PROMPT: '0',
+          // Hermetic: no system/global git config may influence a repo mutation.
+          // Notably it stops an inherited credential.helper from shadowing the
+          // per-invocation one, and keeps unit tests independent of the dev box.
+          GIT_CONFIG_NOSYSTEM: '1',
+          GIT_CONFIG_GLOBAL: '/dev/null',
           ...(auth?.env ?? {}),
         },
         maxBuffer: 10 * 1024 * 1024,
@@ -237,7 +278,9 @@ export class GitClient {
   async clone(url: string, dir: string, branch: string, auth: GitAuth): Promise<void> {
     // `--depth 1` keeps the clone tiny; this repo's history is not interesting
     // to the installer, only its current tree.
-    await this.run(process.cwd(), [
+    // Run from the target's parent, not process.cwd(): the caller has just
+    // ensured that directory exists, whereas cwd is incidental.
+    await this.run(dirname(dir), [
       'clone', '--depth', '1', '--branch', branch, '--single-branch', url, dir,
     ], auth);
   }
@@ -275,7 +318,7 @@ export class GitClient {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd ui && npm test --workspace=packages/server -- src/installed/git-client.spec.ts`
-Expected: PASS — 5 tests.
+Expected: PASS — 6 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -293,12 +336,12 @@ git commit -m "feat(marketplace-ui): add GitClient, a thin wrapper over the git 
 - Test: `ui/packages/server/src/installed/git-remote.service.spec.ts`
 
 **Interfaces:**
-- Consumes: `GitAuth` from Task 1.
+- Consumes: `GitAuth` from Task 1; `CustomObjectsApi` (injected, as `FluxStatusService` already does).
 - Produces:
   ```ts
   export interface GitRemote { url: string; branch: string; auth: GitAuth }
   export class GitRemoteService {
-    constructor(config: ConfigService)
+    constructor(config: ConfigService, customObjectsApi: CustomObjectsApi)
     resolve(): Promise<GitRemote>   // cached after first success
   }
   ```
@@ -306,8 +349,16 @@ git commit -m "feat(marketplace-ui): add GitClient, a thin wrapper over the git 
 Behaviour to implement:
 - URL/branch from `USER_APPS_GIT_URL` / `USER_APPS_GIT_BRANCH` (default branch `master`) when set; otherwise `GET gitrepositories/user-apps-source` in `flux-system` → `spec.url`, `spec.ref.branch ?? 'master'`.
 - Credential directory from `USER_APPS_GIT_CREDENTIALS_DIR` (default `/etc/user-apps-git`).
-- `ssh://` → requires `identity` **and** `known_hosts`; the identity is **copied to a private `0600` path** because Kubernetes Secret volumes mount world-readable and `ssh` refuses such a key (`UNPROTECTED PRIVATE KEY FILE`).
-- `http(s)://` → `USER_APPS_GIT_USERNAME`/`USER_APPS_GIT_PASSWORD`, else files `username`/`password`; written to a `0600` `.git-credentials` consumed via `credential.helper=store`.
+- `http(s)://` → `USER_APPS_GIT_USERNAME`/`USER_APPS_GIT_PASSWORD`, else files `username`/`password` in that directory; written to a `0600` `.git-credentials` consumed via `credential.helper=store`.
+- **`ssh://` → reject with a named error.** This release ships one transport (see Global Constraints). The message must say *what* to do — repoint the GitRepository at `http(s)`, or track the SSH follow-up — because the alternative is a stack of confusing git auth failures.
+- The URL is used **verbatim**: the trailing-dot FQDN lives in `gitrepository.yaml` (Task 8), never in this service.
+
+**Why the k8s client is injected rather than constructed inline:** it matches
+`flux-status.service.ts`, and it means the discovery test can hand in a fake
+instead of reaching into the instance with `vi.spyOn(svc as never, 'readGitRepository')`.
+Spying on a private method to make a unit testable is a smell that outlives the
+test — a later refactor renames the method and the test silently stops asserting
+anything.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -319,12 +370,26 @@ import { mkdtemp, rm, mkdir, writeFile, readFile, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ConfigService } from '@nestjs/config';
+import type { CustomObjectsApi } from '@kubernetes/client-node';
 import { GitRemoteService } from './git-remote.service';
 
 function configOf(values: Record<string, string>): ConfigService {
   return {
     get: (key: string, fallback?: string) => values[key] ?? fallback,
   } as unknown as ConfigService;
+}
+
+/**
+ * A CustomObjectsApi double. Injected rather than spied on: reaching into the
+ * instance with `vi.spyOn(svc as never, 'readGitRepository')` binds the test to a
+ * private name, and a later rename makes it silently assert nothing.
+ */
+function fakeApi(spec?: Record<string, unknown>) {
+  const getNamespacedCustomObject = vi.fn(async () => ({ spec }));
+  return {
+    api: { getNamespacedCustomObject } as unknown as CustomObjectsApi,
+    getNamespacedCustomObject,
+  };
 }
 
 describe('GitRemoteService', () => {
@@ -340,6 +405,7 @@ describe('GitRemoteService', () => {
   });
 
   it('prefers the env override and never touches Kubernetes (the Tier 1 seam)', async () => {
+    const k8s = fakeApi();
     const svc = new GitRemoteService(configOf({
       USER_APPS_GIT_URL: 'http://127.0.0.1:43000/flux/user-apps.git',
       USER_APPS_GIT_BRANCH: 'master',
@@ -347,12 +413,11 @@ describe('GitRemoteService', () => {
       USER_APPS_GIT_PASSWORD: 'pass@w0rd',
       USER_APPS_GIT_CREDENTIALS_DIR: join(root, 'creds'),
       USER_APPS_WORK_DIR: join(root, 'work'),
-    }));
-    const k8s = vi.spyOn(svc as never, 'readGitRepository');
+    }), k8s.api);
 
     const remote = await svc.resolve();
 
-    expect(k8s).not.toHaveBeenCalled();
+    expect(k8s.getNamespacedCustomObject).not.toHaveBeenCalled();
     expect(remote.url).toBe('http://127.0.0.1:43000/flux/user-apps.git');
     expect(remote.branch).toBe('master');
     // credential.helper points at a file we own, and the password is NOT in argv
@@ -368,7 +433,7 @@ describe('GitRemoteService', () => {
       USER_APPS_GIT_PASSWORD: 'p@ss/word',
       USER_APPS_GIT_CREDENTIALS_DIR: join(root, 'creds'),
       USER_APPS_WORK_DIR: join(root, 'work'),
-    }));
+    }), fakeApi().api);
 
     const remote = await svc.resolve();
     const file = /--file=(\S+)/.exec(remote.auth.configArgs.join(' '))![1];
@@ -378,61 +443,90 @@ describe('GitRemoteService', () => {
     expect(await readFile(file, 'utf8')).toContain('https://flux:p%40ss%2Fword@git.example.com');
   });
 
-  it('copies the ssh identity to a 0600 path (Secret volumes mount world-readable)', async () => {
+  it('keeps an explicit default port in the credential entry', async () => {
+    // REGRESSION GUARD. `new URL('http://h:80/x').host` is 'h' — the WHATWG parser
+    // strips a default port — but git looks the credential up under 'h:80'. Build
+    // the entry from URL.host and the entry never matches: git falls back to
+    // prompting, GIT_TERMINAL_PROMPT=0 turns that into an auth failure, and the
+    // ONLY affected URLs are the ones with an explicit :80/:443 — i.e. production.
+    // Tier 1 uses :43000 (non-default) and would stay green.
     const creds = join(root, 'creds');
     await mkdir(creds, { recursive: true });
-    await writeFile(join(creds, 'identity'), 'PRIVATE KEY\n', { mode: 0o444 });
-    await writeFile(join(creds, 'known_hosts'), 'gogs ssh-ed25519 AAAA\n', { mode: 0o444 });
+    await writeFile(join(creds, 'username'), 'flux\n');   // trailing newline on purpose
+    await writeFile(join(creds, 'password'), 'from-file\n');
 
     const svc = new GitRemoteService(configOf({
-      USER_APPS_GIT_URL: 'ssh://git@gogs.gogs.svc.cluster.local:22/flux/user-apps.git',
+      USER_APPS_GIT_URL: 'http://gogs.gogs.svc.cluster.local.:80/flux/user-apps.git',
       USER_APPS_GIT_CREDENTIALS_DIR: creds,
       USER_APPS_WORK_DIR: join(root, 'work'),
-    }));
+    }), fakeApi().api);
 
     const remote = await svc.resolve();
-    const cmd = remote.auth.env.GIT_SSH_COMMAND!;
-    const identity = /-i (\S+)/.exec(cmd)![1];
+    const file = /--file=(\S+)/.exec(remote.auth.configArgs.join(' '))![1];
 
-    expect(identity).not.toBe(join(creds, 'identity'));   // a private copy
-    expect((await stat(identity)).mode & 0o777).toBe(0o600);
-    expect(cmd).toContain('UserKnownHostsFile=');
-    expect(cmd).toContain('BatchMode=yes');
-    expect(cmd).not.toContain('StrictHostKeyChecking=no'); // never disable this
+    // Also proves the mounted-file path (production shape: the Secret's `username`
+    // and `password` keys arrive as files) and that the trailing newline is trimmed
+    // — an embedded newline silently breaks the match the same way.
+    expect(await readFile(file, 'utf8')).toBe(
+      'http://flux:from-file@gogs.gogs.svc.cluster.local.:80\n',
+    );
   });
 
-  it('fails loudly when an ssh remote has no known_hosts', async () => {
-    const creds = join(root, 'creds');
-    await mkdir(creds, { recursive: true });
-    await writeFile(join(creds, 'identity'), 'PRIVATE KEY\n');
-
+  it('fails with an actionable message when the credential is missing', async () => {
+    // The mounted Secret is Reflector-populated and starts EMPTY, so this is a real
+    // startup state, not a hypothetical. It must be a clear error and it must NOT be
+    // cached — the next call has to succeed once Reflector fills it.
     const svc = new GitRemoteService(configOf({
-      USER_APPS_GIT_URL: 'ssh://git@gogs/flux/user-apps.git',
-      USER_APPS_GIT_CREDENTIALS_DIR: creds,
+      USER_APPS_GIT_URL: 'http://gogs/flux/user-apps.git',
+      USER_APPS_GIT_CREDENTIALS_DIR: join(root, 'empty'),
       USER_APPS_WORK_DIR: join(root, 'work'),
-    }));
+    }), fakeApi().api);
 
-    await expect(svc.resolve()).rejects.toThrow(/known_hosts/);
+    await expect(svc.resolve()).rejects.toThrow(/no username\/password/);
+    await expect(svc.resolve()).rejects.toThrow(/no username\/password/); // not cached
+  });
+
+  it('rejects an ssh:// remote with a message that says what to do', async () => {
+    // This release ships ONE transport (design §3). An ssh:// URL is an operator
+    // misconfiguration, and it has to name the fix rather than surfacing as a pile
+    // of git auth errors.
+    const svc = new GitRemoteService(configOf({
+      USER_APPS_GIT_URL: 'ssh://git@gogs.gogs.svc.cluster.local:22/flux/user-apps.git',
+      USER_APPS_GIT_CREDENTIALS_DIR: join(root, 'creds'),
+      USER_APPS_WORK_DIR: join(root, 'work'),
+    }), fakeApi().api);
+
+    await expect(svc.resolve()).rejects.toThrow(/ssh.*not supported/i);
   });
 
   it('discovers url and branch from GitRepository/user-apps-source when no override is set', async () => {
-    const svc = new GitRemoteService(configOf({
-      USER_APPS_GIT_CREDENTIALS_DIR: join(root, 'creds'),
-      USER_APPS_WORK_DIR: join(root, 'work'),
-    }));
-    vi.spyOn(svc as never, 'readGitRepository').mockResolvedValue({
-      spec: { url: 'ssh://git@example/flux/user-apps.git', ref: { branch: 'main' } },
-    } as never);
-    // ssh creds present so resolution can complete
     const creds = join(root, 'creds');
     await mkdir(creds, { recursive: true });
-    await writeFile(join(creds, 'identity'), 'K\n');
-    await writeFile(join(creds, 'known_hosts'), 'h k v\n');
+    await writeFile(join(creds, 'username'), 'flux');
+    await writeFile(join(creds, 'password'), 'secret');
+
+    const k8s = fakeApi({
+      url: 'https://git.example.com/flux/user-apps.git',
+      ref: { branch: 'main' },
+    });
+    const svc = new GitRemoteService(configOf({
+      USER_APPS_GIT_CREDENTIALS_DIR: creds,
+      USER_APPS_WORK_DIR: join(root, 'work'),
+    }), k8s.api);
 
     const remote = await svc.resolve();
 
-    expect(remote.url).toBe('ssh://git@example/flux/user-apps.git');
+    // Verbatim — no host normalisation, no scheme translation.
+    expect(remote.url).toBe('https://git.example.com/flux/user-apps.git');
     expect(remote.branch).toBe('main');
+    expect(k8s.getNamespacedCustomObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        group: 'source.toolkit.fluxcd.io',
+        plural: 'gitrepositories',
+        name: 'user-apps-source',
+        namespace: 'flux-system',
+      }),
+    );
   });
 });
 ```
@@ -449,7 +543,7 @@ Create `ui/packages/server/src/installed/git-remote.service.ts`:
 ```ts
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { KubeConfig, CustomObjectsApi } from '@kubernetes/client-node';
+import { CustomObjectsApi } from '@kubernetes/client-node';
 import { mkdir, writeFile, readFile, chmod, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { GitAuth } from './git-client';
@@ -469,17 +563,25 @@ interface GitRepositoryObject {
  *
  * The URL is discovered from GitRepository/user-apps-source — the same object
  * Flux reads — so the installer can never commit to a repo Flux is not
- * reconciling. Repointing that object at GitHub/GitLab needs no code change.
- * We deliberately do NOT read the GitRepository's secretRef: its name is
- * dynamic, so RBAC could not scope it and the service would need `get secrets`
+ * reconciling. Repointing that object at GitHub/GitLab needs no code change (it
+ * does need a pod restart: the resolved remote is cached for the process
+ * lifetime). We deliberately do NOT read the GitRepository's secretRef: its name
+ * is dynamic, so RBAC could not scope it and the service would need `get secrets`
  * across all of flux-system. The credential is mounted instead.
+ *
+ * One transport: http(s). `ssh://` is rejected — see the class comment on
+ * GitClient and design §3. The discovered URL is used VERBATIM; the trailing-dot
+ * FQDN production needs lives in gitrepository.yaml, not here.
  */
 @Injectable()
 export class GitRemoteService {
   private readonly logger = new Logger(GitRemoteService.name);
   private cached?: GitRemote;
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly customObjectsApi: CustomObjectsApi,
+  ) {}
 
   private get credentialsDir(): string {
     return this.config.get<string>('USER_APPS_GIT_CREDENTIALS_DIR', '/etc/user-apps-git');
@@ -493,10 +595,17 @@ export class GitRemoteService {
     if (this.cached) return this.cached;
 
     const { url, branch } = await this.resolveLocation();
-    const auth = url.startsWith('ssh://')
-      ? await this.sshAuth()
-      : await this.httpAuth(url);
+    if (url.startsWith('ssh://')) {
+      throw new Error(
+        `the app-store remote is ${url}, but the ssh transport is not supported in ` +
+          'this release — repoint GitRepository/user-apps-source at an http(s) URL ' +
+          '(see docs/design/2026-08-19-per-app-flux-isolation-design.md §3)',
+      );
+    }
+    const auth = await this.httpAuth(url);
 
+    // Cached only on success, so an empty (not-yet-reflected) credential Secret
+    // self-heals on the next call instead of poisoning the process.
     this.cached = { url, branch, auth };
     this.logger.log(`user-apps remote: ${url} (branch ${branch})`);
     return this.cached;
@@ -523,13 +632,8 @@ export class GitRemoteService {
     return { url, branch: repo.spec?.ref?.branch ?? 'master' };
   }
 
-  /** Overridden in tests. Kept as its own method so it can be spied on. */
   private async readGitRepository(): Promise<GitRepositoryObject> {
-    const kc = new KubeConfig();
-    if (process.env.KUBERNETES_SERVICE_HOST) kc.loadFromCluster();
-    else kc.loadFromDefault();
-    const api = kc.makeApiClient(CustomObjectsApi);
-    return (await api.getNamespacedCustomObject({
+    return (await this.customObjectsApi.getNamespacedCustomObject({
       group: 'source.toolkit.fluxcd.io',
       version: 'v1',
       namespace: 'flux-system',
@@ -545,38 +649,6 @@ export class GitRemoteService {
     } catch {
       return false;
     }
-  }
-
-  private async sshAuth(): Promise<GitAuth> {
-    const source = join(this.credentialsDir, 'identity');
-    const knownHosts = join(this.credentialsDir, 'known_hosts');
-
-    if (!(await this.exists(source))) {
-      throw new Error(`ssh remote configured but no identity at ${source}`);
-    }
-    if (!(await this.exists(knownHosts))) {
-      throw new Error(
-        `ssh remote configured but no known_hosts at ${knownHosts} — refusing to ` +
-          'disable host-key verification',
-      );
-    }
-
-    // Kubernetes Secret volumes mount world-readable; ssh rejects such a key
-    // ("UNPROTECTED PRIVATE KEY FILE"). Copy to a private 0600 path we own.
-    const privateDir = join(this.workDir, '.ssh');
-    await mkdir(privateDir, { recursive: true, mode: 0o700 });
-    const identity = join(privateDir, 'identity');
-    await writeFile(identity, await readFile(source), { mode: 0o600 });
-    await chmod(identity, 0o600);
-
-    return {
-      env: {
-        GIT_SSH_COMMAND:
-          `ssh -i ${identity} -o IdentitiesOnly=yes -o BatchMode=yes ` +
-          `-o UserKnownHostsFile=${knownHosts}`,
-      },
-      configArgs: [],
-    };
   }
 
   private async httpAuth(url: string): Promise<GitAuth> {
@@ -597,10 +669,21 @@ export class GitRemoteService {
 
     // credential.helper=store reads a file, so the secret never enters argv or
     // the remote URL. Encode the components so / or @ cannot corrupt the entry.
+    //
+    // The authority is taken from the URL AS WRITTEN, not from `new URL(url).host`:
+    // the WHATWG parser strips a default port, so `http://gogs…:80/x` would be
+    // stored under host `gogs…` while git looks it up under `gogs…:80`. The entry
+    // would never match, git would fall back to prompting, and GIT_TERMINAL_PROMPT=0
+    // turns that into an auth failure — on production URLs only, since Tier 1's
+    // :43000 is not a default port. Any userinfo already in the URL is dropped.
     const parsed = new URL(url);
+    const authority = url
+      .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
+      .replace(/^[^@/]*@/, '')
+      .split('/')[0];
     const entry =
       `${parsed.protocol}//${encodeURIComponent(username)}:` +
-      `${encodeURIComponent(password)}@${parsed.host}`;
+      `${encodeURIComponent(password)}@${authority}`;
 
     await mkdir(this.workDir, { recursive: true, mode: 0o700 });
     const file = join(this.workDir, '.git-credentials');
@@ -618,13 +701,13 @@ export class GitRemoteService {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd ui && npm test --workspace=packages/server -- src/installed/git-remote.service.spec.ts`
-Expected: PASS — 5 tests.
+Expected: PASS — 6 tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add ui/packages/server/src/installed/git-remote.service.ts ui/packages/server/src/installed/git-remote.service.spec.ts
-git commit -m "feat(marketplace-ui): discover the user-apps remote from GitRepository, mount the credential (#182)"
+git commit -m "feat(marketplace-ui): discover the user-apps remote from GitRepository, authenticate over http (#182)"
 ```
 
 ---
@@ -661,7 +744,14 @@ import { UserAppsRepoService } from './user-apps-repo.service';
 
 const NO_AUTH = { env: {}, configArgs: [] };
 
-/** Bare "remote" seeded with README.md + the given files (path → content). */
+/**
+ * Address a fixture origin as a URL, never as a bare path — `clone --depth 1` on a
+ * local path silently ignores --depth, which would leave the shallow behaviours
+ * production depends on untested. Exported: Tasks 4 and 5 append to this file.
+ */
+export const fileUrl = (path: string): string => `file://${path}`;
+
+/** Bare "remote" seeded with README.md + the given files (path → content). Returns its PATH. */
 export async function seedOrigin(
   root: string,
   files: Record<string, string>,
@@ -688,7 +778,7 @@ export function makeService(root: string, origin: string): UserAppsRepoService {
       ({ USER_APPS_WORK_DIR: join(root, 'work') } as Record<string, string>)[key] ?? fallback,
   } as unknown as ConfigService;
   const remote = {
-    resolve: async () => ({ url: origin, branch: 'master', auth: NO_AUTH }),
+    resolve: async () => ({ url: fileUrl(origin), branch: 'master', auth: NO_AUTH }),
   } as unknown as GitRemoteService;
   return new UserAppsRepoService(config, new GitClient(), remote);
 }
@@ -975,7 +1065,7 @@ describe('UserAppsRepoService writes', () => {
     // is rejected non-fast-forward, the retry re-fetches and re-applies.
     const git = new GitClient();
     const other = join(root, 'other');
-    await git.clone(origin, other, 'master', NO_AUTH);
+    await git.clone(fileUrl(origin), other, 'master', NO_AUTH);
     await mkdir(join(other, 'apps', 'manual'), { recursive: true });
     await writeFile(join(other, 'apps/manual/release.yaml'), 'kind: Kustomization\n');
     await git.stageAll(other);
@@ -1366,16 +1456,35 @@ In `installed.service.ts`:
   `await this.gogs.removeFromRootKustomization(appName);` with
   `await this.repo.removeApp(appName);`
 
-In `installed.module.ts`, swap the import and provider list:
+In `installed.module.ts`, swap the import and provider list. `GitRemoteService`
+takes `CustomObjectsApi` by injection (Task 2), and nothing provides it today —
+`FluxStatusService` builds its own in `onModuleInit` — so add the factory:
 
 ```ts
+import { KubeConfig, CustomObjectsApi } from '@kubernetes/client-node';
 import { GitClient } from './git-client';
 import { GitRemoteService } from './git-remote.service';
 import { UserAppsRepoService } from './user-apps-repo.service';
 
+// Same kubeconfig selection FluxStatusService.onModuleInit already performs; as a
+// factory it can be injected, which is what lets GitRemoteService be unit-tested
+// without spying on a private method. Note this runs eagerly at module init, so
+// Tier 1's closed-port KUBECONFIG fixture is still what keeps `loadFromDefault()`
+// from throwing where no kubeconfig exists — unchanged behaviour, new location.
+const customObjectsApiProvider = {
+  provide: CustomObjectsApi,
+  useFactory: (): CustomObjectsApi => {
+    const kc = new KubeConfig();
+    if (process.env.KUBERNETES_SERVICE_HOST) kc.loadFromCluster();
+    else kc.loadFromDefault();
+    return kc.makeApiClient(CustomObjectsApi);
+  },
+};
+
 // ...
   providers: [
     InstalledService,
+    customObjectsApiProvider,
     GitClient,
     GitRemoteService,
     UserAppsRepoService,
@@ -1384,6 +1493,9 @@ import { UserAppsRepoService } from './user-apps-repo.service';
     LaunchUrlService,
   ],
 ```
+
+Leave `FluxStatusService` building its own client — migrating it to the provider is
+a tidy-up with its own test blast radius, not part of #182.
 
 Then delete the old service and its spec:
 
@@ -1417,6 +1529,7 @@ git commit -m "refactor(marketplace-ui): replace GogsService with the provider-n
 - Modify: `apps/marketplace-ui/base/serviceaccount.yaml`
 - Modify: `apps/marketplace-ui/base/deployment.yaml`
 - Modify: `apps/marketplace-ui/base/configmap.yaml`
+- Modify: `apps/marketplace-ui/base/kustomization.yaml`
 - Test: `ui/packages/server/src/installed/rbac-manifest.spec.ts`
 
 **Interfaces:**
@@ -1477,16 +1590,13 @@ In `apps/marketplace-ui/base/deployment.yaml`:
             - name: catalog
               mountPath: /data
               readOnly: true
-            # The git identity Flux uses for this repo. Reflector already copies
-            # user-apps-ssh-key into this namespace (see bootstrap-ssh-key.sh's
-            # reflection-auto-namespaces). GitRemoteService copies the key to a
-            # private 0600 path because Secret volumes mount world-readable and
-            # ssh rejects such a key ("UNPROTECTED PRIVATE KEY FILE").
+            # The same credential Flux uses for this repo, as `username`/`password`
+            # files (GitRemoteService reads exactly those two names).
             - name: user-apps-git-credentials
               mountPath: /etc/user-apps-git
               readOnly: true
-            # Working copy of the app-store repo (shallow clone) + the private
-            # key/credential copies. Disposable: rebuilt on demand.
+            # Working copy of the app-store repo (shallow clone) + the generated
+            # .git-credentials. Disposable: rebuilt on demand.
             - name: user-apps-work
               mountPath: /var/lib/user-apps
 ```
@@ -1494,12 +1604,38 @@ In `apps/marketplace-ui/base/deployment.yaml`:
 and in `volumes:`:
 
 ```yaml
+        # user-apps-git-auth is generated EMPTY by this app's kustomization and
+        # filled by Reflector from gogs/user-apps-source-auth. Mounting the
+        # reflected Secret directly would make the pod unschedulable whenever it is
+        # briefly absent — during a rotation, or during cold-boot-repro.sh, which
+        # deletes it in all three namespaces. An empty mount instead lets the pod
+        # boot, /api/health answer, reads degrade, and the first write fail loudly.
         - name: user-apps-git-credentials
           secret:
-            secretName: user-apps-ssh-key
+            secretName: user-apps-git-auth
         - name: user-apps-work
           emptyDir: {}
 ```
+
+In `apps/marketplace-ui/base/kustomization.yaml`, **rename** the placeholder
+`secretGenerator` — same mechanism, provider-neutral name, and it stops
+`gogs-auth` from being left behind unreferenced:
+
+```yaml
+secretGenerator:
+- name: user-apps-git-auth
+  options:
+    disableNameSuffixHash: true
+    annotations:
+      # Empty on purpose. Reflector mirrors gogs/user-apps-source-auth into it —
+      # the same credential Flux authenticates the GitRepository with, so the
+      # installer and Flux can never drift apart on WHO they are.
+      reflector.v1.k8s.emberstack.com/reflects: "gogs/user-apps-source-auth"
+```
+
+`prune: true` on the `marketplace-ui` Kustomization removes the old `gogs-auth`
+Secret on the next reconcile. Nothing else references it — verify with
+`git grep -n gogs-auth` before deleting the generator, and expect zero hits after.
 
 In `apps/marketplace-ui/base/configmap.yaml`, delete the `GOGS_URL` entry **and
 its trailing-dot comment**, and add:
@@ -1515,11 +1651,6 @@ its trailing-dot comment**, and add:
 > `GitRepository/user-apps-source`; hardcoding it would let the installer commit
 > to a repo Flux is not reading. The env var exists only as a test seam.
 
-Removing the two `GOGS_*` env entries leaves `Secret/gogs-auth` unreferenced by
-this Deployment. **Leave the Secret in place** — it is provisioned outside this
-app and may have other consumers; deleting it is out of scope. Just note it in
-the commit body so the loose end is visible to a reviewer.
-
 - [ ] **Step 4: Verify**
 
 Run: `cd ui && npm test --workspace=packages/server -- src/installed/rbac-manifest.spec.ts`
@@ -1530,6 +1661,15 @@ Expected: `OK`.
 
 Run: `kustomize build apps/marketplace-ui/overlays/librepod | grep -c "user-apps-git-credentials"`
 Expected: `2` (the volume and the mount).
+
+Run: `kustomize build apps/marketplace-ui/overlays/librepod | grep -c "user-apps-git-auth"`
+Expected: `2` (the generated Secret and the volume's `secretName`).
+
+Run: `git grep -n "gogs-auth\|GOGS_URL\|GOGS_USERNAME\|GOGS_TOKEN" -- apps/marketplace-ui`
+Expected: no output — the Gogs-specific credential surface is gone from this app.
+
+Run: `kustomize build apps/marketplace-ui/overlays/librepod | grep -A3 "name: user-apps-git-auth"`
+Expected: the Secret has **no `data:`** — it is a placeholder Reflector fills.
 
 - [ ] **Step 5: Commit**
 
@@ -1544,6 +1684,7 @@ git commit -m "feat(marketplace-ui): grant gitrepositories read, mount the git c
 
 **Files:**
 - Modify: `infrastructure/user-apps-source/user-apps.yaml`
+- Modify: `infrastructure/user-apps-source/gitrepository.yaml`
 - Modify: `clusters/librepod/user-apps-source.yaml`
 - Modify: `clusters/librepod-dev/user-apps-source.yaml`
 - Modify: `clusters/librepod-k3d/user-apps-source.yaml`
@@ -1551,7 +1692,7 @@ git commit -m "feat(marketplace-ui): grant gitrepositories read, mount the git c
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks (pure manifest change).
-- Produces: `user-apps-source` Ready ⇔ the git source is seeded — the gate Task 12's tests assert on.
+- Produces: `user-apps-source` Ready ⇔ the git source is seeded — the gate Task 12's tests assert on — and the `http(s)` URL `GitRemoteService` (Task 2) discovers.
 
 - [ ] **Step 1: Make `user-apps` apply-only**
 
@@ -1589,7 +1730,61 @@ In each of `clusters/librepod/user-apps-source.yaml`,
       namespace: flux-system
 ```
 
-- [ ] **Step 3: Repoint the marketplace-ui gate**
+**In the same three files, raise `timeout: 5m` → `timeout: 15m`** with this comment:
+
+```yaml
+  # 15m, not 5m: `timeout` now bounds a HEALTH CHECK, not just an apply. The
+  # GitRepository cannot go Ready until the bootstrap Job has seeded the repo, and
+  # that Job alone polls up to 300s for Gogs to accept credentials before it starts
+  # working — plus image pull, apk add, a kubectl download, keygen, keyscan and up
+  # to five push retries. At 5m the first cold-boot attempt reliably timed out and
+  # recovered on retryInterval, so every cold boot showed this gate Ready=False
+  # with a timeout error: noise indistinguishable from the failure it exists to
+  # catch.
+  timeout: 15m
+```
+
+- [ ] **Step 3: Move the GitRepository to `http`, with the trailing-dot FQDN**
+
+In `infrastructure/user-apps-source/gitrepository.yaml`, replace the `url` and
+`secretRef` (design §4, F13–F15):
+
+```yaml
+spec:
+  interval: 1m
+  # HTTP, not ssh. Three reasons, in order of weight:
+  #   1. The installer writes to THIS url (it discovers it from this object), and
+  #      the only hermetic test tier reaching Gogs does so over HTTP with no port
+  #      22 — so ssh would ship as the one transport no fast test covers.
+  #   2. Trailing dot = absolute FQDN. Do NOT remove it. With ndots:5 a 4-dot name
+  #      is search-expanded first, and where the app zone is in the pod's search
+  #      list that expansion is rewritten to Traefik's ClusterIP by coredns-custom
+  #      — the documented reason marketplace-ui's GOGS_URL carried this dot. The
+  #      absolute form is correct whether or not a given device is exposed to that,
+  #      and an ssh url could not take the dot at all without re-keying
+  #      known_hosts, since host keys are bound to the exact name given.
+  #   3. ssh was adopted for "no baked-in credential", but the flux account's
+  #      password is a committed literal (apps/gogs/components/bootstrap-admin/
+  #      secret.env) reflected into two namespaces — the keypair bought ceremony,
+  #      not secrecy.
+  # Trade-off accepted: basic auth crosses the pod network in plaintext. Revisit
+  # when that credential is rotated. See issue #182's design doc §3.
+  url: http://gogs.gogs.svc.cluster.local.:80/flux/user-apps.git
+  ref:
+    branch: master
+  secretRef:
+    name: user-apps-source-auth
+```
+
+`Secret/user-apps-source-auth` already exists in `flux-system` (the gogs
+`bootstrap-admin` component generates it and Reflector mirrors it) with exactly the
+`username`/`password` keys Flux wants — so this is a manifest-only change with no
+new provisioning. `Secret/user-apps-ssh-key` keeps being created and reflected: it
+is the bootstrap Job's idempotency guard and `cold-boot-repro.sh`'s lever. It is
+simply no longer read by anything. Slimming the Job is a deferred follow-up
+(design Deferred), **not** part of this change.
+
+- [ ] **Step 4: Repoint the marketplace-ui gate**
 
 In `infrastructure/system-apps/marketplace-ui.yaml`, replace the `user-apps`
 dependency (and its whole comment block) with:
@@ -1607,7 +1802,7 @@ dependency (and its whole comment block) with:
     - name: user-apps-source
 ```
 
-- [ ] **Step 4: Verify the manifests build and the gate is wired**
+- [ ] **Step 5: Verify the manifests build and the gate is wired**
 
 Run:
 ```bash
@@ -1627,11 +1822,33 @@ Expected: no output.
 Run: `for f in clusters/*/user-apps-source.yaml; do grep -q "healthChecks" "$f" || echo "MISSING: $f"; done`
 Expected: no output (all three patched).
 
-- [ ] **Step 5: Commit**
+Run: `grep -c "timeout: 15m" clusters/*/user-apps-source.yaml`
+Expected: `1` for each of the three files.
+
+Run: `grep -n "url:\|secretRef" -A1 infrastructure/user-apps-source/gitrepository.yaml`
+Expected: `http://gogs.gogs.svc.cluster.local.:80/flux/user-apps.git` (**with** the
+trailing dot before the colon) and `name: user-apps-source-auth`.
+
+Run: `git grep -n "ssh://" -- infrastructure clusters apps`
+Expected: no output — no manifest still points Flux at the ssh transport.
+
+**Settle design F13's open question while you are here** (one command, and it
+determines whether the trailing dot is a nicety or a necessity):
 
 ```bash
-git add infrastructure/user-apps-source/user-apps.yaml clusters/*/user-apps-source.yaml infrastructure/system-apps/marketplace-ui.yaml
-git commit -m "fix(marketplace-ui): isolate app health and gate the UI on a seeded source (#182)"
+kubectl exec -n marketplace-ui deploy/marketplace-ui -c marketplace-ui -- cat /etc/resolv.conf
+```
+Run it on a **device**, not the dev cluster. If `search` includes the app zone, the
+dot is load-bearing and `configmap.yaml`'s comment is right. If it does not, the
+dot is harmless insurance and that comment should be corrected to say what actually
+broke. Record the answer in the design doc's F13 either way — leaving it open is
+how the next person re-litigates it.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add infrastructure/user-apps-source/user-apps.yaml infrastructure/user-apps-source/gitrepository.yaml clusters/*/user-apps-source.yaml infrastructure/system-apps/marketplace-ui.yaml
+git commit -m "fix(marketplace-ui): isolate app health, gate on a seeded source, clone over http (#182)"
 ```
 
 ---
@@ -1665,12 +1882,25 @@ body to describe the new layout:
 This repository holds user-installed apps for this LibrePod cluster. Each app is
 a directory under `apps/<name>/` containing its Flux objects. There is no root
 `kustomization.yaml`: FluxCD generates one from the whole tree, so an app's
-presence IS its declaration and one app's files cannot affect another's.
+presence IS its declaration — adding a directory installs it, removing the
+directory uninstalls it.
+
+One consequence worth knowing before editing by hand: because the whole tree is
+the build input, a malformed YAML file anywhere in it fails the build for every
+app. The marketplace UI writes exactly one app directory per commit.
 
 Managed by the LibrePod marketplace UI. FluxCD reconciles this repo into the
 cluster.
 MD
 ```
+
+> **Do not** write "one app's files cannot affect another's" here, however
+> tempting. Design F6/F7 verified the opposite: auto-generation decodes every YAML
+> file in the tree, so one malformed file — or two apps declaring the same resource
+> ID — fails the build for all of them. Dropping the root file buys atomicity and
+> real deletion, and #182's isolation win is at the *health* layer (Task 8), not
+> the build layer. A README that overclaims here will send the next person
+> debugging a whole-repo build failure in the wrong direction.
 
 Also update the seed comment above it:
 
@@ -1684,7 +1914,27 @@ Also update the seed comment above it:
 # cluster with zero apps installed.
 ```
 
-- [ ] **Step 2: Fix the false claim in the AUTH NOTE**
+- [ ] **Step 2: Correct the script's header comment (Flux no longer uses the key)**
+
+The first line reads *"so Flux's GitRepository/user-apps-source can clone
+flux/user-apps.git over SSH instead of HTTP basic auth"* — the reverse is now true
+(Task 8). Rewrite the opening paragraph to say what the Job actually provides and
+why the keypair is still here:
+
+```sh
+# Bootstraps the flux/user-apps repo: creates it if missing, seeds its first commit,
+# and provisions Secret/user-apps-ssh-key (ed25519 keypair + Gogs host known_hosts).
+#
+# NOTE ON THE KEYPAIR: since #182 Flux clones this repo over HTTP with
+# Secret/user-apps-source-auth, and the marketplace-ui installer writes to the same
+# HTTP url — so NOTHING currently reads the keypair. It is still provisioned because
+# (a) the Secret's existence is this Job's idempotency guard and the operator's
+# override hook, (b) cold-boot-repro.sh deletes it to force a reseed, and (c) it is
+# the provisioning half of the deferred ssh transport. Removing it is a follow-up
+# with its own cold-boot verification — see the design doc's Deferred section.
+```
+
+- [ ] **Step 3: Fix the false claim in the AUTH NOTE**
 
 The note claims `DELETE` works on the contents API. It does not — three request
 shapes were live-probed and all returned an unrouted HTML `404`, which is the
@@ -1699,7 +1949,7 @@ reason this whole change needs a git client. Replace that bullet:
 #     performs all repo mutations over git instead of the provider's REST API.
 ```
 
-- [ ] **Step 3: Verify**
+- [ ] **Step 4: Verify**
 
 Run: `bash -n infrastructure/user-apps-source/bootstrap-ssh-key/bootstrap-ssh-key.sh && echo "syntax OK"`
 Expected: `syntax OK`.
@@ -1710,10 +1960,16 @@ Expected: `0`.
 Run: `grep -n "git add" infrastructure/user-apps-source/bootstrap-ssh-key/bootstrap-ssh-key.sh`
 Expected: `git add README.md` only.
 
+Run: `grep -n "cannot affect" infrastructure/user-apps-source/bootstrap-ssh-key/bootstrap-ssh-key.sh`
+Expected: no output (the overclaim never made it into the seeded README).
+
+Run: `grep -n "instead of HTTP basic auth" infrastructure/user-apps-source/bootstrap-ssh-key/bootstrap-ssh-key.sh`
+Expected: no output (the header no longer describes the old transport).
+
 Run: `kustomize build infrastructure/user-apps-source > /dev/null && echo OK`
 Expected: `OK` (the script is embedded via configMapGenerator).
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add infrastructure/user-apps-source/bootstrap-ssh-key/bootstrap-ssh-key.sh
@@ -1728,29 +1984,37 @@ git commit -m "fix(user-apps-source): seed README only, never a root kustomizati
 - Modify: `ui/Dockerfile`
 
 **Interfaces:**
-- Consumes: `GitClient` spawns `git`; `GitRemoteService` builds an `ssh` command.
-- Produces: a runtime image where both binaries exist.
+- Consumes: `GitClient` spawns `git`.
+- Produces: a runtime image with `git` — and deliberately **without** `openssh-client`.
 
-- [ ] **Step 1: Add the packages to the production stage**
+- [ ] **Step 1: Add the package to the production stage**
 
 In the `FROM node:22-alpine AS production` stage, immediately after `WORKDIR /app`:
 
 ```dockerfile
 # The installer performs every app-store repo mutation over git (the provider's
 # REST contents API has no DELETE route, so file removal is impossible there —
-# see issue #182). openssh-client provides the ssh transport GIT_SSH_COMMAND
-# drives; Flux's GitRepository for this repo is an ssh:// URL.
-RUN apk add --no-cache git openssh-client
+# see issue #182). git only: the app-store remote is an http(s) URL, and the ssh
+# transport is deliberately not shipped in this release (design §3), so
+# openssh-client would be unused attack surface.
+RUN apk add --no-cache git
 ```
 
-- [ ] **Step 2: Build and verify both binaries are present**
+- [ ] **Step 2: Build and verify the binary set**
 
 Run:
 ```bash
 docker build -t marketplace-ui:182-check ui
-docker run --rm --entrypoint sh marketplace-ui:182-check -c 'git --version && ssh -V'
+docker run --rm --entrypoint sh marketplace-ui:182-check -c 'git --version'
 ```
-Expected: a git version line and an OpenSSH version line, exit 0.
+Expected: a git version line, exit 0.
+
+Run:
+```bash
+docker run --rm --entrypoint sh marketplace-ui:182-check -c 'command -v ssh && echo UNEXPECTED || echo "no ssh, as intended"'
+```
+Expected: `no ssh, as intended`. This is a guard, not trivia — if `ssh` reappears
+it means someone re-added the untested transport.
 
 - [ ] **Step 3: Verify the server still boots in the image**
 
@@ -1764,7 +2028,7 @@ Expected: `dist OK`.
 
 ```bash
 git add ui/Dockerfile
-git commit -m "build(marketplace-ui): install git + openssh-client in the runtime image (#182)"
+git commit -m "build(marketplace-ui): install git in the runtime image (#182)"
 ```
 
 ---
@@ -1781,8 +2045,15 @@ git commit -m "build(marketplace-ui): install git + openssh-client in the runtim
 - Produces: hermetic proof that uninstall now really deletes files and that an old-shape repo migrates.
 
 **Why Tier 1 can do this now:** its Gogs is reached over HTTP on 43000 (no port
-22), and it has no cluster — so the env override is mandatory, and the HTTP
-credential path is what gets exercised.
+22), and it has no cluster — so the env override is mandatory. Since Task 8 makes
+`http` the shipped transport, this tier now exercises the **production credential
+path**, not a test-only concession. That is the whole point of the transport
+decision: the fast, hermetic tier and the cluster run the same code.
+
+One thing Tier 1 still cannot catch, so do not read it as full coverage: its URL
+uses port **43000**, a non-default port. The default-port credential bug guarded by
+`git-remote.service.spec.ts` (`http://…:80` → `URL.host` drops the `:80`) is
+invisible here. That guard lives in the unit tests on purpose.
 
 - [ ] **Step 1: Point the server at the git remote**
 
@@ -1791,8 +2062,8 @@ In `tier1.config.ts`, replace the three `GOGS_*` entries in `webServer.env` with
 ```ts
       // The installer performs repo mutations over git, not the provider API.
       // Tier 1 has no cluster, so GitRepository discovery is impossible — this
-      // override is the documented test seam. HTTP (not ssh): the compose maps
-      // only 43000 → gogs:3000, there is no port 22.
+      // override is the documented test seam. Same transport as production (http);
+      // the compose maps only 43000 → gogs:3000 and there is no port 22.
       USER_APPS_GIT_URL: "http://127.0.0.1:43000/flux/user-apps.git",
       USER_APPS_GIT_BRANCH: "master",
       USER_APPS_GIT_USERNAME: "flux",
@@ -1831,6 +2102,7 @@ printf 'apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresour
 mkdir -p apps/orphan-probe
 printf 'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: orphan-probe\n' > apps/orphan-probe/release.yaml
 git add kustomization.yaml apps/orphan-probe
+```
 
 - [ ] **Step 3: Write the failing spec**
 
@@ -1922,6 +2194,7 @@ git commit -m "test(marketplace-ui): cover git-backed install/uninstall and the 
 **Files:**
 - Create: `ui/packages/e2e/tests/cluster-level/broken-app-isolation.spec.ts`
 - Modify: `ui/packages/e2e/support/cold-boot-repro.sh`
+- Modify: `ui/packages/e2e/support/run-tier2.sh`
 
 **Interfaces:**
 - Consumes: the Flux layers from Task 8.
@@ -1939,76 +2212,181 @@ import { execFileSync } from "node:child_process";
  * #182's acceptance criterion, executable: ONE broken app must not turn any
  * shared Flux object Ready=False.
  *
- * The break is deliberately at the app's own layer — a nonexistent OCI tag makes
- * OCIRepository/marketplace-<app> fail, so Kustomization/marketplace-<app> can
- * never become Ready. Its YAML stays valid, so `user-apps` still builds and
- * applies; only the app's own object degrades.
+ * THE BREAK IS DECLARATIVE — committed to the app-store repo, never patched onto
+ * the live object. A `kubectl patch` of the app's OCIRepository is reverted by
+ * kustomize-controller's drift correction within one `user-apps` interval (1m,
+ * design F16), so a patch-based version of this test races its own assertions and
+ * flakes. Committing the break makes it the DESIRED state: Flux enforces it
+ * instead of healing it. It also exercises the new "presence in the repo IS the
+ * declaration" contract, which is the other half of #182.
+ *
+ * The probe app is synthetic and absent from the catalog, so `enrich()` never
+ * surfaces it and no other spec can observe it — which is also why it does not
+ * collide with `reconcile-lifecycle.spec.ts`'s `pickApp()` app the way breaking a
+ * real app would. Nothing to clean up: this gogs release has no DELETE route
+ * (design F8) and `run-tier2.sh` destroys the cluster — and with it the in-cluster
+ * Gogs — at the end of the run.
  */
-function ready(kind: string, name: string): string {
-  const out = execFileSync("kubectl", [
-    "get", kind, name, "-n", "flux-system",
-    "-o", 'jsonpath={.status.conditions[?(@.type=="Ready")].status}',
-  ], { encoding: "utf8" });
-  return out.trim();
+const APP = "broken-probe-182";
+const NS = "marketplace-ui";
+
+function kubectl(args: string[]): string {
+  return execFileSync("kubectl", args, { encoding: "utf8" });
 }
 
-const BROKEN = "whoami";
+/** Strict: throws if the object is missing. Use for the real assertions. */
+function ready(kind: string, name: string): string {
+  return kubectl([
+    "get", kind, name, "-n", "flux-system",
+    "-o", 'jsonpath={.status.conditions[?(@.type=="Ready")].status}',
+  ]).trim();
+}
+
+/** Tolerant: "absent" until Flux has applied it. Use only inside expect.poll. */
+function readyOrAbsent(kind: string, name: string): string {
+  try {
+    return ready(kind, name);
+  } catch {
+    return "absent";
+  }
+}
+
+/**
+ * Valid YAML that applies cleanly and can never become Ready: the OCI tag does not
+ * exist, so the OCIRepository never produces an artifact. Keeping the YAML VALID is
+ * essential — malformed YAML fails the whole-tree build (design F6) and would turn
+ * `user-apps` Ready=False, destroying this test's premise instead of testing it.
+ */
+function brokenAppFiles(): Record<string, string> {
+  const meta = (kind: string, apiVersion: string) => [
+    `apiVersion: ${apiVersion}`,
+    `kind: ${kind}`,
+    "metadata:",
+    `  name: marketplace-${APP}`,
+    "  namespace: flux-system",
+    "  labels:",
+    `    marketplace.io/app: ${APP}`,
+  ];
+  return {
+    [`apps/${APP}/source.yaml`]: [
+      ...meta("OCIRepository", "source.toolkit.fluxcd.io/v1"),
+      "spec:",
+      "  interval: 1m",
+      "  url: oci://ghcr.io/librepod/marketplace/apps/whoami",
+      "  ref:",
+      '    tag: "0.0.0-does-not-exist"',
+      "",
+    ].join("\n"),
+    [`apps/${APP}/release.yaml`]: [
+      ...meta("Kustomization", "kustomize.toolkit.fluxcd.io/v1"),
+      "spec:",
+      "  interval: 1m",
+      "  retryInterval: 1m",
+      "  timeout: 2m",
+      "  sourceRef:",
+      "    kind: OCIRepository",
+      `    name: marketplace-${APP}`,
+      "  path: ./overlays/librepod",
+      "  prune: true",
+      "  wait: true",
+      "",
+    ].join("\n"),
+    [`apps/${APP}/kustomization.yaml`]: [
+      "apiVersion: kustomize.config.k8s.io/v1beta1",
+      "kind: Kustomization",
+      "resources:",
+      "  - source.yaml",
+      "  - release.yaml",
+      "",
+    ].join("\n"),
+  };
+}
+
+/**
+ * Commit `apps/<APP>/` through the Gogs contents API, executed from INSIDE the
+ * server pod — the same route `run-tier2.sh`'s diagnostics take, and the only one
+ * with both the credential and in-cluster DNS. PUT to a path that does not exist
+ * creates it (201), so no `sha` read-modify-write is needed. Basic auth mints the
+ * token; contents needs `token <sha1>` (the #180 auth matrix).
+ */
+function commitBrokenApp(): void {
+  const pod = kubectl([
+    "get", "pods", "-n", NS, "-l", "app.kubernetes.io/name=marketplace-ui",
+    "-o", "jsonpath={.items[0].metadata.name}",
+  ]).trim();
+
+  const script = `
+    const { readFileSync } = require('node:fs');
+    const dir = process.env.USER_APPS_GIT_CREDENTIALS_DIR || '/etc/user-apps-git';
+    const u = readFileSync(dir + '/username', 'utf8').trim();
+    const p = readFileSync(dir + '/password', 'utf8').trim();
+    const G = 'http://gogs.gogs.svc.cluster.local.:80';
+    const files = ${JSON.stringify(brokenAppFiles())};
+    (async () => {
+      const t = await fetch(G + '/api/v1/users/' + u + '/tokens', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Basic ' + Buffer.from(u + ':' + p).toString('base64'),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: 'broken-probe-' + process.pid }),
+      });
+      if (!t.ok) throw new Error('token mint -> ' + t.status);
+      const tok = (await t.json()).sha1;
+      for (const [path, content] of Object.entries(files)) {
+        const r = await fetch(G + '/api/v1/repos/' + u + '/user-apps/contents/' + path, {
+          method: 'PUT',
+          headers: { Authorization: 'token ' + tok, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: 'test: plant a deliberately broken app (#182)',
+            content: Buffer.from(content).toString('base64'),
+          }),
+        });
+        if (!r.ok) throw new Error('PUT ' + path + ' -> ' + r.status);
+      }
+      console.log('planted');
+    })().catch((e) => { console.error(e.message); process.exit(1); });
+  `;
+
+  expect(
+    kubectl(["exec", "-n", NS, pod, "-c", "marketplace-ui", "--", "node", "-e", script]),
+  ).toContain("planted");
+}
 
 test.describe("broken-app isolation (#182)", () => {
-  test.describe.configure({ retries: 0, timeout: 600_000 });
+  // Longer than the other cluster specs: it deliberately waits out two `user-apps`
+  // reconciles to prove the break is stable rather than racing drift correction.
+  test.describe.configure({ retries: 0, timeout: 900_000 });
 
   test("a broken app degrades alone; the shared objects and the UI stay Ready", async ({ request }) => {
-    const install = await request.post(`/api/apps/${BROKEN}/install`);
-    expect(install.ok()).toBeTruthy();
+    commitBrokenApp();
 
-    // Break only this app: point its OCIRepository at a tag that does not exist.
-    await expect.poll(
-      () => {
-        try {
-          execFileSync("kubectl", [
-            "get", "ocirepository", `marketplace-${BROKEN}`, "-n", "flux-system",
-          ], { stdio: "ignore" });
-          return true;
-        } catch {
-          return false;
-        }
-      },
-      { message: "the app's OCIRepository appears", timeout: 180_000, intervals: [5_000] },
-    ).toBe(true);
-
-    execFileSync("kubectl", [
-      "patch", "ocirepository", `marketplace-${BROKEN}`, "-n", "flux-system",
-      "--type", "json",
-      "-p", '[{"op":"replace","path":"/spec/ref/tag","value":"0.0.0-does-not-exist"}]',
-    ]);
-
-    await expect.poll(() => ready("kustomization", `marketplace-${BROKEN}`), {
-      message: `marketplace-${BROKEN} goes Ready=False`,
+    await expect.poll(() => readyOrAbsent("kustomization", `marketplace-${APP}`), {
+      message: `marketplace-${APP} is applied and goes Ready=False`,
       timeout: 300_000,
       intervals: [10_000],
     }).toBe("False");
 
+    // STABILITY, not a snapshot. `user-apps` reconciles every 1m; surviving ~2.5
+    // intervals proves Flux is enforcing the broken state, not healing it. If this
+    // assertion ever fails, the break mechanism has regressed to something Flux
+    // overwrites — which is exactly the flake this test was rewritten to remove.
+    await new Promise((resolve) => setTimeout(resolve, 150_000));
+    expect(ready("kustomization", `marketplace-${APP}`)).toBe("False");
+
     // The whole point: nothing shared degraded with it.
     expect(ready("kustomization", "user-apps-source")).toBe("True");
-    expect(ready("kustomization", "marketplace-ui")).toBe("True");
     expect(ready("kustomization", "user-apps")).toBe("True");
+    expect(ready("kustomization", "marketplace-ui")).toBe("True");
 
-    // And the installer UI is still usable — the tool you need to remove it.
-    const apps = await request.get("/api/apps");
-    expect(apps.ok()).toBeTruthy();
-
-    const uninstall = await request.post(`/api/apps/${BROKEN}/uninstall`);
-    expect(uninstall.ok()).toBeTruthy();
+    // And the installer UI is still serving — the tool you need to remove it.
+    // (That removal itself is covered by Tier 1's uninstall test and by
+    // reconcile-lifecycle; asserting it here would mutate state those specs share.)
+    expect((await request.get("/api/apps")).ok()).toBeTruthy();
+    expect((await request.get("/api/installed")).ok()).toBeTruthy();
   });
 });
 ```
-
-**Pick an app the lifecycle specs do not touch.** Tier 2 is serial and shares one
-cluster: `reconcile-lifecycle.spec.ts` installs an app via `pickApp(request)` and
-later tests act on it, so deliberately breaking that same app would fail them.
-`whoami` is the safe choice (a `Testing`-category fixture app), and
-`LIBREPOD_E2E_APP` can pin the lifecycle spec to a different one if they ever
-collide. This spec uninstalls what it broke, so the cluster is left clean.
 
 - [ ] **Step 2: Run it against a fresh k3d cluster**
 
@@ -2050,20 +2428,58 @@ un-seeded state, so it reconciles `user-apps-source` as well as `user-apps`:
   flux_request_reconcile kustomization user-apps-source
 ```
 
-- [ ] **Step 4: Verify the harness on the dev cluster**
+- [ ] **Step 4: Repair the Tier 2 diagnostics probe**
 
-Run: `bash -n ui/packages/e2e/support/cold-boot-repro.sh && echo "syntax OK"`
+`run-tier2.sh`'s `dump_diagnostics()` reads the repo through the server pod using
+`GOGS_URL` / `GOGS_USERNAME` / `GOGS_TOKEN` and fetches
+`raw/master/kustomization.yaml`. **All three env vars are deleted by Task 7 and
+that file no longer exists**, so the probe would silently produce nothing —
+precisely when a Tier 2 failure needs it most. It is also the wrong tool now: the
+pod has a git working copy, which is a more direct answer to "what does the repo
+actually contain?".
+
+Replace that `kubectl exec … node -e '…'` block with a git read (no auth needed —
+it inspects the clone the server already maintains):
+
+```sh
+  if [ -n "$pod" ]; then
+    {
+      echo "== HEAD =="
+      kubectl exec -n "$NS" "$pod" -c marketplace-ui -- \
+        git -C /var/lib/user-apps/repo log --oneline -5 2>&1 || true
+      echo "== tree =="
+      kubectl exec -n "$NS" "$pod" -c marketplace-ui -- \
+        git -C /var/lib/user-apps/repo ls-tree -r --name-only HEAD 2>&1 || true
+      echo "== discovered remote =="
+      kubectl get gitrepository user-apps-source -n flux-system \
+        -o jsonpath='{.spec.url}{"\n"}{.status.conditions[*].message}{"\n"}' 2>&1 || true
+    } > "$DIAG_DIR/user-apps-repo-state.txt" 2>&1 || true
+  fi
+```
+
+An empty or missing working copy is itself the diagnosis (the server never reached
+the repo), so a failing `git -C` here is useful output rather than a problem.
+
+Also update the `dump_diagnostics` header comment, which currently describes "same
+calls as GogsService: Basic-auth token bootstrap, then GET raw/master/kustomization.yaml".
+
+- [ ] **Step 5: Verify the harness and the diagnostics**
+
+Run: `bash -n ui/packages/e2e/support/cold-boot-repro.sh && bash -n ui/packages/e2e/support/run-tier2.sh && echo "syntax OK"`
 Expected: `syntax OK`.
+
+Run: `grep -n "GOGS_URL\|GOGS_TOKEN\|raw/master/kustomization.yaml" ui/packages/e2e/support/run-tier2.sh`
+Expected: no output.
 
 Run: `ui/packages/e2e/support/cold-boot-repro.sh` (against the dev cluster,
 per the script's own kubeconfig handling)
 Expected: `GATE=HELD` and a 200 install after the seed is released — the #180
 guarantee still holds through the new gate.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add ui/packages/e2e/tests/cluster-level/broken-app-isolation.spec.ts ui/packages/e2e/support/cold-boot-repro.sh
+git add ui/packages/e2e/tests/cluster-level/broken-app-isolation.spec.ts ui/packages/e2e/support/cold-boot-repro.sh ui/packages/e2e/support/run-tier2.sh
 git commit -m "test(marketplace-ui): assert a broken app degrades alone; move the cold-boot gate (#182)"
 ```
 
@@ -2074,6 +2490,7 @@ git commit -m "test(marketplace-ui): assert a broken app degrades alone; move th
 **Files:**
 - Modify: `apps/marketplace-ui/metadata.yaml`, `apps/marketplace-ui/overlays/librepod/kustomization.yaml`, `infrastructure/system-apps/marketplace-ui.yaml`, `ui/package.json`
 - Modify: `ui/CLAUDE.md`, `docs/user-guide.md`, `docs/DECISIONS_LOG.md`
+- Modify: `.claude/skills/verify-app/SKILL.md`, `.claude/skills/verify-app/references/troubleshooting.md`
 
 **Interfaces:**
 - Consumes: everything above.
@@ -2113,10 +2530,32 @@ Four sections are now wrong; rewrite them:
 - **Configuration table**: drop `GOGS_URL`, `GOGS_USERNAME`, `GOGS_TOKEN`; add
   `USER_APPS_GIT_URL` (test seam — normally discovered), `USER_APPS_GIT_BRANCH`,
   `USER_APPS_GIT_USERNAME`, `USER_APPS_GIT_PASSWORD`,
-  `USER_APPS_GIT_CREDENTIALS_DIR`, `USER_APPS_WORK_DIR`.
+  `USER_APPS_GIT_CREDENTIALS_DIR`, `USER_APPS_WORK_DIR`. State that the transport
+  is `http(s)` **only** and that an `ssh://` remote is rejected at resolution —
+  otherwise the next reader assumes both work and debugs the wrong thing.
 
 Also update the Tier 1 gotcha that reads "**`GOGS_TOKEN` is the Gogs user's
 *password***" to describe the git HTTP credential instead.
+
+- [ ] **Step 2b: Update the `verify-app` skill**
+
+The skill documents the install flow it walks a user through, and it is now not
+merely stale — one of its steps is actively undone by `migrateLayout()`.
+
+- `SKILL.md:187` "Update the root `kustomization.yaml` in the repo to include the
+  new app" → committing `apps/<name>/` **is** the install; there is no root file.
+  Left as-is, following the skill would add a root file that the next server boot
+  deletes.
+- `SKILL.md:292` "Remove from root kustomization.yaml" → delete the app directory
+  and commit.
+- `SKILL.md:159`'s repo-layout sketch → show `apps/<name>/` with no root file.
+- `references/troubleshooting.md:129` "Root `kustomization.yaml` in user-apps repo
+  doesn't reference the app directory" → replace with the real failure mode now:
+  a malformed YAML file anywhere in the tree fails the whole-tree build (design
+  F6), and `user-apps` reports it.
+- `references/troubleshooting.md:109` "Authentication secret `user-apps-source-auth`
+  expired or missing" → still the right Secret name after Task 8, but say what it
+  is now: the HTTP basic credential Flux **and** the installer both use.
 
 - [ ] **Step 3: Fix `docs/user-guide.md` §3.3**
 
@@ -2131,10 +2570,15 @@ The manual flow is stale and would now be wrong in a new way. Change:
 
 `docs/DECISIONS_LOG.md` is append-only. Per its own convention, mark the old row
 rather than rewriting it: prefix row 6's Decision cell with
-`**Superseded by #182.**` and leave the rest of its text intact. Then append:
+`**Superseded by row 7.**` and leave the rest of its text intact. (The log numbers
+*decisions*, not issues — pointing row 6 at "#182" would send a reader to GitHub
+instead of to the row two lines below.) Then append **two** rows — the layer/git
+change and the transport change are separate decisions with separate rationales,
+and a future reader will want to reverse one without the other:
 
 ```
-| 7 | 2026-08-19 | marketplace-ui | Split the app-store wiring into three Flux layers with distinct meanings — `user-apps-source` (Ready ⇔ a selective healthCheck on GitRepository/user-apps-source, i.e. the git source is seeded), `user-apps` (`wait: false`, apply-only), `marketplace-<app>` (`wait: true`, that app's health) — gate `marketplace-ui` on the first; drop the shared root `kustomization.yaml` in favour of Flux's auto-generated one; and perform every repo mutation with a generic git client instead of the provider's REST API (issue #182) | `user-apps` with `wait: true` health-checked every per-app Kustomization it applied, so ONE unhealthy app turned the shared object `Ready=False` and, via #180's gate, could block re-applying the installer UI — the tool needed to remove it. Apps already had their own Kustomizations, so the fix was to dissolve the aggregate, not to redesign installs. The root file was also a shared mutable allow-list serialising every install; removing it makes install/uninstall one atomic commit each and retires the "Pitfall 3" write-ordering rule. The git client is required, not preferred: this Gogs release has NO DELETE route on its contents API (live-probed), so uninstall could never delete an app's files over REST — and git is what makes the repo pluggable to GitHub or GitLab. |
+| 7 | 2026-08-19 | marketplace-ui | Split the app-store wiring into three Flux layers with distinct meanings — `user-apps-source` (Ready ⇔ a selective healthCheck on GitRepository/user-apps-source, i.e. the git source is seeded), `user-apps` (`wait: false`, apply-only), `marketplace-<app>` (`wait: true`, that app's health) — gate `marketplace-ui` on the first; drop the shared root `kustomization.yaml` in favour of Flux's auto-generated one; and perform every repo mutation with a generic git client instead of the provider's REST API (issue #182) | `user-apps` with `wait: true` health-checked every per-app Kustomization it applied, so ONE unhealthy app turned the shared object `Ready=False` and, via #180's gate, could block re-applying the installer UI — the tool needed to remove it. Apps already had their own Kustomizations, so the fix was to dissolve the aggregate, not to redesign installs. The root file was also a shared mutable allow-list serialising every install; removing it makes install/uninstall one atomic commit each and retires the "Pitfall 3" write-ordering rule. The git client is required, not preferred: this Gogs release has NO DELETE route on its contents API (live-probed), so uninstall could never delete an app's files over REST — and git is what makes the repo pluggable to GitHub or GitLab. Note this buys HEALTH isolation, not build isolation: with the whole tree as the build input, one malformed YAML file still fails the build for every app. |
+| 8 | 2026-08-19 | marketplace-ui | Move `GitRepository/user-apps-source` back to `http://` + `Secret/user-apps-source-auth` (with a trailing-dot FQDN) and ship the installer with the `http(s)` git transport only; `ssh://` is rejected at resolution and deferred. Supersedes the SSH switch made in #50 | The installer writes to the URL it discovers from that object, so both sides share one transport — and the only hermetic test tier reaching Gogs does so over HTTP with no port 22, so SSH would have shipped as the one transport no fast test covers. SSH's original rationale ("no baked-in credential") no longer held: the flux account's password is a committed literal reflected into two namespaces, so the keypair bought ceremony rather than secrecy, at a cost of ~80 lines of bootstrap shell and `openssh-client` in the app image. It also lets the URL use the absolute (trailing-dot) hostname that `marketplace-ui`'s `GOGS_URL` needed in production — a 4-dot name is search-expanded and, where the app zone is in the pod's search list, rewritten to Traefik — whereas an ssh URL could not take that dot without re-keying `known_hosts`. Accepted trade-off: basic auth crosses the pod network in plaintext (cluster-internal, single-node appliance, password already public). Revisit in-cluster TLS or SSH when that credential is rotated. |
 ```
 
 - [ ] **Step 5: Full verification sweep**
@@ -2154,10 +2598,24 @@ Expected: `manifests OK`.
 Run: `git grep -n "GOGS_URL\|GogsService\|addToRootKustomization\|ensureWritableToken" -- ':!docs' ':!*.md'`
 Expected: no output.
 
+Run: `git grep -n "GIT_SSH_COMMAND\|openssh-client\|ssh-keyscan" -- ui/`
+Expected: no output — no unexercised transport shipped in the app or its image.
+
+Run: `git grep -n "user-apps-ssh-key" -- apps/ infrastructure/`
+Expected: hits **only** in `infrastructure/user-apps-source/bootstrap-ssh-key/`
+(the Job still provisions it) — and none under `apps/marketplace-ui/`, which must
+mount `user-apps-git-auth` instead.
+
+Run: `grep -n "cluster.local:22" infrastructure/user-apps-source/gitrepository.yaml`
+Expected: no output — the GitRepository no longer points at the ssh transport.
+(Do **not** widen this grep to all of `infrastructure/`: the bootstrap Job uses a
+dotless in-cluster URL and works today, which is one half of design F13's open
+question. Changing it is out of scope here.)
+
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/marketplace-ui/metadata.yaml apps/marketplace-ui/overlays/librepod/kustomization.yaml infrastructure/system-apps/marketplace-ui.yaml ui/package.json ui/CLAUDE.md docs/user-guide.md docs/DECISIONS_LOG.md
+git add apps/marketplace-ui/metadata.yaml apps/marketplace-ui/overlays/librepod/kustomization.yaml infrastructure/system-apps/marketplace-ui.yaml ui/package.json ui/CLAUDE.md docs/user-guide.md docs/DECISIONS_LOG.md .claude/skills/verify-app
 git commit -m "release(marketplace-ui): 0.6.0 — per-app isolation + git write layer (#182)"
 ```
 
@@ -2170,12 +2628,27 @@ published `:latest` and the `ref.tag` pin is what actually moves a cluster.
 
 1. `flux get kustomizations -n flux-system` — `user-apps-source`, `user-apps`,
    `marketplace-ui` all `Ready=True`; `user-apps` shows no `Healthy` condition
-   (it no longer health-checks).
-2. Confirm the repo migrated: its tree has no root `kustomization.yaml` and no
+   (it no longer health-checks). Also confirm `GitRepository/user-apps-source` is
+   Ready on the **http** URL (`kubectl get gitrepository user-apps-source -n
+   flux-system -o jsonpath='{.spec.url}'`) — this is the first live proof of the
+   transport flip, and it is the same URL the installer will discover.
+2. Confirm the credential wiring end-to-end: `Secret/user-apps-git-auth` exists in
+   `marketplace-ui` **with data** (Reflector filled the placeholder), and the old
+   `gogs-auth` Secret is gone (pruned). Then delete `user-apps-git-auth` once and
+   check the pod stays `Running` and `/api/health` still answers — that is the
+   whole point of the placeholder, and it is worth proving once by hand since no
+   automated tier covers a live Reflector.
+3. Confirm the repo migrated: its tree has no root `kustomization.yaml` and no
    orphaned app directories.
-3. Install and uninstall one app through the UI; confirm the app's directory
-   appears and then disappears, each in a single commit.
-4. Run `ui/packages/e2e/support/cold-boot-repro.sh` — expect `GATE=HELD` plus a
+4. Install and uninstall one app through the UI; confirm the app's directory
+   appears and then disappears, each in a single commit. This is also the live
+   proof that the default-port credential entry is right — an auth failure here
+   means the `URL.host` bug is back (Task 2), and Tier 1 would not have caught it.
+5. Run `ui/packages/e2e/support/cold-boot-repro.sh` — expect `GATE=HELD` plus a
    200 install after release.
-5. Break one app (patch its OCIRepository tag) and confirm only its own
-   Kustomization degrades.
+6. Break one app and confirm only its own Kustomization degrades. Break it the way
+   Task 12 does — **commit** a bad tag — not with `kubectl patch`, which Flux
+   reverts within a minute (design F16).
+7. Answer design F13 on a device: `kubectl exec -n marketplace-ui
+   deploy/marketplace-ui -c marketplace-ui -- cat /etc/resolv.conf`, and record
+   whether `search` carries the app zone.
