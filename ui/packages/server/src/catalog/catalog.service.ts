@@ -16,6 +16,7 @@ export class CatalogService implements OnModuleInit, OnModuleDestroy {
   private apps: CatalogApp[] = [];
   private watcher: fs.FSWatcher | null = null;
   private reloadTimer: ReturnType<typeof setTimeout> | null = null;
+  private loadedOnce = false;
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -49,13 +50,23 @@ export class CatalogService implements OnModuleInit, OnModuleDestroy {
       this.apps = (catalog.apps ?? []).filter(
         (app) => app.category !== 'Infrastructure',
       );
+      this.loadedOnce = true;
       this.logger.log(
         `Loaded ${this.apps.length} user-facing apps from catalog`,
       );
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Failed to load catalog: ${message}`);
-      this.apps = [];
+      if (this.loadedOnce) {
+        // The mounted ConfigMap is updated in place (stable name); the kubelet
+        // symlink swap can briefly make the file unreadable. Keep serving the
+        // last-good list rather than blanking the catalog.
+        this.logger.warn(
+          `Failed to reload catalog, keeping last-good list (${this.apps.length} apps): ${message}`,
+        );
+      } else {
+        this.logger.error(`Failed to load catalog: ${message}`);
+        this.apps = [];
+      }
     }
   }
 

@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as path from 'node:path';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CatalogService } from './catalog.service';
@@ -103,6 +105,60 @@ describe('CatalogService', () => {
       // Even if you ask for an infrastructure app by name, it should not be found
       const result = service.findOne('traefik');
       expect(result).toBeUndefined();
+    });
+  });
+
+  describe('hot-reload resilience', () => {
+    let tmpDir: string;
+    let catalogPath: string;
+    let tmpModule: TestingModule;
+    let tmpService: CatalogService;
+
+    beforeEach(async () => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'catalog-test-'));
+      catalogPath = path.join(tmpDir, 'catalog.yaml');
+      fs.copyFileSync(FIXTURE_PATH, catalogPath);
+
+      tmpModule = await Test.createTestingModule({
+        imports: [ConfigModule.forRoot({ isGlobal: true })],
+        providers: [
+          CatalogService,
+          {
+            provide: ConfigService,
+            useValue: {
+              get: (key: string, defaultValue?: string) =>
+                key === 'CATALOG_PATH' ? catalogPath : defaultValue,
+            },
+          },
+        ],
+      }).compile();
+      tmpService = tmpModule.get<CatalogService>(CatalogService);
+      await tmpModule.init();
+    });
+
+    afterEach(async () => {
+      await tmpModule.close();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('keeps the last-good app list when a reload fails', () => {
+      const before = tmpService.findAll();
+      expect(before).toHaveLength(3);
+
+      fs.writeFileSync(catalogPath, 'apps: [unclosed\n');
+      (tmpService as unknown as { loadCatalog: () => void }).loadCatalog();
+
+      expect(tmpService.findAll()).toEqual(before);
+    });
+
+    it('swaps the app list when a reload succeeds', () => {
+      fs.writeFileSync(
+        catalogPath,
+        ['apiVersion: marketplace/v1', 'kind: Catalog', 'apps: []'].join('\n'),
+      );
+      (tmpService as unknown as { loadCatalog: () => void }).loadCatalog();
+
+      expect(tmpService.findAll()).toHaveLength(0);
     });
   });
 });
