@@ -25,6 +25,10 @@ spec:
       # Gatus is Go: point it at the merged CA bundle so OIDC calls to
       # id.<BASE_DOMAIN> (private LibrePod CA) verify.
       SSL_CERT_FILE: "/etc/ssl/certs/ca-certificates.crt"
+      # Directory config composition: gatus deep-merges every *.yaml in
+      # /config AND its subdirectories (endpoint arrays append). The platform
+      # fragment is /config/config.yaml; user fragments live in /config/user/.
+      GATUS_CONFIG_PATH: "/config"
     # OIDC client credentials, written at runtime by casdoor-sso-controller.
     envFrom:
     - secretRef:
@@ -59,3 +63,35 @@ spec:
       mountPath: /etc/ssl/certs/ca-certificates.crt
       subPath: ca-certificates.crt
       readOnly: true
+    # User-owned endpoints (see docs/user-endpoints.md): mounted into the
+    # composed config directory. The ConfigMap is created manually by the
+    # user in their user-apps repo — the volume is optional (postRenderers
+    # patch below) so a fresh install runs before the user adds anything.
+    - name: gatus-user-config
+      mountPath: /config/user
+      readOnly: true
+      existingConfigMap: gatus-user-config
+  # The chart's extraVolumeMounts auto-created volumes expose no `optional`
+  # flag, and a ConfigMap volume referencing a missing ConfigMap blocks pod
+  # creation. Patch helm's output so gatus-user-config is optional: mounts as
+  # an empty volume until the user creates it. Strategic-merge volumes by
+  # name key — no index brittleness.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+              name: gatus
+            patch: |-
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: gatus
+              spec:
+                template:
+                  spec:
+                    volumes:
+                      - name: gatus-user-config
+                        configMap:
+                          name: gatus-user-config
+                          optional: true
