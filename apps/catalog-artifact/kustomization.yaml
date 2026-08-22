@@ -1,0 +1,19 @@
+# Template staged by .github/workflows/publish-catalog.yaml into the
+# marketplace/catalog OCI artifact next to the generated catalog.yaml.
+# Rendered on each cluster by infrastructure/system-apps/marketplace-catalog.yaml.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: marketplace-ui
+
+configMapGenerator:
+- name: marketplace-ui-catalog
+  files:
+  - catalog.yaml
+  options:
+    disableNameSuffixHash: true
+    # The catalog embeds ${VAR} placeholders (FRP_SERVER_ADDR, BASE_DOMAIN, ...)
+    # as literal content inside app install templates — resolved by the
+    # marketplace installer at user-install time, not by anything at render time.
+    annotations:
+      kustomize.toolkit.fluxcd.io/substitute: disabled

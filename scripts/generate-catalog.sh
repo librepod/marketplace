@@ -6,7 +6,6 @@ set -e
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CATALOG_FILE="${REPO_ROOT}/catalog.yaml"
-CONFIGMAP_CATALOG="${REPO_ROOT}/apps/marketplace-ui/base/catalog.yaml"
 
 # Extract a YAML literal block value from spec.templates.<key> in metadata.yaml
 # Outputs the content with 4-space indent (to nest under the app entry)
@@ -48,7 +47,7 @@ HEADER
 sed -i "s/TIMESTAMP/$(date -u +%Y-%m-%dT%H:%M:%SZ)/" "$CATALOG_FILE"
 
 # Find all metadata.yaml files
-for metadata_file in "$REPO_ROOT"/apps/*/metadata.yaml; do
+for metadata_file in $(printf '%s\n' "$REPO_ROOT"/apps/*/metadata.yaml | LC_ALL=C sort); do
   app_dir=$(dirname "$metadata_file")
   app_name=$(basename "$app_dir")
 
@@ -137,9 +136,5 @@ if grep -q '__VERSION__' "$CATALOG_FILE"; then
   echo "ERROR: __VERSION__ sentinel leaked into catalog.yaml" >&2; exit 1
 fi
 
-# Copy to marketplace-ui ConfigMap source
-cp "$CATALOG_FILE" "$CONFIGMAP_CATALOG"
-
 echo
 echo "Catalog written to: $CATALOG_FILE"
-echo "ConfigMap catalog:  $CONFIGMAP_CATALOG"
