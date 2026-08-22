@@ -126,3 +126,83 @@ describe('UserAppsRepoService reads', () => {
     expect(await svc.listInstalledApps()).toEqual(['baikal']); // re-cloned, not wedged
   });
 });
+
+describe('UserAppsRepoService writes', () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'user-apps-write-spec-'));
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+    vi.restoreAllMocks();
+  });
+
+  /** Read a path out of the origin, proving the change was actually pushed. */
+  async function inOrigin(origin: string, rel: string): Promise<string> {
+    const { stdout } = await new GitClient().run(origin, ['show', `master:${rel}`]);
+    return stdout;
+  }
+
+  it('writes an app as ONE commit containing all its files', async () => {
+    const origin = await seedOrigin(root, {});
+    const svc = makeService(root, origin);
+
+    await svc.writeApp('vaultwarden', {
+      'source.yaml': 'kind: OCIRepository\n',
+      'release.yaml': 'kind: Kustomization\n',
+      'kustomization.yaml': 'resources:\n  - source.yaml\n',
+    });
+
+    expect(await inOrigin(origin, 'apps/vaultwarden/source.yaml')).toContain('OCIRepository');
+    expect(await inOrigin(origin, 'apps/vaultwarden/release.yaml')).toContain('Kustomization');
+    const { stdout: log } = await new GitClient().run(origin, ['log', '--oneline', 'master']);
+    expect(log.trim().split('\n')).toHaveLength(2); // seed + one install commit
+  });
+
+  it('removeApp deletes the whole app directory in one commit', async () => {
+    const origin = await seedOrigin(root, {
+      'apps/baikal/release.yaml': 'kind: Kustomization\n',
+      'apps/baikal/kustomization.yaml': 'resources: []\n',
+    });
+    const svc = makeService(root, origin);
+
+    await svc.removeApp('baikal');
+
+    const { stdout } = await new GitClient().run(origin, ['ls-tree', '-r', '--name-only', 'master']);
+    expect(stdout).not.toContain('apps/baikal');
+    expect(stdout).toContain('README.md');
+  });
+
+  it('retries the push after a concurrent commit lands on the remote', async () => {
+    const origin = await seedOrigin(root, {});
+    const svc = makeService(root, origin);
+    await svc.listInstalledApps(); // establish the working copy
+
+    // Simulate a human pushing between our fetch and our push: the first push
+    // is rejected non-fast-forward, the retry re-fetches and re-applies.
+    const git = new GitClient();
+    const other = join(root, 'other');
+    await git.clone(fileUrl(origin), other, 'master', NO_AUTH);
+    await mkdir(join(other, 'apps', 'manual'), { recursive: true });
+    await writeFile(join(other, 'apps/manual/release.yaml'), 'kind: Kustomization\n');
+    await git.stageAll(other);
+    await git.commit(other, 'manual edit');
+    await git.run(other, ['push', 'origin', 'master'], NO_AUTH);
+
+    await svc.writeApp('litellm', { 'release.yaml': 'kind: Kustomization\n' });
+
+    // BOTH changes survive — the retry must not clobber the other writer.
+    const { stdout } = await new GitClient().run(origin, ['ls-tree', '-r', '--name-only', 'master']);
+    expect(stdout).toContain('apps/litellm/release.yaml');
+    expect(stdout).toContain('apps/manual/release.yaml');
+  });
+
+  it('throws (and writes nothing) when the remote is unreachable', async () => {
+    const svc = makeService(root, join(root, 'never-existed.git'));
+    await expect(
+      svc.writeApp('vaultwarden', { 'release.yaml': 'kind: Kustomization\n' }),
+    ).rejects.toThrow(/app-store repo unavailable/);
+  });
+});

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { readdir, mkdir, access, rm } from 'node:fs/promises';
+import { readdir, mkdir, access, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { GitClient } from './git-client';
 import { GitRemoteService, type GitRemote } from './git-remote.service';
@@ -125,5 +125,55 @@ export class UserAppsRepoService {
     } catch {
       return []; // no apps/ directory yet
     }
+  }
+
+  /**
+   * Apply an idempotent mutation to the repo as exactly one commit.
+   *
+   * `mutate` must be idempotent because it is replayed on a push retry: a
+   * non-fast-forward rejection means someone else committed, so we hard-reset to
+   * the new origin tip and re-apply. Resetting BEFORE re-applying is what keeps
+   * the other writer's commit intact.
+   */
+  private async commitAndPush(message: string, mutate: () => Promise<void>): Promise<void> {
+    const remote = await this.remote.resolve();
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await this.syncWorkingCopy(true);
+      await mutate();
+      await this.git.stageAll(this.repoDir);
+      const committed = await this.git.commit(this.repoDir, message);
+      this.invalidateFreshness();
+      if (!committed) return; // already in the desired state
+
+      try {
+        await this.git.push(this.repoDir, remote.branch, remote.auth);
+        return;
+      } catch (error: unknown) {
+        lastError = error;
+        this.logger.warn(
+          `push rejected (attempt ${attempt + 1}/2), re-syncing and retrying: ` +
+            (error instanceof Error ? error.message : String(error)),
+        );
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+
+  async writeApp(name: string, files: Record<string, string>): Promise<void> {
+    await this.commitAndPush(`install ${name}`, async () => {
+      const dir = join(this.repoDir, 'apps', name);
+      await mkdir(dir, { recursive: true });
+      for (const [file, content] of Object.entries(files)) {
+        await writeFile(join(dir, file), content);
+      }
+    });
+  }
+
+  async removeApp(name: string): Promise<void> {
+    await this.commitAndPush(`uninstall ${name}`, async () => {
+      await this.git.removePath(this.repoDir, `apps/${name}`);
+    });
   }
 }
