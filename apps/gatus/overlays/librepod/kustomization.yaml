@@ -1,0 +1,48 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: gatus
+
+resources:
+- ../../base
+- ingressroute.yaml
+- ssoclient.yaml
+
+configMapGenerator:
+# Gatus application configuration (mounted at /config/config.yaml via the
+# chart's externalConfigMap hook).
+#
+# substitute: disabled is REQUIRED — the config's ${GATUS_SSO_*} /
+# ${GATUS_OIDC_*} / ${GATUS_SELF_URL} placeholders are expanded by Gatus at
+# runtime from pod env; Flux substitution would blank them (they are not in
+# the substitute map, and the OIDC credentials only exist at runtime anyway).
+#
+# disableNameSuffixHash is REQUIRED — the HelmRelease references this ConfigMap
+# by name through chart values (externalConfigMap), which kustomize
+# name-reference rewriting does not reach.
+#
+# The name MUST be exactly "gatus" (the chart's release fullname): the chart
+# hardcodes `envFrom: configMapRef: <fullname>` even when externalConfigMap is
+# set, so one ConfigMap serves both the /config volume and envFrom. (Its
+# config.yaml key becomes a harmless extra env var.)
+- name: gatus
+  options:
+    disableNameSuffixHash: true
+    annotations:
+      kustomize.toolkit.fluxcd.io/substitute: disabled
+  files:
+  - config.yaml=config.yaml
+# Reflector stub: replicates the LibrePod root CA from namespace step-ca so the
+# CA-merge init container can fuse it into the pod trust bundle. Stays EMPTY
+# here — Reflector fills it from the source. disableNameSuffixHash is REQUIRED
+# (Reflector keys its replication off this exact object name).
+- name: step-certificates-certs
+  options:
+    disableNameSuffixHash: true
+    annotations:
+      reflector.v1.k8s.emberstack.com/reflects: "step-ca/step-certificates-certs"
+
+patches:
+- path: ./patch-helmrelease.yaml
+  target:
+    kind: HelmRelease

@@ -1,0 +1,82 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: gatus
+spec:
+  displayName: "Gatus"
+  description: "Automated service health dashboard — uptime monitoring and status page with OIDC login"
+  icon: "https://raw.githubusercontent.com/TwiN/gatus/a1c8422c2ff2b9d0a6f184c99e4dc728d3f2cd75/web/static/logo-192x192.png"
+  category: "Monitoring"
+  website: "https://github.com/TwiN/gatus"
+
+  version: "v5.36.0"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/gatus"
+    path: ./overlays/librepod
+
+  params:
+    required:
+      - name: BASE_DOMAIN
+        description: "Base domain (app will be at gatus.BASE_DOMAIN)"
+        type: string
+        example: "example.com"
+
+  dependencies:
+    required:
+      - kind: IngressController
+        description: "Traefik (provided by traefik app)"
+      - kind: StorageClass
+        description: "nfs-client (provided by nfs-provisioner app)"
+      - kind: SSO
+        description: "casdoor-sso-controller (provisions the Gatus OIDC client in Casdoor)"
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1beta2
+      kind: OCIRepository
+      metadata:
+        name: marketplace-gatus
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "gatus"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/gatus
+        ref:
+          tag: "v5.36.0"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-gatus
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "gatus"
+      spec:
+        dependsOn:
+          - name: traefik              # IngressRoute
+          - name: storage              # nfs-client PVC (chart-managed)
+          - name: casdoor-sso-controller   # SSOClient CRD + controller (not bare casdoor-sso)
+        force: true                    # Force instructs the controller to recreate resources when patching fails due to an immutable field change.
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-gatus
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+        postBuild:
+          substitute:
+            BASE_DOMAIN: "${BASE_DOMAIN}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml

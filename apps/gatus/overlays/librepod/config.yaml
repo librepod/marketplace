@@ -1,0 +1,35 @@
+# Gatus configuration.
+#
+# Every ${VAR} below is expanded by Gatus itself at startup (os.ExpandEnv over
+# the whole config file) — NOT by Flux; this ConfigMap is annotated
+# `kustomize.toolkit.fluxcd.io/substitute: disabled` (see kustomization.yaml).
+# The env vars come from two places:
+#   - HelmRelease values `env:` → issuer/redirect/self URLs (the ${BASE_DOMAIN}
+#     placeholders there ARE Flux-substituted, inside the HelmRelease manifest)
+#   - Secret gatus-sso → OIDC client credentials, written at runtime by the
+#     casdoor-sso-controller from the SSOClient CR in this overlay
+storage:
+  type: sqlite
+  path: /data/data.db
+
+security:
+  oidc:
+    issuer-url: "${GATUS_OIDC_ISSUER_URL}"
+    redirect-url: "${GATUS_OIDC_REDIRECT_URL}"   # must end with /authorization-code/callback (Gatus validates)
+    client-id: "${GATUS_SSO_CLIENT_ID}"
+    client-secret: "${GATUS_SSO_CLIENT_SECRET}"
+    scopes: ["openid"]
+    # No allowed-subjects: every user of the IdP may view the dashboard
+    # (sign-up is disabled platform-wide, so all subjects are admin-created).
+
+endpoints:
+  - name: Identity provider (OIDC discovery)
+    url: "${GATUS_OIDC_ISSUER_URL}/.well-known/openid-configuration"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+  - name: Gatus (self)
+    url: "${GATUS_SELF_URL}/health"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"

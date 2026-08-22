@@ -1,0 +1,61 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: gatus
+spec:
+  chart:
+    spec:
+      chart: gatus
+      version: "~1.5.0"          # HTTP Helm repo: pin chart minor here (base can't semver-pin)
+      sourceRef:
+        kind: HelmRepository
+        name: gatus-helm-charts
+      interval: 12h
+  values:
+    image:
+      tag: "v5.36.0"             # chart appVersion is v5.34.0; override with latest upstream
+    persistence:
+      storageClassName: nfs-client
+    # ${BASE_DOMAIN:=libre.pod} placeholders below are Flux-substituted inside
+    # this HelmRelease manifest; the values then reach Gatus as plain env vars.
+    env:
+      GATUS_OIDC_ISSUER_URL: "https://id.${BASE_DOMAIN:=libre.pod}"
+      GATUS_OIDC_REDIRECT_URL: "https://gatus.${BASE_DOMAIN:=libre.pod}/authorization-code/callback"
+      GATUS_SELF_URL: "https://gatus.${BASE_DOMAIN:=libre.pod}"
+      # Gatus is Go: point it at the merged CA bundle so OIDC calls to
+      # id.<BASE_DOMAIN> (private LibrePod CA) verify.
+      SSL_CERT_FILE: "/etc/ssl/certs/ca-certificates.crt"
+    # OIDC client credentials, written at runtime by casdoor-sso-controller.
+    envFrom:
+    - secretRef:
+        name: gatus-sso
+    # Fuse the LibrePod root CA into the pod trust bundle (replicated into this
+    # namespace by the Reflector stub in kustomization.yaml). Chart quirk used
+    # here: extraVolumeMounts entries with existingConfigMap/emptydir
+    # auto-create the pod volumes — the chart has no extraVolumes key.
+    extraInitContainers:
+    - name: merge-ca-bundle
+      image: alpine:3.19
+      command: ["/bin/sh", "-c"]
+      args:
+      - |
+        set -e
+        cat /etc/ssl/certs/ca-certificates.crt > /mnt/merged-ca/ca-certificates.crt
+        echo "" >> /mnt/merged-ca/ca-certificates.crt
+        echo "# LibrePod Root CA" >> /mnt/merged-ca/ca-certificates.crt
+        cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+      volumeMounts:
+      - name: root-ca-cert
+        mountPath: /mnt/root-ca
+        readOnly: true
+      - name: merged-ca-bundle
+        mountPath: /mnt/merged-ca
+    extraVolumeMounts:
+    - name: root-ca-cert
+      mountPath: /mnt/root-ca
+      readOnly: true
+      existingConfigMap: step-certificates-certs
+    - name: merged-ca-bundle
+      mountPath: /etc/ssl/certs/ca-certificates.crt
+      subPath: ca-certificates.crt
+      readOnly: true
