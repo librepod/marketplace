@@ -1,11 +1,11 @@
 # Design: Per-App Flux Isolation and a Provider-Neutral Git Write Layer
 
 **Date:** 2026-08-19
-**Status:** Approved (design phase); revised 2026-08-19 after design review
+**Status:** Approved (design phase); revised 2026-08-22 after design review
 **Author:** Alex Sukhov (with Claude)
 **Issue:** [#182](https://github.com/librepod/marketplace/issues/182) — cross-refs #180, #181, #169
 
-## Revision — 2026-08-19 (post-review)
+## Revision — 2026-08-22 (post-review)
 
 Five changes, each recorded inline below. Listed here so the delta is legible to
 anyone who read the first draft.
@@ -484,11 +484,12 @@ it is needed. It has to be reworked onto the git working copy.
    publish — see #184). `0.5.3` → `0.6.0`: new env, new RBAC, new volume, and a
    repo-layout migration.
 3. Do **not** regenerate `catalog.yaml` locally; CI regenerates both copies.
-4. Append **two** `DECISIONS_LOG.md` rows (the log is append-only) — one for the
-   layer split + generic git client, one for the HTTP transport, since a future
-   reader may want to reverse one without the other; and mark row 6 — #180's
-   `dependsOn: user-apps` gate — **Superseded by row 7** (the log numbers
-   decisions, not issues).
+4. `DECISIONS_LOG.md` gets **two** rows for this work, since a future reader may
+   want to reverse one without the other. **Row 7 (the HTTP transport) already
+   landed** — it was recorded when the decision was taken, not when it ships. Row 8
+   (the layer split + generic git client) is appended at release, and row 6 —
+   #180's `dependsOn: user-apps` gate — is marked **Superseded by row 8** (the log
+   numbers decisions, not issues).
 5. Verify on the dev cluster with `cold-boot-repro.sh` plus a deliberate
    broken-app install.
 

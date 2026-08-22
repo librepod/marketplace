@@ -2568,17 +2568,21 @@ The manual flow is stale and would now be wrong in a new way. Change:
 
 - [ ] **Step 4: Append the decision rows**
 
-`docs/DECISIONS_LOG.md` is append-only. Per its own convention, mark the old row
-rather than rewriting it: prefix row 6's Decision cell with
-`**Superseded by row 7.**` and leave the rest of its text intact. (The log numbers
-*decisions*, not issues — pointing row 6 at "#182" would send a reader to GitHub
-instead of to the row two lines below.) Then append **two** rows — the layer/git
-change and the transport change are separate decisions with separate rationales,
-and a future reader will want to reverse one without the other:
+`docs/DECISIONS_LOG.md` is append-only.
+
+**Row 7 — the http(s) transport switch — has already landed** (committed ahead of
+this task, since the decision was taken at design-review time and the log records
+decisions rather than shipped code). Do not re-add it. What remains is the
+layer-split/git-write-layer row, appended as **row 8**, and marking row 6
+superseded.
+
+Prefix row 6's Decision cell with `**Superseded by row 8.**` and leave the rest of
+its text intact — row 8, not row 7, is what moves #180's gate off `user-apps`.
+(The log numbers *decisions*, not issues: pointing row 6 at "#182" would send a
+reader to GitHub instead of to a row in the same table.) Then append:
 
 ```
-| 7 | 2026-08-19 | marketplace-ui | Split the app-store wiring into three Flux layers with distinct meanings — `user-apps-source` (Ready ⇔ a selective healthCheck on GitRepository/user-apps-source, i.e. the git source is seeded), `user-apps` (`wait: false`, apply-only), `marketplace-<app>` (`wait: true`, that app's health) — gate `marketplace-ui` on the first; drop the shared root `kustomization.yaml` in favour of Flux's auto-generated one; and perform every repo mutation with a generic git client instead of the provider's REST API (issue #182) | `user-apps` with `wait: true` health-checked every per-app Kustomization it applied, so ONE unhealthy app turned the shared object `Ready=False` and, via #180's gate, could block re-applying the installer UI — the tool needed to remove it. Apps already had their own Kustomizations, so the fix was to dissolve the aggregate, not to redesign installs. The root file was also a shared mutable allow-list serialising every install; removing it makes install/uninstall one atomic commit each and retires the "Pitfall 3" write-ordering rule. The git client is required, not preferred: this Gogs release has NO DELETE route on its contents API (live-probed), so uninstall could never delete an app's files over REST — and git is what makes the repo pluggable to GitHub or GitLab. Note this buys HEALTH isolation, not build isolation: with the whole tree as the build input, one malformed YAML file still fails the build for every app. |
-| 8 | 2026-08-19 | marketplace-ui | Move `GitRepository/user-apps-source` back to `http://` + `Secret/user-apps-source-auth` (with a trailing-dot FQDN) and ship the installer with the `http(s)` git transport only; `ssh://` is rejected at resolution and deferred. Supersedes the SSH switch made in #50 | The installer writes to the URL it discovers from that object, so both sides share one transport — and the only hermetic test tier reaching Gogs does so over HTTP with no port 22, so SSH would have shipped as the one transport no fast test covers. SSH's original rationale ("no baked-in credential") no longer held: the flux account's password is a committed literal reflected into two namespaces, so the keypair bought ceremony rather than secrecy, at a cost of ~80 lines of bootstrap shell and `openssh-client` in the app image. It also lets the URL use the absolute (trailing-dot) hostname that `marketplace-ui`'s `GOGS_URL` needed in production — a 4-dot name is search-expanded and, where the app zone is in the pod's search list, rewritten to Traefik — whereas an ssh URL could not take that dot without re-keying `known_hosts`. Accepted trade-off: basic auth crosses the pod network in plaintext (cluster-internal, single-node appliance, password already public). Revisit in-cluster TLS or SSH when that credential is rotated. |
+| 8 | 2026-08-22 | marketplace-ui | Split the app-store wiring into three Flux layers with distinct meanings — `user-apps-source` (Ready ⇔ a selective healthCheck on GitRepository/user-apps-source, i.e. the git source is seeded), `user-apps` (`wait: false`, apply-only), `marketplace-<app>` (`wait: true`, that app's health) — gate `marketplace-ui` on the first; drop the shared root `kustomization.yaml` in favour of Flux's auto-generated one; and perform every repo mutation with a generic git client instead of the provider's REST API (issue #182) | `user-apps` with `wait: true` health-checked every per-app Kustomization it applied, so ONE unhealthy app turned the shared object `Ready=False` and, via #180's gate, could block re-applying the installer UI — the tool needed to remove it. Apps already had their own Kustomizations, so the fix was to dissolve the aggregate, not to redesign installs. The root file was also a shared mutable allow-list serialising every install; removing it makes install/uninstall one atomic commit each and retires the "Pitfall 3" write-ordering rule. The git client is required, not preferred: this Gogs release has NO DELETE route on its contents API (live-probed), so uninstall could never delete an app's files over REST — and git is what makes the repo pluggable to GitHub or GitLab. Note this buys HEALTH isolation, not build isolation: with the whole tree as the build input, one malformed YAML file still fails the build for every app. |
 ```
 
 - [ ] **Step 5: Full verification sweep**
