@@ -8,6 +8,14 @@
 #     placeholders there ARE Flux-substituted, inside the HelmRelease manifest)
 #   - Secret gatus-sso → OIDC client credentials, written at runtime by the
 #     casdoor-sso-controller from the SSOClient CR in this overlay
+
+# Keep running on the OLD config when a config UPDATE is invalid (bad user
+# fragment, merge conflict). Gatus logs and skips the update instead of
+# exiting. Startup validity is unaffected: the platform part of this file is
+# authored here. Users edit their own fragments in ConfigMap
+# gatus-user-config (see docs/user-endpoints.md).
+skip-invalid-config-update: true
+
 storage:
   type: sqlite
   path: /data/data.db
