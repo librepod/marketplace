@@ -50,6 +50,11 @@ const READS: Array<{ group: string; resource: string; readBy: string }> = [
     resource: 'ocirepositories',
     readBy: 'SystemAppsService',
   },
+  {
+    group: 'source.toolkit.fluxcd.io',
+    resource: 'gitrepositories',
+    readBy: 'GitRemoteService',
+  },
 ];
 
 function loadClusterRoleRules(): PolicyRule[] {

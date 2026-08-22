@@ -26,10 +26,13 @@ configMapGenerator:
       kustomize.toolkit.fluxcd.io/substitute: disabled
 
 secretGenerator:
-- name: gogs-auth
+- name: user-apps-git-auth
   options:
     disableNameSuffixHash: true
     annotations:
+      # Empty on purpose. Reflector mirrors gogs/user-apps-source-auth into it —
+      # the same credential Flux authenticates the GitRepository with, so the
+      # installer and Flux can never drift apart on WHO they are.
       reflector.v1.k8s.emberstack.com/reflects: "gogs/user-apps-source-auth"
 
 resources:
