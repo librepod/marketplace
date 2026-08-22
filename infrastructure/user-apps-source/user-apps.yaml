@@ -10,4 +10,8 @@ spec:
     name: user-apps-source
   path: ./
   prune: true
-  wait: true
+  # Apply-only on purpose. With wait: true Flux health-checks every object it
+  # applies — including each per-app Kustomization CR — so ONE unhealthy app
+  # turned this shared object Ready=False (issue #182). App health belongs to
+  # each marketplace-<app> Kustomization, which keeps its own wait: true.
+  wait: false
