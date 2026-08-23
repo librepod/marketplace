@@ -269,6 +269,42 @@ describe('UserAppsRepoService.migrateLayout', () => {
     expect(stdout).toContain('apps/baikal/release.yaml');
   });
 
+  it('tolerates a "./apps/<name>" resources entry when classifying orphans', async () => {
+    // A hand-written root file may address its resources relatively. Failing to
+    // normalize the leading "./" puts a LISTED app outside the allow-list set,
+    // and migration then deletes a deployed app's directory at boot.
+    const origin = await seedOrigin(root, {
+      'kustomization.yaml': OLD_ROOT.replace('- apps/baikal', '- ./apps/baikal'),
+      'apps/baikal/release.yaml': 'kind: Kustomization\n',
+    });
+    const svc = makeService(root, origin);
+
+    await svc.migrateLayout();
+
+    const { stdout } = await new GitClient().run(origin, ['ls-tree', '-r', '--name-only', 'master']);
+    expect(stdout).toContain('apps/baikal/release.yaml');
+    expect(stdout.split('\n')).not.toContain('kustomization.yaml');
+  });
+
+  it('names the dropped orphan directories in the migration commit message', async () => {
+    const origin = await seedOrigin(root, {
+      'kustomization.yaml': OLD_ROOT,
+      'apps/baikal/release.yaml': 'kind: Kustomization\n',
+      'apps/ghost/release.yaml': 'kind: Kustomization\n',
+      'apps/spectre/release.yaml': 'kind: Kustomization\n',
+    });
+    const svc = makeService(root, origin);
+
+    await svc.migrateLayout();
+
+    // git log must explain the deletions to whoever finds them later.
+    const { stdout } = await new GitClient().run(origin, ['log', '-1', '--format=%B', 'master']);
+    expect(stdout).toContain('migrate to per-app layout');
+    expect(stdout).toContain('apps/ghost');
+    expect(stdout).toContain('apps/spectre');
+    expect(stdout).not.toContain('apps/baikal'); // listed, so not dropped
+  });
+
   it('onModuleInit does NOT throw when the remote is unreachable (issue #176 lesson)', async () => {
     const svc = makeService(root, join(root, 'never-existed.git'));
     await expect(svc.onModuleInit()).resolves.toBeUndefined();
@@ -291,5 +327,52 @@ describe('UserAppsRepoService.migrateLayout', () => {
     const { stdout } = await new GitClient().run(origin, ['ls-tree', '-r', '--name-only', 'master']);
     expect(stdout.split('\n')).not.toContain('kustomization.yaml'); // migrated on the way
     expect(stdout).toContain('apps/litellm/release.yaml');
+  });
+});
+
+describe('UserAppsRepoService concurrency', () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'user-apps-race-spec-'));
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+    vi.restoreAllMocks();
+  });
+
+  it('survives reads racing a write against the single working copy', async () => {
+    // The client polls /api/apps every few seconds, so reads DO overlap installs.
+    // Both are git in the same directory, and without serialization it breaks two
+    // ways: the reader's fetch collides with the writer's over .git/shallow.lock
+    // ("Unable to create '.git/shallow.lock': File exists"), or — worse, silently —
+    // the reader's `reset --hard` + `clean -fdx` lands between mutate() and
+    // stageAll(), deleting the new files so the commit is empty, the push never
+    // happens, and install reports success having installed nothing.
+    const origin = await seedOrigin(root, {});
+    const svc = makeService(root, origin);
+    await svc.listInstalledApps(); // establish the working copy
+
+    let stop = false;
+    const reader = (async () => {
+      while (!stop) {
+        svc.invalidateFreshness(); // every poll re-fetches, as it would after a write
+        await svc.listInstalledApps();
+        await new Promise((r) => setTimeout(r, 25));
+      }
+    })();
+
+    try {
+      await svc.writeApp('vaultwarden', { 'release.yaml': 'kind: K\n' });
+    } finally {
+      stop = true;
+      await reader;
+    }
+
+    // The install must have reached the ORIGIN — a resolved writeApp whose commit
+    // was silently emptied is the failure mode this asserts against.
+    const { stdout } = await new GitClient().run(origin, ['ls-tree', '-r', '--name-only', 'master']);
+    expect(stdout).toContain('apps/vaultwarden/release.yaml');
   });
 });
