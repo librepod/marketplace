@@ -4,8 +4,14 @@
 
 set -e
 
+# Byte-order collation everywhere below: deterministic app ordering in the
+# generated catalog regardless of the invoking environment's locale (also
+# governs bash's glob-expansion sort in the loop).
+export LC_ALL=C
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CATALOG_FILE="${REPO_ROOT}/catalog.yaml"
+APP_COUNT=0
 
 # Extract a YAML literal block value from spec.templates.<key> in metadata.yaml
 # Outputs the content with 4-space indent (to nest under the app entry)
@@ -46,8 +52,11 @@ HEADER
 # Replace timestamp
 sed -i "s/TIMESTAMP/$(date -u +%Y-%m-%dT%H:%M:%SZ)/" "$CATALOG_FILE"
 
-# Find all metadata.yaml files
-for metadata_file in $(printf '%s\n' "$REPO_ROOT"/apps/*/metadata.yaml | LC_ALL=C sort); do
+# Find all metadata.yaml files. The glob loop (not $(... | sort)) keeps paths
+# with whitespace intact; LC_ALL=C above makes the expansion order deterministic.
+for metadata_file in "$REPO_ROOT"/apps/*/metadata.yaml; do
+  # Unmatched glob expands to the literal pattern — skip it.
+  [ -e "$metadata_file" ] || continue
   app_dir=$(dirname "$metadata_file")
   app_name=$(basename "$app_dir")
 
@@ -58,6 +67,7 @@ for metadata_file in $(printf '%s\n' "$REPO_ROOT"/apps/*/metadata.yaml | LC_ALL=
   fi
 
   echo "Adding: $app_name"
+  APP_COUNT=$((APP_COUNT + 1))
 
   # Extract fields using grep/sed (no yq dependency)
   NAME=$(grep '^  name:' "$metadata_file" | head -1 | sed 's/.*name: *//')
@@ -134,6 +144,13 @@ done
 
 if grep -q '__VERSION__' "$CATALOG_FILE"; then
   echo "ERROR: __VERSION__ sentinel leaked into catalog.yaml" >&2; exit 1
+fi
+
+# An empty catalog is always a regression (extraction failure, moved metadata
+# schema, ...), never a valid state — this repo ships dozens of apps.
+if [ "$APP_COUNT" -eq 0 ]; then
+  echo "ERROR: no apps found under apps/*/metadata.yaml (with overlays/librepod) — refusing to write an empty catalog" >&2
+  exit 1
 fi
 
 echo

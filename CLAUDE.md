@@ -83,7 +83,7 @@ reconciliation — see @docs/FLUX_WORKFLOW.md
   `apps/*/metadata.yaml`, wraps it with the template in `apps/catalog-artifact/`, and pushes
   the result as a cosign-signed OCI artifact (`oci://ghcr.io/librepod/marketplace/catalog`).
   Clusters consume it via `infrastructure/system-apps/marketplace-catalog.yaml`, whose
-  Kustomization renders the `marketplace-ui-catalog` ConfigMap the marketplace-ui mounts.
+  Kustomization renders the `marketplace-catalog` ConfigMap the marketplace-ui mounts.
   When bumping an app version, edit only the source of truth (`metadata.yaml` `spec.version`,
   plus the overlay image tag and the `ref.tag` in `infrastructure/system-apps/<app>.yaml`);
   the catalog updates on all clusters within ~5 min of merge. For local UI development run

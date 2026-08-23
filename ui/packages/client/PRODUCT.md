@@ -119,7 +119,8 @@ same baked-defaults + GitOps architecture underneath.
 
 - **Real, in-repo:** the UI surfaces and copy
   (`packages/client/src/pages/*`, `components/AppShell.tsx`); the CI-generated
-  catalog (`marketplace/catalog.yaml`); the API + Git/Gogs/Flux mechanics
+  catalog (`marketplace/catalog.yaml`, published as an OCI artifact — never
+  committed); the API + Git/Gogs/Flux mechanics
   (`packages/server`, summarized in `ui/CLAUDE.md`); the broader LibrePod
   architecture (`marketplace/CLAUDE.md`, root `CLAUDE.md`).
 - **Design reference:** `marketplace/docs/marketplace-for-self-hosted-apps-design.md`

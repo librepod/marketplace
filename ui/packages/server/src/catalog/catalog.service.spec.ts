@@ -151,6 +151,46 @@ describe('CatalogService', () => {
       expect(tmpService.findAll()).toEqual(before);
     });
 
+    it('retries a failed reload automatically and keeps the last-good list', async () => {
+      // compile() WITHOUT init(): onModuleInit never runs, so no fs watcher
+      // exists — the only possible automatic re-attempt is the retry timer.
+      const retryModule = await Test.createTestingModule({
+        imports: [ConfigModule.forRoot({ isGlobal: true })],
+        providers: [
+          CatalogService,
+          {
+            provide: ConfigService,
+            useValue: {
+              get: (key: string, defaultValue?: string) =>
+                key === 'CATALOG_PATH' ? catalogPath : defaultValue,
+            },
+          },
+        ],
+      }).compile();
+      const retryService = retryModule.get<CatalogService>(CatalogService);
+      const internal = retryService as unknown as {
+        loadCatalog: () => void;
+        retryTimer: unknown;
+      };
+
+      internal.loadCatalog();
+      expect(retryService.findAll()).toHaveLength(3);
+
+      fs.writeFileSync(catalogPath, 'apps: [unclosed\n');
+      internal.loadCatalog();
+      // First failure arms the bounded retry; catalog stays last-good.
+      expect(internal.retryTimer).not.toBeNull();
+      expect(retryService.findAll()).toHaveLength(3);
+
+      // Past the retry window the timer has fired (and, with the file still
+      // broken, escalated) — retry no longer armed, list still last-good.
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      expect(internal.retryTimer).toBeNull();
+      expect(retryService.findAll()).toHaveLength(3);
+
+      await retryModule.close();
+    });
+
     it('swaps the app list when a reload succeeds', () => {
       fs.writeFileSync(
         catalogPath,
@@ -159,6 +199,79 @@ describe('CatalogService', () => {
       (tmpService as unknown as { loadCatalog: () => void }).loadCatalog();
 
       expect(tmpService.findAll()).toHaveLength(0);
+    });
+  });
+
+  describe('kubelet-style ConfigMap volume updates', () => {
+    let tmpDir: string;
+    let kubeletModule: TestingModule;
+    let kubeletService: CatalogService;
+
+    const waitFor = async (cond: () => boolean, timeoutMs = 5000) => {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        if (cond()) return;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('condition not met within timeout');
+    };
+
+    // Reproduces kubelet's atomic-writer layout: the volume dir holds a STABLE
+    // `catalog.yaml` symlink pointing at `..data/catalog.yaml` (where `..data`
+    // is itself a symlink to a timestamped dir). Updates rename a `..data_tmp`
+    // symlink over `..data` — the leaf `catalog.yaml` name NEVER appears in a
+    // filesystem event.
+    const setupKubeletLayout = () => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'catalog-kubelet-'));
+      const initDir = path.join(tmpDir, '..2026_01_01_00_00_00_init');
+      fs.mkdirSync(initDir);
+      fs.copyFileSync(FIXTURE_PATH, path.join(initDir, 'catalog.yaml'));
+      fs.symlinkSync(path.basename(initDir), path.join(tmpDir, '..data'));
+      fs.symlinkSync('..data/catalog.yaml', path.join(tmpDir, 'catalog.yaml'));
+    };
+
+    // One atomic kubelet update: new timestamped dir, new ..data symlink
+    // renamed over the old one.
+    const kubeletUpdate = (content: string) => {
+      const newDir = path.join(tmpDir, '..2026_01_01_00_00_00.000000000');
+      fs.mkdirSync(newDir);
+      fs.writeFileSync(path.join(newDir, 'catalog.yaml'), content);
+      const tmpLink = path.join(tmpDir, '..data_tmp');
+      fs.symlinkSync(path.basename(newDir), tmpLink);
+      fs.renameSync(tmpLink, path.join(tmpDir, '..data'));
+    };
+
+    afterEach(async () => {
+      await kubeletModule.close();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('reloads when the ..data symlink is swapped (never touches catalog.yaml)', async () => {
+      setupKubeletLayout();
+      kubeletModule = await Test.createTestingModule({
+        imports: [ConfigModule.forRoot({ isGlobal: true })],
+        providers: [
+          CatalogService,
+          {
+            provide: ConfigService,
+            useValue: {
+              get: (key: string, defaultValue?: string) =>
+                key === 'CATALOG_PATH'
+                  ? path.join(tmpDir, 'catalog.yaml')
+                  : defaultValue,
+            },
+          },
+        ],
+      }).compile();
+      kubeletService = kubeletModule.get<CatalogService>(CatalogService);
+      await kubeletModule.init();
+      expect(kubeletService.findAll()).toHaveLength(3);
+
+      kubeletUpdate(
+        ['apiVersion: marketplace/v1', 'kind: Catalog', 'apps: []'].join('\n'),
+      );
+
+      await waitFor(() => kubeletService.findAll().length === 0);
     });
   });
 });

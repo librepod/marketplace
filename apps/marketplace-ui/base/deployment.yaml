@@ -84,4 +84,11 @@ spec:
       volumes:
         - name: catalog
           configMap:
-            name: marketplace-ui-catalog
+            # Rendered by the separate marketplace-catalog Kustomization
+            # (CI-published OCI artifact), which reconciles independently of
+            # this app. Optional so pods still schedule during bootstrap or
+            # upgrade windows when that ConfigMap does not exist yet — the
+            # server starts with an empty catalog and hot-reloads it (it
+            # watches the mount directory) as soon as kubelet mounts it.
+            name: marketplace-catalog
+            optional: true

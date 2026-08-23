@@ -1,8 +1,9 @@
 # Catalog delivery: pulls the CI-published, cosign-signed catalog artifact
 # (see .github/workflows/publish-catalog.yaml and apps/catalog-artifact/) and
-# renders ConfigMap/marketplace-ui-catalog, which the marketplace-ui mounts at
-# /data/catalog.yaml. In-place ConfigMap updates (stable name) + the server's
-# fs.watch hot-reload = new apps appear without version bumps or restarts.
+# renders ConfigMap/marketplace-catalog, which the marketplace-ui mounts at
+# /data/catalog.yaml (optional volume). In-place ConfigMap updates (stable
+# name) + the server's directory fs.watch hot-reload = new apps appear without
+# version bumps or restarts.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
 metadata:

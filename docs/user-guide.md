@@ -94,11 +94,11 @@ The catalog lists all available applications. You can view it by pulling the cat
 
 ```bash
 flux pull artifact oci://ghcr.io/librepod/marketplace/catalog:latest --output=/tmp/catalog
-cat /tmp/catalog
+cat /tmp/catalog/catalog.yaml
 ```
 
-The artifact contains both `catalog.yaml` and the `kustomization.yaml` that renders it
-into the `marketplace-ui-catalog` ConfigMap on each cluster.
+The artifact is a directory containing both `catalog.yaml` and the `kustomization.yaml`
+that renders it into the `marketplace-catalog` ConfigMap on each cluster.
 
 Each app has:
 - `name`: Technical identifier (used in filenames)

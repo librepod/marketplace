@@ -421,7 +421,7 @@ Three GitHub Actions workflows handle OCI artifact publishing:
 |----------|---------|-------------------|----------|
 | `publish-bootstrap.yaml` | Push to master (changes in `clusters/` or `infrastructure/`) | `clusters/` + `infrastructure/` | `oci://ghcr.io/<owner>/marketplace/bootstrap` |
 | `publish-apps.yaml` | Push to master (changes in `apps/*/base/`, `overlays/`, `metadata.yaml`) | Each `apps/<name>/` individually | `oci://ghcr.io/<owner>/marketplace/apps/<name>` |
-| `publish-catalog.yaml` | workflow_dispatch, or push to master (`apps/*/metadata.yaml`, `apps/catalog-artifact/**`, generator script) | `{kustomization.yaml, catalog.yaml}` staged by CI (never committed) | `oci://ghcr.io/<owner>/marketplace/catalog` |
+| `publish-catalog.yaml` | workflow_dispatch; push to master (`apps/*/metadata.yaml`, `apps/catalog-artifact/**`, generator script); or after every successful `Publish App Artifacts` run (`workflow_run`) | `{kustomization.yaml, catalog.yaml}` staged by CI (never committed) | `oci://ghcr.io/<owner>/marketplace/catalog` |
 
 All three use `flux push artifact` to publish and `cosign sign` to sign both
 versioned and `latest` tags.
@@ -442,7 +442,9 @@ manual dispatch with `["all"]` to republish everything. Reads version from
 Runs the catalog generator script, wraps `catalog.yaml` with `apps/catalog-artifact/`,
 and publishes the result as a cosign-signed OCI artifact. The catalog is never committed
 to the repo; clusters consume it via the `marketplace-catalog` Kustomization, which renders
-the `marketplace-ui-catalog` ConfigMap on each cluster.
+the `marketplace-catalog` ConfigMap on each cluster. The `workflow_run` trigger keeps the
+catalog from advertising app versions whose artifacts haven't finished publishing, and
+re-publishes (self-heals) if a transient GHCR failure dropped an update.
 
 ## Variable Substitution
 
@@ -496,7 +498,7 @@ To replicate this architecture in a new project:
 6. **Set up CI workflows:**
    - `publish-bootstrap.yaml` — packs clusters/ + infrastructure/
    - `publish-apps.yaml` — packs each app directory
-   - `publish-catalog.yaml` — packs the generated catalog (optional)
+   - `publish-catalog.yaml` — packs the generated catalog
 
 7. **Bootstrap the cluster:**
    ```bash
