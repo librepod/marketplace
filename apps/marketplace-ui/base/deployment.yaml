@@ -82,13 +82,17 @@ spec:
           configMap:
             name: marketplace-ui-catalog
         # user-apps-git-auth is generated EMPTY by this app's kustomization and
-        # filled by Reflector from gogs/user-apps-source-auth. Mounting the
-        # reflected Secret directly would make the pod unschedulable whenever it is
-        # briefly absent — during a rotation, or during cold-boot-repro.sh, which
-        # deletes it in all three namespaces. An empty mount instead lets the pod
-        # boot, /api/health answer, reads degrade, and the first write fail loudly.
+        # filled by Reflector from gogs/user-apps-source-auth. Two guards, because
+        # data-less and missing are different failures: the empty placeholder covers
+        # an EMPTY Secret (mounts fine), `optional: true` covers an ABSENT one — a
+        # missing Secret blocks the mount and the pod never starts. That window is
+        # real: this release's gogs-auth → user-apps-git-auth rename, a rotation, or
+        # cold-boot-repro.sh, which deletes it in all three namespaces. The server
+        # already tolerates both — GitRemoteService throws a named "no
+        # username/password in env or /etc/user-apps-git" on writes, reads degrade.
         - name: user-apps-git-credentials
           secret:
             secretName: user-apps-git-auth
+            optional: true
         - name: user-apps-work
           emptyDir: {}
