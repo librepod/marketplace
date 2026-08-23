@@ -1,0 +1,24 @@
+# Provisions the Casdoor OIDC application for Gatus and writes its credentials
+# to Secret gatus-sso (keys GATUS_SSO_CLIENT_ID / GATUS_SSO_CLIENT_SECRET /
+# GATUS_SSO_ISSUER) in this namespace — see docs/sso-app-author-guide.md.
+apiVersion: marketplace.librepod.org/v1alpha1
+kind: SSOClient
+metadata:
+  name: gatus-sso                # also the default output Secret name
+  namespace: gatus
+spec:
+  clientId: gatus                # Casdoor application name AND OIDC client_id
+  organization: librepod
+  redirectUris:
+  - "https://gatus.${BASE_DOMAIN:=libre.pod}/authorization-code/callback"
+  scopes: [openid, profile, email]   # accepted but not applied by the controller
+  grantTypes: [authorization_code, refresh_token]
+  tokenFormat: JWT-Standard      # spec-compliant claims; avoids the plain-JWT address trap
+  expireInHours: 168
+  output:
+    secretName: gatus-sso
+    keys:
+      clientId: GATUS_SSO_CLIENT_ID
+      clientSecret: GATUS_SSO_CLIENT_SECRET
+      issuer: GATUS_SSO_ISSUER   # discovery URL — unused by Gatus (it wants the bare issuer)
+  casdoorPolicy: retain

@@ -12,10 +12,17 @@ import { CatalogApp, CatalogFile } from './catalog.types';
 
 @Injectable()
 export class CatalogService implements OnModuleInit, OnModuleDestroy {
+  private static readonly RELOAD_DEBOUNCE_MS = 300;
+  private static readonly RELOAD_RETRY_MS = 1_000;
+
   private readonly logger = new Logger(CatalogService.name);
   private apps: CatalogApp[] = [];
   private watcher: fs.FSWatcher | null = null;
   private reloadTimer: ReturnType<typeof setTimeout> | null = null;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private loadedOnce = false;
+  private reloadFailed = false;
+  private lastGoodAt: Date | null = null;
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -27,6 +34,9 @@ export class CatalogService implements OnModuleInit, OnModuleDestroy {
   onModuleDestroy(): void {
     if (this.reloadTimer) {
       clearTimeout(this.reloadTimer);
+    }
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
     }
     this.watcher?.close();
   }
@@ -49,30 +59,73 @@ export class CatalogService implements OnModuleInit, OnModuleDestroy {
       this.apps = (catalog.apps ?? []).filter(
         (app) => app.category !== 'Infrastructure',
       );
+      this.loadedOnce = true;
+      this.reloadFailed = false;
+      this.lastGoodAt = new Date();
+      if (this.retryTimer) {
+        clearTimeout(this.retryTimer);
+        this.retryTimer = null;
+      }
       this.logger.log(
         `Loaded ${this.apps.length} user-facing apps from catalog`,
       );
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Failed to load catalog: ${message}`);
-      this.apps = [];
+      if (!this.loadedOnce) {
+        const hint =
+          (error as NodeJS.ErrnoException).code === 'ENOENT'
+            ? ' — generate it with `bash ./scripts/generate-catalog.sh` (see CLAUDE.md); on a cluster it is mounted from the marketplace-catalog ConfigMap'
+            : '';
+        this.logger.error(`Failed to load catalog: ${message}${hint}`);
+        return;
+      }
+      if (!this.reloadFailed) {
+        // The mounted ConfigMap is updated in place (stable name); the kubelet
+        // symlink swap can briefly make the file unreadable mid-rename. Retry
+        // once before declaring the catalog stale — the transient window is
+        // milliseconds, a permanent failure will not recover on the retry.
+        this.reloadFailed = true;
+        this.logger.warn(
+          `Failed to reload catalog (${message}); retrying in ${CatalogService.RELOAD_RETRY_MS}ms`,
+        );
+        if (this.retryTimer) clearTimeout(this.retryTimer);
+        this.retryTimer = setTimeout(() => {
+          this.retryTimer = null;
+          this.loadCatalog();
+        }, CatalogService.RELOAD_RETRY_MS);
+      } else {
+        // Keep serving the last-good list rather than blanking the catalog,
+        // but escalate so staleness is visible in logs.
+        this.logger.error(
+          `Catalog reload still failing; serving last-good list (${this.apps.length} apps, last successful load ${
+            this.lastGoodAt?.toISOString() ?? 'unknown'
+          }): ${message}`,
+        );
+      }
     }
   }
 
   private watchCatalog(): void {
-    const catalogPath = this.catalogPath;
-    const dir = path.dirname(catalogPath);
-    const filename = path.basename(catalogPath);
+    const dir = path.dirname(this.catalogPath);
 
     try {
-      this.watcher = fs.watch(dir, (eventType, changedFile) => {
-        if (changedFile !== filename) return;
-        // Debounce: editors and OCI extractors may fire multiple events per save
+      // Watch the directory and reload on ANY event, without filtering by
+      // filename: kubelet updates ConfigMap volumes with its atomic writer —
+      // it renames a `..data_tmp` symlink over `..data`, while the leaf
+      // `catalog.yaml` is a stable symlink that is never recreated. Events
+      // therefore arrive for `..data`/`..<timestamp>`, never for
+      // `catalog.yaml` itself, and a filename filter would silently drop
+      // every real in-cluster update.
+      this.watcher = fs.watch(dir, () => {
+        // Debounce: the atomic swap fires several events per update, and
+        // editors/OCI extractors may fire multiple events per save.
         if (this.reloadTimer) clearTimeout(this.reloadTimer);
         this.reloadTimer = setTimeout(() => {
-          this.logger.log('Catalog file changed, reloading...');
+          this.reloadTimer = null;
+          this.logger.log('Catalog change detected, reloading...');
+          this.reloadFailed = false;
           this.loadCatalog();
-        }, 300);
+        }, CatalogService.RELOAD_DEBOUNCE_MS);
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);

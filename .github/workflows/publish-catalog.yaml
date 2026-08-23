@@ -1,40 +1,94 @@
 name: Publish Catalog
 
+# Generates catalog.yaml from apps/*/metadata.yaml and pushes it — wrapped with
+# the configMapGenerator template in apps/catalog-artifact/ — as a cosign-signed
+# OCI artifact. Clusters consume it via
+# infrastructure/system-apps/marketplace-catalog.yaml, which renders the
+# ConfigMap/marketplace-catalog that marketplace-ui mounts. catalog.yaml is
+# never committed to git. NOTE: this workflow must NOT push with GITHUB_TOKEN
+# content-write — pushes made with GITHUB_TOKEN don't trigger other workflows,
+# which is fine here because nothing downstream consumes a git copy anymore.
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Publish App Artifacts"]
-    types: [completed]
   push:
     branches: [master]
     paths:
       - 'apps/*/metadata.yaml'
+      - 'apps/catalog-artifact/**'
+      # The gate asserts the rendered ConfigMap matches what the deployment
+      # mounts, so a deployment-side rename of that reference must re-run it.
+      - 'apps/marketplace-ui/base/deployment.yaml'
       - 'scripts/generate-catalog.sh'
+  # Ordering + self-heal: every successful app-artifact publish re-publishes
+  # the catalog. Without this, a metadata bump merge races publish-apps (which
+  # waits on image builds) and catalog:latest can advertise app versions whose
+  # OCI artifacts don't exist yet — and a transiently failed catalog push is
+  # never re-triggered. workflow_run fires only for runs on the default branch.
+  workflow_run:
+    workflows: [Publish App Artifacts]
+    types: [completed]
+
+# A merge that bumps an app typically fires both the push and workflow_run
+# triggers; serialize so two runs never race pushes of :latest (the second
+# republishes identical content, which is harmless).
+concurrency:
+  group: publish-catalog
+  cancel-in-progress: false
 
 jobs:
   publish:
+    # Skip workflow_run invocations whose upstream run failed — nothing new
+    # was published, and re-running against stale app artifacts is noise.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.workflow_run.conclusion == 'success'
     permissions:
       packages: write
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v6
 
       - name: Generate catalog
         run: ./scripts/generate-catalog.sh
 
-      - name: Commit catalog if changed
+      - name: Stage and validate artifact
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet catalog.yaml apps/marketplace-ui/base/catalog.yaml; then
-            echo "No catalog changes"
-          else
-            git add catalog.yaml apps/marketplace-ui/base/catalog.yaml
-            git commit -m "chore: regenerate catalog.yaml"
-            git push
+          set -euo pipefail
+          mkdir catalog-artifact
+          cp apps/catalog-artifact/kustomization.yaml catalog-artifact/
+          cp catalog.yaml catalog-artifact/
+
+          # Content invariant, computed independently of the generator: every
+          # app dir (metadata.yaml + overlays/librepod) must appear as a catalog
+          # entry. A silent extractor regression — empty or partial apps list —
+          # must fail here, not ship signed to every cluster.
+          EXPECTED=$(for m in apps/*/metadata.yaml; do
+                       [ -e "$m" ] || continue
+                       d=$(dirname "$m")
+                       [ -d "$d/overlays/librepod" ] && echo x
+                     done | wc -l)
+          ACTUAL=$(grep -c '^    - name:' catalog-artifact/catalog.yaml || true)
+          echo "Catalog entries: $ACTUAL (expected $EXPECTED from apps/*/metadata.yaml)"
+          if [ "$ACTUAL" -eq 0 ] || [ "$ACTUAL" -ne "$EXPECTED" ]; then
+            echo "::error::catalog.yaml has $ACTUAL app entries but $EXPECTED apps exist under apps/" >&2
+            exit 1
           fi
+
+          # Contract gate: name/namespace/data-key of the rendered ConfigMap
+          # must match what the marketplace-ui deployment mounts. The two
+          # sides live in independently versioned OCI artifacts — nothing at
+          # reconcile time reconciles a mismatch, the pod would just fail to
+          # mount. kubectl ships kustomize (kustomize build also works).
+          kubectl kustomize catalog-artifact > rendered.yaml
+          for expected in 'kind: ConfigMap' 'name: marketplace-catalog' 'namespace: marketplace-ui' 'catalog.yaml:'; do
+            grep -q "$expected" rendered.yaml || {
+              echo "::error::rendered catalog artifact missing: $expected" >&2
+              exit 1
+            }
+          done
+          grep -q 'name: marketplace-catalog' apps/marketplace-ui/base/deployment.yaml || {
+            echo "::error::apps/marketplace-ui/base/deployment.yaml no longer mounts ConfigMap/marketplace-catalog — update the volume reference and this gate together" >&2
+            exit 1
+          }
 
       - uses: fluxcd/flux2/action@main
 
@@ -55,8 +109,9 @@ jobs:
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
         run: |
           retry() {
-            # Retry through transient GHCR secondary rate-limits (HTTP 403)
-            # during cosign signature blob uploads.
+            # Retry through transient GHCR secondary rate-limits (HTTP 403).
+            # Applies to BOTH flux push and cosign sign — both upload blobs
+            # to GHCR and both have been hit by the secondary limit.
             local max=5 delay=15 i=0
             until "$@"; do
               i=$((i + 1))
@@ -73,23 +128,25 @@ jobs:
           DATE=$(date -u +%Y%m%d)
 
           echo "Pushing dated artifact and capture its digest..."
-          DIGEST_D=$(flux push artifact \
+          PUSH_JSON=$(retry flux push artifact \
             oci://ghcr.io/${{ github.repository_owner }}/marketplace/catalog:${DATE} \
-            --path=./catalog.yaml \
+            --path=./catalog-artifact \
             --source="$(git config --get remote.origin.url)" \
             --revision="$(git rev-parse HEAD)" \
-            --output json | jq -r '.repository + "@" + .digest')
+            --output json)
+          DIGEST_D=$(printf '%s' "$PUSH_JSON" | jq -r '.repository + "@" + .digest')
 
           echo "Signing dated artifact by digest: $DIGEST_D"
           retry cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST_D"
 
           echo "Pushing latest artifact and capture its digest..."
-          DIGEST_L=$(flux push artifact \
+          PUSH_JSON=$(retry flux push artifact \
             oci://ghcr.io/${{ github.repository_owner }}/marketplace/catalog:latest \
-            --path=./catalog.yaml \
+            --path=./catalog-artifact \
             --source="$(git config --get remote.origin.url)" \
             --revision="$(git rev-parse HEAD)" \
-            --output json | jq -r '.repository + "@" + .digest')
+            --output json)
+          DIGEST_L=$(printf '%s' "$PUSH_JSON" | jq -r '.repository + "@" + .digest')
 
           echo "Signing latest artifact by digest: $DIGEST_L"
           retry cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST_L"

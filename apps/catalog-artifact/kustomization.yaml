@@ -1,0 +1,33 @@
+# Template staged by .github/workflows/publish-catalog.yaml into the
+# marketplace/catalog OCI artifact next to the generated catalog.yaml.
+# Rendered on each cluster by infrastructure/system-apps/marketplace-catalog.yaml.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: marketplace-ui
+
+# Keep the standard app label the ConfigMap carried when it was generated
+# inside the marketplace-ui app (<=0.5.3): it is still marketplace-ui's data
+# volume, just rendered by the marketplace-catalog Kustomization (Flux stamps
+# its own kustomize.toolkit.fluxcd.io/* owner labels on apply).
+labels:
+- pairs:
+    app.kubernetes.io/name: marketplace-ui
+
+configMapGenerator:
+- name: marketplace-catalog
+  # Deliberately NOT the historical `marketplace-ui-catalog` name: that object
+  # lives in the <=0.5.3 marketplace-ui artifact's inventory, so reusing the
+  # name makes the 0.5.4 reconcile PRUNE the ConfigMap this Kustomization owns
+  # (last-writer-wins ownership see-saw, then a FailedMount window until this
+  # Kustomization re-creates it). A disjoint name makes the handover two
+  # independent create/delete operations that never race.
+  files:
+  - catalog.yaml
+  options:
+    disableNameSuffixHash: true
+    # The catalog embeds ${VAR} placeholders (FRP_SERVER_ADDR, BASE_DOMAIN, ...)
+    # as literal content inside app install templates — resolved by the
+    # marketplace installer at user-install time, not by anything at render time.
+    annotations:
+      kustomize.toolkit.fluxcd.io/substitute: disabled

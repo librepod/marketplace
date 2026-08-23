@@ -9,10 +9,16 @@
 #   grpc_listen_addr   → 0.0.0.0:50443 (same reason)
 #   derp.server.enabled→ true (default false; embedded DERP relay for regions where Tailscale
 #                        DERP servers are unreachable; relay traffic goes through FRP tunnel)
-#   derp.urls         → kept Tailscale defaults as fallback; can be removed if fully unreachable
+#   derp.urls          → [] (self-hosted relay only; Tailscale's public map not merged)
 #   dns.base_domain    → ts.${BASE_DOMAIN} for MagicDNS hostnames
 #   dns.nameservers    → 1.1.1.1 only (defaults include v6 Cloudflare too)
 #   disable_check_updates → true (not useful in containers)
+#
+# NOTE: clients only ever select this embedded region as their home DERP if its
+# STUN endpoint (UDP, stun_listen_addr's port) answers on the public server_url
+# host. Tailscale measures DERP latency with UDP STUN and only falls back to
+# HTTPS when UDP is blocked everywhere, and unmeasured regions are never chosen.
+# components/frp-upstreams publishes both the HTTPS relay and UDP 3478.
 #
 # Variables like ${BASE_DOMAIN} are substituted by FluxCD postBuild.substitute.
 # For local testing: export BASE_DOMAIN=libre.pod && kustomize build ... | envsubst
@@ -39,10 +45,40 @@ derp:
     region_id: 999
     region_code: "headscale"
     region_name: "Headscale Embedded DERP"
+    # The BIND ADDRESS here is overridden at runtime by
+    # HEADSCALE_DERP_SERVER_STUN_LISTEN_ADDR in deployment.yaml, which pins it to
+    # the pod's own address: a wildcard-bound UDP socket answers with a
+    # route-selected source address, which breaks STUN for every client reaching
+    # it through a Service. See the long comment on that env var. Only the PORT
+    # here is authoritative — headscale advertises it as STUNPort in the DERP
+    # map, so it must match the env var and the public port published by
+    # components/frp-upstreams.
     stun_listen_addr: "0.0.0.0:3478"
     private_key_path: /var/lib/headscale/derp_server_private.key
-  urls:
-    - https://controlplane.tailscale.com/derpmap/default
+  # No external DERP maps: the embedded region above is the ONLY relay clients
+  # get. Tailscale's public map is deliberately not merged, because a reachable
+  # region is not necessarily a used one — clients pick the lowest-latency
+  # region, and an embedded relay behind a tunnel loses that race to a nearby
+  # Tailscale relay (measured: ~44ms through the tunnel vs ~35ms to the nearest
+  # public one). Leaving the map empty is what makes every client actually use
+  # the self-hosted relay.
+  #
+  # Consequences, so they are not a surprise:
+  #   - every relayed byte crosses the home uplink twice (in through the tunnel
+  #     and back out) instead of meeting at a Tailscale relay;
+  #   - there is no second relay, so while the tunnel or the relay host is down,
+  #     peers that cannot reach each other directly cannot talk at all;
+  #   - STUN through an FRP tunnel reports the tunnel client's own private
+  #     address, and with no other region to compare against that becomes the
+  #     client's GlobalV4 — so hole-punching loses its public-endpoint hint and
+  #     direct connections get less likely. Answering STUN on the relay host
+  #     itself (public IP, one hop) fixes this and the latency above; the
+  #     embedded region only needs the DERP relay leg tunnelled.
+  #
+  # headscale keeps serving the embedded region here because
+  # derp.server.automatically_add_embedded_derp_region defaults to true — an
+  # empty urls list with no derp.paths would otherwise be a fatal config.
+  urls: []
   auto_update_enabled: true
   update_frequency: 24h
 

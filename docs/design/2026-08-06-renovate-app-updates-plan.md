@@ -2,6 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status update (post PR #195):** `catalog.yaml` is **no longer committed to
+> git** — CI generates it from `apps/*/metadata.yaml` and publishes it as a
+> cosign-signed OCI artifact (`.github/workflows/publish-catalog.yaml`), and
+> `apps/marketplace-ui/base/catalog.yaml` no longer exists. Steps below that
+> say `git add catalog.yaml …` predate that change: regenerate locally with
+> `bash ./scripts/generate-catalog.sh` to *verify*, but never commit the
+> output (it is gitignored).
+
 **Goal:** Audit and normalize all `apps/` to one `metadata.yaml` schema and a single trackable version source, then have Renovate open one CI-validated PR per app when an upstream image/chart updates.
 
 **Architecture:** Five sequenced deliverables. **D0** ships a re-runnable `scripts/audit-apps.sh` that classifies every app (schema conformance + version archetype) and drives the rest. **D1** builds the CI validation gate early (kubeconform + `validate-apps.yaml`) so later structural fixes are checked. **D2** de-duplicates the version field to one `spec.version` per app via a `__VERSION__` sentinel and standardizes marketplace-ui. **D3** normalizes every app to the canonical schema and a single trackable version source (scope B — schema + trackability, not forced directory restructuring), using the audit + the D1 gate. **D4** adds `renovate.json5` (pilot → full) on the now-clean ground.
@@ -13,7 +21,7 @@
 ## Global Constraints
 
 - **Sentinel is `__VERSION__`** (double-underscore), never `${VERSION}` — `${...}` collides with Flux `postBuild.substitute`. Verbatim.
-- **`__VERSION__` must never appear in `catalog.yaml`** or `apps/marketplace-ui/base/catalog.yaml` — it ships to user clusters. Leak-guard enforces this.
+- **`__VERSION__` must never appear in `catalog.yaml`** — it ships to user clusters. Leak-guard enforces this. (The catalog is CI-generated and never committed; check the locally regenerated file.)
 - **`spec.version` is the single version string per app**; it becomes the published OCI artifact tag (`publish-apps.yaml` reads it).
 - **Renovate never edits `infrastructure/**`** — system-app cluster adoption stays manual.
 - **No auto-merge** in Renovate config.
@@ -400,16 +408,15 @@ Expected: **empty**. Non-empty ⇒ a real tag was mangled — STOP, fix Task 4/5
 - [ ] **Step 2: Confirm no sentinel in shipped artifacts**
 
 ```bash
-grep -c '__VERSION__' catalog.yaml apps/marketplace-ui/base/catalog.yaml
+grep -c '__VERSION__' catalog.yaml
 ```
-Expected: `0` for both.
+Expected: `0`. (Pre-PR-#195 this also checked `apps/marketplace-ui/base/catalog.yaml`; that file no longer exists — the catalog is CI-published, never committed.)
 
 - [ ] **Step 3: Commit (likely no-op)**
 
-```bash
-git add catalog.yaml apps/marketplace-ui/base/catalog.yaml
-git commit -m "chore: regenerate catalog.yaml after sentinel refactor" || echo "no changes (expected)"
-```
+Post-PR-#195 there is nothing to commit — `catalog.yaml` is generated in CI
+only. This step is kept as a no-op checkpoint for plans executing against
+checkouts that predate that change.
 
 ---
 
@@ -487,7 +494,7 @@ Expected: succeeds; `0`.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add apps/marketplace-ui/metadata.yaml catalog.yaml apps/marketplace-ui/base/catalog.yaml
+git add apps/marketplace-ui/metadata.yaml
 git commit -m "refactor(marketplace-ui): add standard templates block, drop duplicate appVersion"
 ```
 

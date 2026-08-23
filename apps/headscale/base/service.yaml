@@ -9,3 +9,24 @@ spec:
       targetPort: http
       protocol: TCP
       name: http
+    # Embedded DERP STUN endpoint.
+    #
+    # Tailscale clients only ever measure DERP region latency with UDP STUN
+    # probes; netcheck's HTTPS/ICMP fallback runs *only* when UDP is blocked
+    # for every region (net/netcheck: `if !rs.anyUDP()`). A region whose STUN
+    # endpoint does not answer therefore gets no latency at all, and only
+    # regions with a measured latency are candidates for a client's home DERP
+    # — so an unreachable STUN endpoint silently demotes the embedded relay and
+    # every device falls back to the nearest Tailscale DERP.
+    #
+    # The port must stay 3478: headscale advertises STUNPort in the DERP map
+    # from derp.server.stun_listen_addr, and the public port has to match it.
+    #
+    # NOT published publicly by this app — see components/frp-upstreams for why
+    # STUN belongs on the edge host rather than in an FRP tunnel. This port is
+    # kept for reaching the endpoint from inside the cluster and for setups that
+    # front it with something that preserves client source addresses.
+    - port: 3478
+      targetPort: derp-stun
+      protocol: UDP
+      name: derp-stun

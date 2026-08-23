@@ -15,4 +15,5 @@ resources:
   - step-certificates.yaml
   - step-issuer.yaml
   - marketplace-ui.yaml
+  - marketplace-catalog.yaml
   - traefik.yaml

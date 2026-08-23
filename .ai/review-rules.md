@@ -43,7 +43,8 @@ Be terse. Post exactly one verdict block per app changed.
 
 Fall back to a normal review: correctness, security, and behavior changes in
 the Kustomize/Flux manifests. Skip style-only nits and generated files
-(especially `catalog.yaml`). Respect the repo conventions in `CLAUDE.md`.
+(`catalog.yaml` is CI-generated and never committed — if it appears in a diff,
+flag it). Respect the repo conventions in `CLAUDE.md`.
 
 ## Always
 
