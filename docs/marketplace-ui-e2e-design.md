@@ -5,6 +5,15 @@
 - **Scope:** `ui/` (the marketplace installer UI/API) + a local k3d cluster for deployment-level tests
 - **Branch:** `cyxou/Add-E2E-tests`
 
+> **⚠ Partly superseded (2026-08-22, issue #182) — historical design record.** The Gogs
+> REST layer this document assumes is gone: `GogsService`, the
+> `GOGS_URL`/`GOGS_USERNAME`/`GOGS_TOKEN` env triple, and the root `kustomization.yaml`
+> read-modify-write were all deleted. Installs are now one plain git commit via
+> `UserAppsRepoService`, and "installed" means `apps/<name>/` exists in the repo tree.
+> The tiering, Playwright architecture and the C2/C4 constraints still hold. For current
+> behaviour see `ui/CLAUDE.md` — "No database — Git is the source of truth" and "App-store
+> repo (`UserAppsRepoService`)" — plus `docs/DECISIONS_LOG.md` rows 7 and 8.
+
 ## 1. Problem
 
 The marketplace UI has **no browser-driven end-to-end tests**. Its only test
@@ -60,6 +69,9 @@ container image, the GitOps install lifecycle). CI runs **no tests at all** toda
   as the HTTP Basic-auth *password* during token bootstrap (the name is misleading). The
   seeded Gogs user's **password must equal `GOGS_TOKEN`**; Nest bootstraps its own API
   token at runtime. A wrong seed field → 401 on every install with a misleading error.
+  **⚠ No longer applies (#182):** `GogsService` and the `GOGS_TOKEN` env var are gone. The
+  credential is a `username`/`password` file pair mounted at `/etc/user-apps-git` and used
+  by git over HTTP — no token bootstrap, so this gotcha has no successor.
 - **C2 — Without `KUBERNETES_SERVICE_HOST`, an installed app never reaches `running`.**
   `FluxStatusService` reads Flux CRDs via the in-cluster config; with no cluster it
   degrades to `installing` indefinitely. **Tier 1 must therefore assert install-*commit*
@@ -130,6 +142,8 @@ no `KUBERNETES_SERVICE_HOST`.
    - `CATALOG_PATH` → `fixtures/catalog.fixture.yaml`
    - `GOGS_URL` → `http://127.0.0.1:43000`
    - `GOGS_USERNAME` / `GOGS_TOKEN` → seeded creds (C1: `GOGS_TOKEN` = the user's *password*)
+   - **⚠ Superseded (#182):** those three vars no longer exist. Tier 1 now points the server
+     at the Gogs git remote and mounts `username`/`password` files; see `ui/CLAUDE.md`.
    - `BASE_DOMAIN=libre.pod`, `KUBERNETES_SERVICE_HOST` unset
    - `url: http://localhost:3000`, `reuseExistingServer: !process.env.CI`
 5. `trap EXIT` → `docker compose down`.
@@ -143,6 +157,12 @@ no `KUBERNETES_SERVICE_HOST`.
 writes, and the root-kustomization read-modify-write ("Pitfall 3" ordering). It asserts
 install-*commit* (mutation success, membership in `/api/installed`, root kustomization
 entry). It **cannot** assert `running` (C2) — that gap is Tier 2's purpose.
+
+> **⚠ Superseded (#182):** there is no root `kustomization.yaml` and no read-modify-write.
+> Install commits `apps/<name>/` and uninstall deletes that directory, each in one commit;
+> `/api/installed` is derived from directory presence in the tree. Read every
+> root-kustomization assertion in this document (§5.2, §5.3's prune bullet, §6's
+> `install-uninstall.spec.ts` row) as "the app's directory exists / is gone".
 
 ### 5.3 Tier 2 — deployment-level, nightly / on-merge / dispatch (advisory)
 

@@ -4,6 +4,15 @@
 **Status:** Approved (design), pending implementation plan
 **Scope:** `ui/` (marketplace installer UI/API), plus one verification step against a live cluster
 
+> **⚠ Partly superseded (2026-08-22, issue #182) — historical design record.** The
+> installed-detection layer described below is gone: `GogsService` and its
+> `GOGS_URL`/`GOGS_USERNAME`/`GOGS_TOKEN` env triple were replaced by
+> `UserAppsRepoService` over plain git, and there is no root `kustomization.yaml` — an app
+> is installed iff `apps/<name>/` exists in the repo tree. The system-app concept, the
+> label-vs-presence root cause, and the UI design still hold. For current behaviour see
+> `ui/CLAUDE.md` — "No database — Git is the source of truth" and "App-store repo
+> (`UserAppsRepoService`)" — plus `docs/DECISIONS_LOG.md` rows 7 and 8.
+
 ---
 
 ## 1. Background & root cause
@@ -19,6 +28,9 @@ for normal marketplace installs.
 - **"Is it installed?"** — `GogsService.getInstalledAppNames()` reads the root
   `kustomization.yaml` of the on-cluster Gogs `flux/user-apps` repo and treats
   any `apps/<name>` entry as an installed app, purely by directory presence.
+  **⚠ Superseded (#182):** now `UserAppsRepoService.listInstalledApps()` lists
+  `apps/*` directory names from a shallow git working copy — same
+  presence-based meaning, no root file and no REST API.
 - **"What's its status?"** — `FluxStatusService.getStatusFor()` derives status
   only from Flux objects carrying the `marketplace.io/app=<name>` label (the
   signature of objects the marketplace installer creates).
