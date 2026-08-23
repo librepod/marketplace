@@ -49,3 +49,4 @@ docs/superpowers/
 /.claude/scheduled_tasks.lock
 /.vite/vitest/results.json
 librepod-dev.config
+/catalog.yaml

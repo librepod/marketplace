@@ -9,22 +9,6 @@ labels:
   pairs:
     app.kubernetes.io/name: marketplace-ui
 
-configMapGenerator:
-- name: marketplace-ui-catalog
-  files:
-  - catalog.yaml
-  options:
-    disableNameSuffixHash: true
-    # The catalog embeds ${VAR} placeholders (FRP_SERVER_ADDR, BASE_DOMAIN, etc.)
-    # as literal content inside app install templates — they are resolved later by
-    # the marketplace installer at user-install time, NOT by Flux. Without this,
-    # Flux's strict postBuild envsubst scans the rendered ConfigMap and aborts the
-    # build on the first unsubstituted var (e.g. FRP_SERVER_ADDR), so the
-    # marketplace-ui Deployment never applies. `substitute: disabled` is the same
-    # annotation already used by step-certificates / step-issuer / headscale.
-    annotations:
-      kustomize.toolkit.fluxcd.io/substitute: disabled
-
 secretGenerator:
 - name: gogs-auth
   options:

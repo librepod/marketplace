@@ -103,7 +103,8 @@ cluster-wide via Traefik's TLS store.
 ├── .github/workflows/             # 🔄 CI pipelines
 │   ├── publish-apps.yaml          #   Publish per-app OCI artifacts
 │   └── publish-bootstrap.yaml     #   Publish bootstrap OCI artifact
-└── catalog.yaml                   # 📋 App catalog (generated)
+└── scripts/
+    └── generate-catalog.sh        # 📋 Catalog generator (CI runs it; catalog.yaml is never committed)
 ```
 
 ---

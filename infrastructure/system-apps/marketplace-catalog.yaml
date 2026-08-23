@@ -1,0 +1,40 @@
+# Catalog delivery: pulls the CI-published, cosign-signed catalog artifact
+# (see .github/workflows/publish-catalog.yaml and apps/catalog-artifact/) and
+# renders ConfigMap/marketplace-catalog, which the marketplace-ui mounts at
+# /data/catalog.yaml (optional volume). In-place ConfigMap updates (stable
+# name) + the server's directory fs.watch hot-reload = new apps appear without
+# version bumps or restarts.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: marketplace-catalog
+  namespace: flux-system
+spec:
+  interval: 5m
+  url: oci://ghcr.io/librepod/marketplace/catalog
+  ref:
+    tag: latest
+  verify:
+    provider: cosign
+    secretRef:
+      name: cosign-pub
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: marketplace-catalog
+  namespace: flux-system
+spec:
+  interval: 5m
+  # No dependsOn: on a fresh cluster the first apply races the marketplace-ui
+  # namespace creation and 404s — the retry resolves it. dependsOn:
+  # A dependsOn: marketplace-ui would deadlock (the app pod waits on this
+  # ConfigMap volume, so the app Kustomization can never be Ready first).
+  retryInterval: 30s
+  timeout: 1m
+  sourceRef:
+    kind: OCIRepository
+    name: marketplace-catalog
+  path: ./
+  prune: true
+  wait: false
