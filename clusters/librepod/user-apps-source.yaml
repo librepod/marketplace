@@ -10,29 +10,19 @@ spec:
     - name: gogs
   interval: 1h
   retryInterval: 2m
-  # 15m, not 5m: `timeout` now bounds a HEALTH CHECK, not just an apply. The
-  # GitRepository cannot go Ready until the bootstrap Job has seeded the repo, and
-  # that Job alone polls up to 300s for Gogs to accept credentials before it starts
-  # working — plus image pull, apk add, a kubectl download, keygen, keyscan and up
-  # to five push retries. At 5m the first cold-boot attempt reliably timed out and
-  # recovered on retryInterval, so every cold boot showed this gate Ready=False
-  # with a timeout error: noise indistinguishable from the failure it exists to
-  # catch.
+  # Do NOT lower back to 5m: `timeout` bounds the health check below, which waits
+  # on the seeding Job (that Job alone polls up to 300s for Gogs). At 5m every cold
+  # boot showed a spurious Ready=False timeout. Why: docs/DECISIONS_LOG.md row 8.
   timeout: 15m
   sourceRef:
     kind: OCIRepository
     name: librepod-bootstrap
   path: ./infrastructure/user-apps-source
   prune: true
-  # Ready ⇔ Flux cloned a SEEDED repo. `wait: false` + an explicit healthChecks
-  # list is a *selective* assessment: the CRD states "Wait instructs the
-  # controller to check the health of all the reconciled resources. When enabled,
-  # the HealthChecks are ignored." So this checks the GitRepository ONLY — not
-  # Kustomization/user-apps, which this same Kustomization also applies and whose
-  # health depends on every installed app's YAML.
-  # This is what marketplace-ui gates on (issue #180's guarantee, without #182's
-  # coupling). Evaluated after apply, so the seed Job it applies is free to be
-  # what makes the GitRepository Ready — no deadlock.
+  # Ready ⇔ Flux cloned a SEEDED repo, and that is all. Do NOT "fix" this to
+  # `wait: true`: the CRD ignores healthChecks when wait is enabled, so it would
+  # health-check every applied object — Kustomization/user-apps included — which is
+  # exactly the coupling #182 removes. Why: docs/DECISIONS_LOG.md row 8.
   wait: false
   healthChecks:
     - apiVersion: source.toolkit.fluxcd.io/v1

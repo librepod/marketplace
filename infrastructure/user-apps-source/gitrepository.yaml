@@ -21,7 +21,8 @@ spec:
   #      secret.env) reflected into two namespaces — the keypair bought ceremony,
   #      not secrecy.
   # Trade-off accepted: basic auth crosses the pod network in plaintext. Revisit
-  # when that credential is rotated. See issue #182's design doc §3.
+  # when that credential is rotated. See issue #182 and docs/DECISIONS_LOG.md
+  # row 7 (2026-08-22) for the full rationale and the probes behind it.
   url: http://gogs.gogs.svc.cluster.local.:80/flux/user-apps.git
   ref:
     branch: master
