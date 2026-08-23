@@ -132,6 +132,44 @@ describe('GitRemoteService', () => {
     await expect(svc.resolve()).rejects.toThrow(/ssh.*not supported/i);
   });
 
+  it('rejects the scp-style git@host:path remote with the same actionable message', async () => {
+    // The form Gogs shows in its OWN UI, so the likeliest operator paste into
+    // GitRepository.spec.url. It carries no scheme, so an `ssh://` prefix check
+    // waved it through to `new URL(url)` in httpAuth(), where it surfaced as a
+    // bare `TypeError: Invalid URL` that named neither cause nor fix.
+    const svc = new GitRemoteService(configOf({
+      USER_APPS_GIT_URL: 'git@gogs.gogs.svc.cluster.local:flux/user-apps.git',
+      USER_APPS_GIT_CREDENTIALS_DIR: join(root, 'creds'),
+      USER_APPS_WORK_DIR: join(root, 'work'),
+    }), fakeApi().api);
+
+    await expect(svc.resolve()).rejects.toThrow(/only the http\(s\) transport is supported/);
+    await expect(svc.resolve()).rejects.toThrow(/repoint GitRepository\/user-apps-source/);
+    await expect(svc.resolve()).rejects.toThrow(/issue #182/);
+    // Specifically NOT the old failure mode.
+    await expect(svc.resolve()).rejects.not.toThrow(TypeError);
+  });
+
+  it('rejects any other non-http(s) scheme with the same actionable message', async () => {
+    // The guard is a whitelist, so a transport nobody thought about (file://,
+    // git://, https typo'd as htps://) still fails with guidance rather than a
+    // TypeError from the URL parser.
+    for (const url of [
+      'file:///srv/git/user-apps.git',
+      'git://gogs.gogs.svc.cluster.local/flux/user-apps.git',
+    ]) {
+      const svc = new GitRemoteService(configOf({
+        USER_APPS_GIT_URL: url,
+        USER_APPS_GIT_CREDENTIALS_DIR: join(root, 'creds'),
+        USER_APPS_WORK_DIR: join(root, 'work'),
+      }), fakeApi().api);
+
+      await expect(svc.resolve()).rejects.toThrow(/only the http\(s\) transport is supported/);
+      await expect(svc.resolve()).rejects.toThrow(/repoint GitRepository\/user-apps-source/);
+      await expect(svc.resolve()).rejects.not.toThrow(TypeError);
+    }
+  });
+
   it('discovers url and branch from GitRepository/user-apps-source when no override is set', async () => {
     const creds = join(root, 'creds');
     await mkdir(creds, { recursive: true });

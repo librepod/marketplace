@@ -4,6 +4,7 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { rm } from 'node:fs/promises';
 import cookieParser from 'cookie-parser';
 import { AppModule } from '../src/app.module';
 import { SessionService } from '../src/auth/session.service';
@@ -26,10 +27,10 @@ process.env.CATALOG_PATH = path.resolve(
 process.env.USER_APPS_GIT_URL = 'http://localhost:9999/flux/user-apps.git';
 process.env.USER_APPS_GIT_USERNAME = 'flux';
 process.env.USER_APPS_GIT_PASSWORD = 'test-password';
-process.env.USER_APPS_WORK_DIR = path.join(
-  os.tmpdir(),
-  `marketplace-e2e-user-apps-${process.pid}`,
-);
+// Hoisted so the afterAll teardown removes exactly this directory: resolving the
+// remote writes a 0600 `.git-credentials` holding the literal test password here.
+const WORK_DIR = path.join(os.tmpdir(), `marketplace-e2e-user-apps-${process.pid}`);
+process.env.USER_APPS_WORK_DIR = WORK_DIR;
 // Auth (global AuthGuard gates /api/* — mint a session cookie in beforeAll)
 process.env.SESSION_SECRET = 'e2e-secret-long-and-random';
 process.env.CASDOOR_ENDPOINT = 'https://id.example.com';
@@ -58,6 +59,7 @@ describe('Catalog API (e2e)', () => {
 
   afterAll(async () => {
     await app.close();
+    await rm(WORK_DIR, { recursive: true, force: true });
   });
 
   describe('GET /api/apps', () => {

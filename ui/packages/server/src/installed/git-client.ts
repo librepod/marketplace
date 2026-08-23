@@ -51,6 +51,9 @@ export class GitClient {
     } catch (error: unknown) {
       const e = error as { stderr?: string; message?: string };
       const detail = (e.stderr || e.message || 'unknown git failure').trim();
+      // `args` only, never `auth.configArgs` — deliberate: it carries
+      // `credential.helper=store --file=<path>`, which must stay out of logs and
+      // API error bodies. Do not "helpfully" widen this to the full argv.
       throw new Error(`git ${args.join(' ')} failed: ${detail}`);
     }
   }

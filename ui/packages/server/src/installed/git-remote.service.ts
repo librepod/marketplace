@@ -26,7 +26,8 @@ interface GitRepositoryObject {
  * is dynamic, so RBAC could not scope it and the service would need `get secrets`
  * across all of flux-system. The credential is mounted instead.
  *
- * One transport: http(s). `ssh://` is rejected rather than half-attempted: Tier 1
+ * One transport: http(s). Anything else — `ssh://`, the scp-like `git@host:path`
+ * form Gogs displays, `file://` — is rejected rather than half-attempted: Tier 1
  * has no port 22, so ssh would be the only transport no fast test covers (#182).
  * The discovered URL is used VERBATIM; the trailing-dot FQDN production needs
  * lives in gitrepository.yaml, not here.
@@ -53,11 +54,13 @@ export class GitRemoteService {
     if (this.cached) return this.cached;
 
     const { url, branch } = await this.resolveLocation();
-    if (url.startsWith('ssh://')) {
+    const unsupported = this.unsupportedTransport(url);
+    if (unsupported) {
       throw new Error(
-        `the app-store remote is ${url}, but the ssh transport is not supported in ` +
-          'this release — repoint GitRepository/user-apps-source at an http(s) URL ' +
-          '(ssh support is deferred — see issue #182)',
+        `the app-store remote is ${url} (${unsupported}), but only the http(s) ` +
+          'transport is supported in this release — repoint ' +
+          'GitRepository/user-apps-source at an http(s) URL. ssh and other ' +
+          'transports are not supported (deferred — see issue #182)',
       );
     }
     const auth = await this.httpAuth(url);
@@ -67,6 +70,23 @@ export class GitRemoteService {
     this.cached = { url, branch, auth };
     this.logger.log(`user-apps remote: ${url} (branch ${branch})`);
     return this.cached;
+  }
+
+  /**
+   * Names the transport of a remote we cannot use, or undefined for http(s).
+   *
+   * A whitelist, not an `ssh://` blacklist: the scp-like form Gogs shows in its
+   * own UI (`git@host:flux/user-apps.git`) carries no scheme, so a blacklist let
+   * it reach `new URL(url)` in httpAuth() and die as a bare `TypeError: Invalid
+   * URL` — which names neither the problem nor the fix.
+   */
+  private unsupportedTransport(url: string): string | undefined {
+    if (/^https?:\/\//i.test(url)) return undefined;
+    const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(url)?.[1];
+    if (scheme) return `${scheme.toLowerCase()} transport`;
+    // `user@host:path` — no scheme at all, so it is not caught above.
+    if (/^[^/]+@[^/]+:/.test(url)) return 'scp-style ssh syntax';
+    return 'unrecognised transport';
   }
 
   private async resolveLocation(): Promise<{ url: string; branch: string }> {
