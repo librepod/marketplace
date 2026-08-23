@@ -8,7 +8,8 @@ import { execFileSync } from "node:child_process";
  * THE BREAK IS DECLARATIVE — committed to the app-store repo, never patched onto
  * the live object. A `kubectl patch` of the app's OCIRepository is reverted by
  * kustomize-controller's drift correction within one `user-apps` interval (1m,
- * design F16), so a patch-based version of this test races its own assertions and
+ * assumed, NOT live-probed), so a patch-based version of this test races its own
+ * assertions and
  * flakes. Committing the break makes it the DESIRED state: Flux enforces it
  * instead of healing it. It also exercises the new "presence in the repo IS the
  * declaration" contract, which is the other half of #182.
@@ -17,7 +18,7 @@ import { execFileSync } from "node:child_process";
  * surfaces it and no other spec can observe it — which is also why it does not
  * collide with `reconcile-lifecycle.spec.ts`'s `pickApp()` app the way breaking a
  * real app would. Nothing to clean up: this gogs release has no DELETE route
- * (design F8) and `run-tier2.sh` destroys the cluster — and with it the in-cluster
+ * (live-probed, #182) and `run-tier2.sh` destroys the cluster — and with it the in-cluster
  * Gogs — at the end of the run.
  */
 const APP = "broken-probe-182";
@@ -47,7 +48,7 @@ function readyOrAbsent(kind: string, name: string): string {
 /**
  * Valid YAML that applies cleanly and can never become Ready: the OCI tag does not
  * exist, so the OCIRepository never produces an artifact. Keeping the YAML VALID is
- * essential — malformed YAML fails the whole-tree build (design F6) and would turn
+ * essential — malformed YAML fails the whole-tree build (#182) and would turn
  * `user-apps` Ready=False, destroying this test's premise instead of testing it.
  */
 function brokenAppFiles(): Record<string, string> {

@@ -8,7 +8,7 @@
 # (a) the Secret's existence is this Job's idempotency guard and the operator's
 # override hook, (b) cold-boot-repro.sh deletes it to force a reseed, and (c) it is
 # the provisioning half of the deferred ssh transport. Removing it is a follow-up
-# with its own cold-boot verification — see the design doc's Deferred section.
+# with its own cold-boot verification, deferred out of #182.
 #
 # Flow: apk add openssh-client curl jq git -> download kubectl -> wait until the
 # Gogs API accepts flux basic auth -> skip if Secret exists (idempotent + override

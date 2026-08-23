@@ -26,9 +26,10 @@ interface GitRepositoryObject {
  * is dynamic, so RBAC could not scope it and the service would need `get secrets`
  * across all of flux-system. The credential is mounted instead.
  *
- * One transport: http(s). `ssh://` is rejected — see the class comment on
- * GitClient and design §3. The discovered URL is used VERBATIM; the trailing-dot
- * FQDN production needs lives in gitrepository.yaml, not here.
+ * One transport: http(s). `ssh://` is rejected rather than half-attempted: Tier 1
+ * has no port 22, so ssh would be the only transport no fast test covers (#182).
+ * The discovered URL is used VERBATIM; the trailing-dot FQDN production needs
+ * lives in gitrepository.yaml, not here.
  */
 @Injectable()
 export class GitRemoteService {
@@ -56,7 +57,7 @@ export class GitRemoteService {
       throw new Error(
         `the app-store remote is ${url}, but the ssh transport is not supported in ` +
           'this release — repoint GitRepository/user-apps-source at an http(s) URL ' +
-          '(see docs/design/2026-08-19-per-app-flux-isolation-design.md §3)',
+          '(ssh support is deferred — see issue #182)',
       );
     }
     const auth = await this.httpAuth(url);

@@ -256,8 +256,9 @@ Three units replaced `GogsService` (#182), split by what they know:
 never delete an app's files over REST. git is also what makes the repo pluggable.
 
 **Transport: `http(s)` only.** An `ssh://` remote is rejected at resolution with a named
-error telling you to repoint the GitRepository — it is not a second supported path. See
-`docs/design/2026-08-19-per-app-flux-isolation-design.md` §3.
+error telling you to repoint the GitRepository — it is not a second supported path. The
+reason it is a rejection rather than a fallback: Tier 1 has no port 22, so shipping ssh
+would mean shipping the one transport no fast test covers. Tracked in issue #182.
 
 **Layout migration** (`migrateLayout`, run from `onModuleInit`): deletes orphaned
 `apps/<name>/` directories — present in the tree but absent from the old root file's

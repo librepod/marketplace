@@ -24,7 +24,7 @@ WORKDIR /app
 # The installer performs every app-store repo mutation over git (the provider's
 # REST contents API has no DELETE route, so file removal is impossible there —
 # see issue #182). git only: the app-store remote is an http(s) URL, and the ssh
-# transport is deliberately not shipped in this release (design §3), so
+# transport is deliberately not shipped in this release (issue #182), so
 # openssh-client would be unused attack surface.
 RUN apk add --no-cache git
 

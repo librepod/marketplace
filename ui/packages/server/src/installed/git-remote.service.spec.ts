@@ -120,7 +120,7 @@ describe('GitRemoteService', () => {
   });
 
   it('rejects an ssh:// remote with a message that says what to do', async () => {
-    // This release ships ONE transport (design §3). An ssh:// URL is an operator
+    // This release ships ONE transport (#182). An ssh:// URL is an operator
     // misconfiguration, and it has to name the fix rather than surfacing as a pile
     // of git auth errors.
     const svc = new GitRemoteService(configOf({
