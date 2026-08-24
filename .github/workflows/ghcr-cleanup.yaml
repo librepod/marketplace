@@ -1,0 +1,51 @@
+name: GHCR Cleanup
+
+on:
+  schedule:
+    - cron: '23 4 * * 1' # weekly, Monday 04:23 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (log deletions, change nothing)'
+        type: boolean
+        default: true
+
+# The cleanup action is not safe to run in parallel against the same package.
+concurrency:
+  group: ghcr-cleanup
+
+permissions:
+  packages: write
+  pull-requests: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute open-PR tags to protect
+        id: prs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAGS=$(gh pr list -R "${{ github.repository }}" --state open \
+            --json number --jq '.[] | "pr-\(.number)"' | paste -sd, -)
+          # pr-__none__ matches no real tag; keeps exclude-tags well-formed
+          echo "list=${TAGS:-pr-__none__}" >> "$GITHUB_OUTPUT"
+
+      - name: Prune old bootstrap artifact versions
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          token: ${{ github.token }}
+          package: marketplace/bootstrap
+          # Only mutable dev tags are ever deletion candidates; semver and
+          # latest are structurally immune (they match no delete pattern).
+          delete-tags: '0.0.0-*,pr-*'
+          keep-n-tagged: 10
+          exclude-tags: 'latest,${{ steps.prs.outputs.list }}'
+          # Untagged orphans come from overwriting latest/pr-N tags.
+          delete-untagged: true
+          # Sweep cosign signature tags (sha256-...) whose parent digest is
+          # gone; signatures of kept artifacts cascade only with their parent.
+          delete-orphaned-images: true
+          # Empty on schedule events -> falsy -> weekly run deletes for real.
+          dry-run: ${{ inputs.dry_run == true }}
