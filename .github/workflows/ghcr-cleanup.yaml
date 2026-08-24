@@ -27,7 +27,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAGS=$(gh pr list -R "${{ github.repository }}" --state open \
+          TAGS=$(gh pr list -R "${{ github.repository }}" --state open --limit 1000 \
             --json number --jq '.[] | "pr-\(.number)"' | paste -sd, -)
           # pr-__none__ matches no real tag; keeps exclude-tags well-formed
           echo "list=${TAGS:-pr-__none__}" >> "$GITHUB_OUTPUT"
@@ -47,5 +47,5 @@ jobs:
           # Sweep cosign signature tags (sha256-...) whose parent digest is
           # gone; signatures of kept artifacts cascade only with their parent.
           delete-orphaned-images: true
-          # Empty on schedule events -> falsy -> weekly run deletes for real.
+          # Null on schedule events -> falsy -> weekly run deletes for real.
           dry-run: ${{ inputs.dry_run == true }}
