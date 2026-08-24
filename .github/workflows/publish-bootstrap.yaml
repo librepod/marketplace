@@ -95,8 +95,12 @@ jobs:
               --revision="$(git rev-parse HEAD)" \
               --output json | jq -r '.repository + "@" + .digest')
 
-            echo "Signing latest artifact by digest: $DIGEST_L"
-            cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST_L"
+            if [ "$DIGEST_V" = "$DIGEST_L" ]; then
+              echo "latest shares the versioned digest - skipping redundant sign"
+            else
+              echo "Signing latest artifact by digest: $DIGEST_L"
+              cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST_L"
+            fi
           fi
 
   comment:
