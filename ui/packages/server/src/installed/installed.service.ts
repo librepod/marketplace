@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Mutex } from 'async-mutex';
 import * as crypto from 'node:crypto';
 import { CatalogService } from '../catalog/catalog.service';
-import { GogsService } from './gogs.service';
+import { UserAppsRepoService } from './user-apps-repo.service';
 import { FluxStatusService } from './flux-status.service';
 import { SystemAppsService } from './system-apps.service';
 import { LaunchUrlService } from './launch-url.service';
@@ -16,7 +16,7 @@ export class InstalledService {
 
   constructor(
     private readonly catalog: CatalogService,
-    private readonly gogs: GogsService,
+    private readonly repo: UserAppsRepoService,
     private readonly flux: FluxStatusService,
     private readonly configService: ConfigService,
     private readonly systemApps: SystemAppsService,
@@ -25,7 +25,7 @@ export class InstalledService {
 
   async enrich(apps: CatalogApp[]): Promise<CatalogApp[]> {
     const [installedNames, systemMap] = await Promise.all([
-      this.gogs.getInstalledAppNames(),
+      this.repo.listInstalledApps(),
       this.systemApps.getSystemApps(),
     ]);
     const installedSet = new Set(installedNames);
@@ -43,7 +43,7 @@ export class InstalledService {
     return Promise.all(
       apps.map(async (app) => {
         // System classification wins: a managed app's status comes from its
-        // platform Flux object (by name), never the Gogs "installed?" check —
+        // platform Flux object (by name), never the app-store "installed?" check —
         // this is what stops the forever-"Installing" badge for apps like
         // frp-operator that are both system-managed and present in user-apps.
         const systemKustomization = systemMap.get(app.name);
@@ -95,14 +95,8 @@ export class InstalledService {
       }
       if (!app.templates) throw new InternalServerErrorException(`App "${appName}" has no install templates`);
 
-      // Ensure a Gogs write token before any repo interaction. On a fresh cluster
-      // Gogs may still be creating the flux admin user; this waits (bounded)
-      // rather than letting the first install 500. Placed after the cheap
-      // validations so bad input fails fast without waiting.
-      await this.gogs.ensureWritableToken();
-
       // 2. Check not already installed
-      const installed = await this.gogs.getInstalledAppNames();
+      const installed = await this.repo.listInstalledApps();
       if (installed.includes(appName)) throw new ConflictException(`${app.displayName} is already installed`);
 
       // 3. Build variable substitution map
@@ -118,33 +112,19 @@ export class InstalledService {
         }
       }
 
-      // 4. Render and write template files (app files FIRST per Pitfall 3)
-      const basePath = `apps/${appName}`;
-      await this.gogs.createFile(
-        `${basePath}/source.yaml`,
-        this.renderTemplate(app.templates.source, vars),
-        `install ${appName}: add source`,
-      );
-      await this.gogs.createFile(
-        `${basePath}/release.yaml`,
-        this.renderTemplate(app.templates.release, vars),
-        `install ${appName}: add release`,
-      );
+      // 4. Render every file and write them as ONE commit. Ordering no longer
+      // matters ("Pitfall 3" was about the root kustomization.yaml naming an
+      // app dir before its files existed) — atomicity now comes from the commit,
+      // and Flux auto-generates its kustomization from the tree.
+      const files: Record<string, string> = {
+        'source.yaml': this.renderTemplate(app.templates.source, vars),
+        'release.yaml': this.renderTemplate(app.templates.release, vars),
+        'kustomization.yaml': this.renderTemplate(app.templates.kustomization, vars),
+      };
       if (app.templates.secret) {
-        await this.gogs.createFile(
-          `${basePath}/secret.yaml`,
-          this.renderTemplate(app.templates.secret, vars),
-          `install ${appName}: add secret`,
-        );
+        files['secret.yaml'] = this.renderTemplate(app.templates.secret, vars);
       }
-      await this.gogs.createFile(
-        `${basePath}/kustomization.yaml`,
-        this.renderTemplate(app.templates.kustomization, vars),
-        `install ${appName}: add kustomization`,
-      );
-
-      // 5. Update root kustomization.yaml LAST (per Pitfall 3)
-      await this.gogs.addToRootKustomization(appName);
+      await this.repo.writeApp(appName, files);
 
       return { success: true, message: `${app.displayName} is being deployed` };
     });
@@ -161,15 +141,15 @@ export class InstalledService {
         );
       }
 
-      // Ensure a Gogs write token before touching the repo (see install()).
-      await this.gogs.ensureWritableToken();
-
       // 2. Check is installed
-      const installed = await this.gogs.getInstalledAppNames();
+      const installed = await this.repo.listInstalledApps();
       if (!installed.includes(appName)) throw new ConflictException(`${app.displayName} is not installed`);
 
-      // 3. Remove from root kustomization FIRST
-      await this.gogs.removeFromRootKustomization(appName);
+      // 3. Delete the app's whole directory — one commit. Unlike the old
+      // root-kustomization edit this really removes the files, so a later
+      // reinstall starts clean and Flux's auto-generated build cannot
+      // resurrect the app.
+      await this.repo.removeApp(appName);
 
       return { success: true, message: `${app.displayName} has been removed` };
     });

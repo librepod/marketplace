@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { InstalledService } from './installed.service';
-import { GogsService } from './gogs.service';
+import { UserAppsRepoService } from './user-apps-repo.service';
 import { FluxStatusService } from './flux-status.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { ConfigService } from '@nestjs/config';
@@ -52,13 +52,12 @@ const mockCatalogApps = [
 
 describe('InstalledService', () => {
   let service: InstalledService;
-  let mockGogsService: {
-    getInstalledAppNames: ReturnType<typeof vi.fn>;
-    createFile: ReturnType<typeof vi.fn>;
-    getFileContents: ReturnType<typeof vi.fn>;
-    addToRootKustomization: ReturnType<typeof vi.fn>;
-    removeFromRootKustomization: ReturnType<typeof vi.fn>;
-    ensureWritableToken: ReturnType<typeof vi.fn>;
+  // Exactly the three methods InstalledService calls on the app-store repo.
+  // Install is now ONE write (a single commit), not four ordered file PUTs.
+  let mockRepo: {
+    listInstalledApps: ReturnType<typeof vi.fn>;
+    writeApp: ReturnType<typeof vi.fn>;
+    removeApp: ReturnType<typeof vi.fn>;
   };
   let mockFluxService: { getStatusFor: ReturnType<typeof vi.fn> };
   let mockCatalogService: { findAll: ReturnType<typeof vi.fn>; findOne: ReturnType<typeof vi.fn> };
@@ -69,13 +68,10 @@ describe('InstalledService', () => {
   let mockLaunchUrlService: { resolve: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
-    mockGogsService = {
-      getInstalledAppNames: vi.fn(),
-      createFile: vi.fn().mockResolvedValue(undefined),
-      getFileContents: vi.fn(),
-      addToRootKustomization: vi.fn().mockResolvedValue(undefined),
-      removeFromRootKustomization: vi.fn().mockResolvedValue(undefined),
-      ensureWritableToken: vi.fn().mockResolvedValue('mock-token'),
+    mockRepo = {
+      listInstalledApps: vi.fn(async () => [] as string[]),
+      writeApp: vi.fn(async () => undefined),
+      removeApp: vi.fn(async () => undefined),
     };
     mockFluxService = { getStatusFor: vi.fn() };
     mockCatalogService = {
@@ -101,7 +97,7 @@ describe('InstalledService', () => {
 
     service = new InstalledService(
       mockCatalogService as unknown as CatalogService,
-      mockGogsService as unknown as GogsService,
+      mockRepo as unknown as UserAppsRepoService,
       mockFluxService as unknown as FluxStatusService,
       mockConfigService,
       mockSystemAppsService as unknown as SystemAppsService,
@@ -119,7 +115,7 @@ describe('InstalledService', () => {
 
   describe('enrich()', () => {
     it('sets installedStatus to not_installed for apps not in Gogs (BACK-02)', async () => {
-      mockGogsService.getInstalledAppNames.mockResolvedValue([]);
+      mockRepo.listInstalledApps.mockResolvedValue([]);
 
       const enriched = await service.enrich(mockCatalogApps);
 
@@ -128,7 +124,7 @@ describe('InstalledService', () => {
     });
 
     it('sets installedStatus from FluxCD for installed apps (BACK-02+03)', async () => {
-      mockGogsService.getInstalledAppNames.mockResolvedValue(['vaultwarden']);
+      mockRepo.listInstalledApps.mockResolvedValue(['vaultwarden']);
       mockFluxService.getStatusFor.mockResolvedValue('running');
 
       const enriched = await service.enrich(mockCatalogApps);
@@ -138,7 +134,7 @@ describe('InstalledService', () => {
     });
 
     it('uses Promise.all — does not call flux serially (BACK-03)', async () => {
-      mockGogsService.getInstalledAppNames.mockResolvedValue(['vaultwarden', 'gogs']);
+      mockRepo.listInstalledApps.mockResolvedValue(['vaultwarden', 'gogs']);
       mockFluxService.getStatusFor.mockResolvedValue('running');
 
       await service.enrich(mockCatalogApps);
@@ -148,7 +144,7 @@ describe('InstalledService', () => {
     });
 
     it('does not call FluxCD for not-installed apps (BACK-03)', async () => {
-      mockGogsService.getInstalledAppNames.mockResolvedValue([]);
+      mockRepo.listInstalledApps.mockResolvedValue([]);
 
       await service.enrich(mockCatalogApps);
 
@@ -158,7 +154,7 @@ describe('InstalledService', () => {
 
   describe('enrich() launch fields', () => {
     it('stamps launchUrl when resolve returns { url }', async () => {
-      mockGogsService.getInstalledAppNames.mockResolvedValue(['vaultwarden']);
+      mockRepo.listInstalledApps.mockResolvedValue(['vaultwarden']);
       mockFluxService.getStatusFor.mockResolvedValue('running');
       mockLaunchUrlService.resolve.mockResolvedValue({ url: 'https://vaultwarden.example.com/ui' });
 
@@ -170,7 +166,7 @@ describe('InstalledService', () => {
     });
 
     it('stamps launchable:false when resolve returns { launchable:false }', async () => {
-      mockGogsService.getInstalledAppNames.mockResolvedValue(['vaultwarden']);
+      mockRepo.listInstalledApps.mockResolvedValue(['vaultwarden']);
       mockFluxService.getStatusFor.mockResolvedValue('running');
       mockLaunchUrlService.resolve.mockResolvedValue({ launchable: false });
 
@@ -182,7 +178,7 @@ describe('InstalledService', () => {
     });
 
     it('stamps neither field when resolve returns {}', async () => {
-      mockGogsService.getInstalledAppNames.mockResolvedValue(['vaultwarden']);
+      mockRepo.listInstalledApps.mockResolvedValue(['vaultwarden']);
       mockFluxService.getStatusFor.mockResolvedValue('running');
       mockLaunchUrlService.resolve.mockResolvedValue({});
 
@@ -194,7 +190,7 @@ describe('InstalledService', () => {
     });
 
     it('does not resolve launch info for not-installed apps', async () => {
-      mockGogsService.getInstalledAppNames.mockResolvedValue([]);
+      mockRepo.listInstalledApps.mockResolvedValue([]);
 
       await service.enrich(mockCatalogApps);
 
@@ -207,7 +203,7 @@ describe('InstalledService', () => {
       );
       // Not in Gogs — status must come from the system branch, which still
       // resolves launch info (a managed app can carry a launch override).
-      mockGogsService.getInstalledAppNames.mockResolvedValue([]);
+      mockRepo.listInstalledApps.mockResolvedValue([]);
       mockFluxService.getStatusFor.mockResolvedValue('running');
       mockLaunchUrlService.resolve.mockResolvedValue({ url: 'https://gogs.example.com' });
 
@@ -222,7 +218,7 @@ describe('InstalledService', () => {
 
   describe('getInstalled()', () => {
     it('returns only apps with installedStatus !== not_installed (INST-03)', async () => {
-      mockGogsService.getInstalledAppNames.mockResolvedValue(['vaultwarden']);
+      mockRepo.listInstalledApps.mockResolvedValue(['vaultwarden']);
       mockFluxService.getStatusFor.mockResolvedValue('running');
 
       const installed = await service.getInstalled();
@@ -232,7 +228,7 @@ describe('InstalledService', () => {
     });
 
     it('returns empty array when no apps installed (INST-03)', async () => {
-      mockGogsService.getInstalledAppNames.mockResolvedValue([]);
+      mockRepo.listInstalledApps.mockResolvedValue([]);
 
       const installed = await service.getInstalled();
 
@@ -243,7 +239,7 @@ describe('InstalledService', () => {
       mockSystemAppsService.getSystemApps.mockResolvedValue(
         new Map([['gogs', 'gogs']]),
       );
-      mockGogsService.getInstalledAppNames.mockResolvedValue(['vaultwarden', 'gogs']);
+      mockRepo.listInstalledApps.mockResolvedValue(['vaultwarden', 'gogs']);
       mockFluxService.getStatusFor.mockResolvedValue('running');
 
       const installed = await service.getInstalled();
@@ -253,45 +249,24 @@ describe('InstalledService', () => {
   });
 
   describe('install()', () => {
-    it('writes template files to Gogs and updates root kustomization (INST-01)', async () => {
-      mockGogsService.getInstalledAppNames.mockResolvedValue([]);
+    it('writes every rendered app file in a single repo write (INST-01)', async () => {
+      mockRepo.listInstalledApps.mockResolvedValue([]);
 
       await service.install('vaultwarden');
 
-      // Should create source.yaml, release.yaml, kustomization.yaml, secret.yaml
-      expect(mockGogsService.createFile).toHaveBeenCalled();
-      expect(mockGogsService.addToRootKustomization).toHaveBeenCalledWith('vaultwarden');
+      expect(mockRepo.writeApp).toHaveBeenCalledTimes(1);
+      const [name, files] = mockRepo.writeApp.mock.calls[0];
+      expect(name).toBe('vaultwarden');
+      expect(Object.keys(files).sort()).toEqual([
+        'kustomization.yaml', 'release.yaml', 'secret.yaml', 'source.yaml',
+      ]);
+      expect(files['secret.yaml']).not.toContain('${ADMIN_TOKEN}'); // generated
     });
 
     it('throws ConflictException if app is already installed (INST-01)', async () => {
-      mockGogsService.getInstalledAppNames.mockResolvedValue(['vaultwarden']);
+      mockRepo.listInstalledApps.mockResolvedValue(['vaultwarden']);
 
       await expect(service.install('vaultwarden')).rejects.toThrow();
-    });
-
-    it('waits for a Gogs write token before touching the repo (first-click race)', async () => {
-      mockGogsService.getInstalledAppNames.mockResolvedValue([]);
-
-      await service.install('vaultwarden');
-
-      // ensureWritableToken must run before any repo read/write, so a fresh
-      // cluster's slow flux-user provisioning is absorbed rather than 500ing.
-      expect(mockGogsService.ensureWritableToken).toHaveBeenCalled();
-      const tokenOrder = mockGogsService.ensureWritableToken.mock.invocationCallOrder[0];
-      const firstWriteOrder = mockGogsService.createFile.mock.invocationCallOrder[0];
-      expect(tokenOrder).toBeLessThan(firstWriteOrder);
-    });
-
-    it('fails cleanly without writing any files if the token never becomes available', async () => {
-      mockGogsService.getInstalledAppNames.mockResolvedValue([]);
-      mockGogsService.ensureWritableToken.mockRejectedValueOnce(
-        new Error('Gogs API token unavailable after 5 attempts'),
-      );
-
-      await expect(service.install('vaultwarden')).rejects.toThrow(/token unavailable/i);
-      // No partial write: we bail before the first createFile.
-      expect(mockGogsService.createFile).not.toHaveBeenCalled();
-      expect(mockGogsService.addToRootKustomization).not.toHaveBeenCalled();
     });
 
     it('throws NotFoundException if app not in catalog (INST-01)', async () => {
@@ -301,41 +276,32 @@ describe('InstalledService', () => {
     });
 
     it('generates random secret when metadata has generate config (INST-01, D-04)', async () => {
-      mockGogsService.getInstalledAppNames.mockResolvedValue([]);
+      mockRepo.listInstalledApps.mockResolvedValue([]);
 
       await service.install('vaultwarden');
 
-      // secret.yaml should be created with a generated value, not ${ADMIN_TOKEN}
-      const secretCalls = (mockGogsService.createFile as ReturnType<typeof vi.fn>).mock.calls.filter(
-        (call: string[]) => call[0].includes('secret'),
-      );
-      expect(secretCalls.length).toBeGreaterThan(0);
-      const secretContent = secretCalls[0][1] as string;
-      expect(secretContent).not.toContain('${ADMIN_TOKEN}');
+      const [, files] = mockRepo.writeApp.mock.calls[0];
+      expect(files['secret.yaml']).toBeDefined();
+      expect(files['secret.yaml']).not.toContain('${ADMIN_TOKEN}');
     });
 
     it('substitutes BASE_DOMAIN param in templates (INST-01, D-04)', async () => {
-      mockGogsService.getInstalledAppNames.mockResolvedValue([]);
+      mockRepo.listInstalledApps.mockResolvedValue([]);
 
       await service.install('vaultwarden');
 
-      // release.yaml should have the actual domain substituted
-      const releaseCalls = (mockGogsService.createFile as ReturnType<typeof vi.fn>).mock.calls.filter(
-        (call: string[]) => call[0].includes('release'),
-      );
-      expect(releaseCalls.length).toBeGreaterThan(0);
-      const releaseContent = releaseCalls[0][1] as string;
-      expect(releaseContent).not.toContain('${BASE_DOMAIN}');
+      const [, files] = mockRepo.writeApp.mock.calls[0];
+      expect(files['release.yaml']).not.toContain('${BASE_DOMAIN}');
     });
   });
 
   describe('uninstall()', () => {
-    it('removes app from root kustomization (INST-02)', async () => {
-      mockGogsService.getInstalledAppNames.mockResolvedValue(['vaultwarden']);
+    it('uninstall removes the app directory (INST-02)', async () => {
+      mockRepo.listInstalledApps.mockResolvedValue(['vaultwarden']);
 
       await service.uninstall('vaultwarden');
 
-      expect(mockGogsService.removeFromRootKustomization).toHaveBeenCalledWith('vaultwarden');
+      expect(mockRepo.removeApp).toHaveBeenCalledWith('vaultwarden');
     });
 
     it('throws NotFoundException if app not in catalog (INST-02)', async () => {
@@ -345,7 +311,7 @@ describe('InstalledService', () => {
     });
 
     it('throws ConflictException if app is not installed (INST-02)', async () => {
-      mockGogsService.getInstalledAppNames.mockResolvedValue([]);
+      mockRepo.listInstalledApps.mockResolvedValue([]);
 
       await expect(service.uninstall('vaultwarden')).rejects.toThrow();
     });
@@ -353,9 +319,9 @@ describe('InstalledService', () => {
 
   describe('mutex serialization (BACK-04)', () => {
     it('serializes concurrent install operations (BACK-04)', async () => {
-      mockGogsService.getInstalledAppNames.mockResolvedValue([]);
+      mockRepo.listInstalledApps.mockResolvedValue([]);
       const order: string[] = [];
-      mockGogsService.addToRootKustomization.mockImplementation(async (name: string) => {
+      mockRepo.writeApp.mockImplementation(async (name: string) => {
         order.push(`start-${name}`);
         await new Promise(r => setTimeout(r, 50));
         order.push(`end-${name}`);
@@ -387,7 +353,7 @@ describe('InstalledService', () => {
         new Map([['gogs', 'gogs']]),
       );
       // gogs must be classified system BEFORE the Gogs check is consulted
-      mockGogsService.getInstalledAppNames.mockResolvedValue(['gogs']);
+      mockRepo.listInstalledApps.mockResolvedValue(['gogs']);
       mockFluxService.getStatusFor.mockResolvedValue('running');
 
       const enriched = await service.enrich(mockCatalogApps);
@@ -405,7 +371,7 @@ describe('InstalledService', () => {
       mockSystemAppsService.getSystemApps.mockResolvedValue(
         new Map([['frp-operator', 'frp-operator']]),
       );
-      mockGogsService.getInstalledAppNames.mockResolvedValue(['frp-operator']);
+      mockRepo.listInstalledApps.mockResolvedValue(['frp-operator']);
       mockFluxService.getStatusFor.mockResolvedValue('running');
 
       const [enriched] = await service.enrich([frp]);
@@ -416,7 +382,7 @@ describe('InstalledService', () => {
 
     it('leaves a user app system:false and uses the marketplace label query', async () => {
       mockSystemAppsService.getSystemApps.mockResolvedValue(new Map());
-      mockGogsService.getInstalledAppNames.mockResolvedValue(['vaultwarden']);
+      mockRepo.listInstalledApps.mockResolvedValue(['vaultwarden']);
       mockFluxService.getStatusFor.mockResolvedValue('running');
 
       const enriched = await service.enrich(mockCatalogApps);
@@ -432,14 +398,14 @@ describe('InstalledService', () => {
       mockSystemAppsService.isSystem.mockResolvedValue(true);
 
       await expect(service.install('gogs')).rejects.toThrow(/managed by the platform/);
-      expect(mockGogsService.createFile).not.toHaveBeenCalled();
+      expect(mockRepo.writeApp).not.toHaveBeenCalled();
     });
 
     it('uninstall throws ConflictException for a managed app', async () => {
       mockSystemAppsService.isSystem.mockResolvedValue(true);
 
       await expect(service.uninstall('gogs')).rejects.toThrow(/managed by the platform/);
-      expect(mockGogsService.removeFromRootKustomization).not.toHaveBeenCalled();
+      expect(mockRepo.removeApp).not.toHaveBeenCalled();
     });
   });
 });

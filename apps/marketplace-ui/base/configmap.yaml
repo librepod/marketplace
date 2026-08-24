@@ -5,15 +5,13 @@ metadata:
 data:
   PORT: "3000"
   CATALOG_PATH: "/data/catalog.yaml"
-  # Trailing dot = absolute FQDN. Do NOT remove it. On a host whose resolv.conf
-  # has a search domain ending in the app zone (e.g. `search ... libre.pod`, which
-  # every LibrePod device and the dev box carry), a bare `gogs.gogs.svc.cluster.local`
-  # is resolved with the search domain appended first -> `...svc.cluster.local.<host>.libre.pod`
-  # -> matched by the coredns-custom libre.pod rewrite -> rewritten to Traefik's ClusterIP.
-  # Traefik then 301-redirects HTTP->HTTPS and serves the untrusted default cert, so every
-  # Gogs API call (`fetch failed`) breaks and installs silently degrade to not_installed.
-  # The trailing dot makes the name absolute, skipping the search list entirely.
-  GOGS_URL: "http://gogs.gogs.svc.cluster.local.:80"
+  # Where the app-store repo working copy and the private credential copies live
+  # (the emptyDir mounted by the Deployment).
+  USER_APPS_WORK_DIR: "/var/lib/user-apps"
+  USER_APPS_GIT_CREDENTIALS_DIR: "/etc/user-apps-git"
+  # NB: no USER_APPS_GIT_URL here on purpose. It is discovered from
+  # GitRepository/user-apps-source, so the installer can never commit to a repo
+  # Flux is not reading; the env var exists only as a test seam (Tier 1).
   # The cluster's app zone, substituted by Flux postBuild (system-apps sets
   # BASE_DOMAIN). The server reads this to build every launch link
   # (https://<name>.<BASE_DOMAIN>); without it the server falls back to its

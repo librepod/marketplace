@@ -7,7 +7,7 @@ spec:
   interval: 10m
   url: oci://ghcr.io/librepod/marketplace/apps/marketplace-ui
   ref:
-    tag: "0.5.4"
+    tag: "0.6.0"
   verify:
     provider: cosign
     secretRef:
@@ -23,14 +23,16 @@ spec:
     - name: gogs
     - name: cert-manager
     - name: casdoor-sso-controller
-    # Gate on the user-apps Kustomization: Ready ⇔ Flux cloned a seeded
-    # flux/user-apps repo and applied it — a provider-neutral "repo is seeded and
-    # writable" signal (identical semantics for Gogs, GitHub, or GitLab). Without
-    # this the server can become Ready while the repo is still commitless, and the
-    # first install PUTs to a commitless repo → Gogs 500 (issue #180). dependsOn
-    # can only target Kustomizations, not the user-apps-source GitRepository, so
-    # this is the correct gate. user-apps dependsOn nothing → acyclic.
-    - name: user-apps
+    # Gate on user-apps-source, whose Ready is a selective healthCheck on
+    # GitRepository/user-apps-source: "Flux cloned a seeded repo". That is the
+    # installer's real invariant and it is provider-neutral (identical for Gogs,
+    # GitHub, GitLab). It deliberately does NOT gate on `user-apps`: that
+    # Kustomization builds every installed app's YAML, so one broken app would
+    # block re-applying the installer UI — the very tool needed to remove it
+    # (issue #182). dependsOn cannot target a GitRepository directly, so the
+    # Kustomization that owns it carries the check. Acyclic: user-apps-source
+    # dependsOn system-configs + gogs only.
+    - name: user-apps-source
   interval: 1m
   retryInterval: 2m
   timeout: 5m

@@ -51,27 +51,28 @@ dump_diagnostics() {
     kubectl get pods -A -o wide > "$DIAG_DIR/pods.txt" 2>&1 || true
   } || true
 
-  # The flux/user-apps repo state — the crux (empty/commitless ⇒ install 500). Reached
-  # via the running server pod (has node + creds + in-cluster Gogs URL), same calls as
-  # GogsService: Basic-auth token bootstrap, then GET raw/master/kustomization.yaml.
+  # The flux/user-apps repo state — the crux (empty/commitless ⇒ install 500). Read
+  # straight off the git working copy the server maintains (issue #182): that is the
+  # most direct answer to "what does the repo actually contain?", needs no credential,
+  # and it replaces the old REST probe, whose GOGS_* env and root kustomization.yaml
+  # both no longer exist. An empty or missing working copy is itself the diagnosis —
+  # it means the server never reached the repo — so a failing `git -C` here is useful
+  # output rather than a problem.
   local pod
   pod="$(kubectl get pods -n "$NS" -l app.kubernetes.io/name=marketplace-ui \
     -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
   if [ -n "$pod" ]; then
-    kubectl exec -n "$NS" "$pod" -c marketplace-ui -- node -e '
-      const G=(process.env.GOGS_URL||"http://gogs.gogs.svc.cluster.local:80").replace(/\/$/,"");
-      const U=process.env.GOGS_USERNAME,P=process.env.GOGS_TOKEN;
-      (async()=>{
-        const t=await fetch(`${G}/api/v1/users/${U}/tokens`,{method:"POST",
-          headers:{Authorization:"Basic "+Buffer.from(`${U}:${P}`).toString("base64"),"Content-Type":"application/json"},
-          body:JSON.stringify({name:"diag-"+Math.random().toString(16).slice(2,8)})});
-        console.log("token bootstrap ->",t.status);
-        const tok=t.ok?(await t.json()).sha1:"";
-        const r=await fetch(`${G}/api/v1/repos/flux/user-apps/raw/master/kustomization.yaml`,{headers:{Authorization:`token ${tok}`}});
-        console.log("GET raw/master/kustomization.yaml ->",r.status);
-        console.log("body:\n"+(await r.text()));
-      })().catch(e=>console.log("probe error:",e.message));
-    ' > "$DIAG_DIR/user-apps-repo-state.txt" 2>&1 || true
+    {
+      echo "== HEAD =="
+      kubectl exec -n "$NS" "$pod" -c marketplace-ui -- \
+        git -C /var/lib/user-apps/repo log --oneline -5 2>&1 || true
+      echo "== tree =="
+      kubectl exec -n "$NS" "$pod" -c marketplace-ui -- \
+        git -C /var/lib/user-apps/repo ls-tree -r --name-only HEAD 2>&1 || true
+      echo "== discovered remote =="
+      kubectl get gitrepository user-apps-source -n flux-system \
+        -o jsonpath='{.spec.url}{"\n"}{.status.conditions[*].message}{"\n"}' 2>&1 || true
+    } > "$DIAG_DIR/user-apps-repo-state.txt" 2>&1 || true
   fi
   echo "==> Diagnostics written: $(ls -1 "$DIAG_DIR" 2>/dev/null | wc -l) file(s)"
 }

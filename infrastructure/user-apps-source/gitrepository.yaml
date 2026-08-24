@@ -5,8 +5,26 @@ metadata:
   namespace: flux-system
 spec:
   interval: 1m
-  url: ssh://git@gogs.gogs.svc.cluster.local:22/flux/user-apps.git
+  # HTTP, not ssh. Three reasons, in order of weight:
+  #   1. The installer writes to THIS url (it discovers it from this object), and
+  #      the only hermetic test tier reaching Gogs does so over HTTP with no port
+  #      22 — so ssh would ship as the one transport no fast test covers.
+  #   2. Trailing dot = absolute FQDN. Do NOT remove it. With ndots:5 a 4-dot name
+  #      is search-expanded first, and where the app zone is in the pod's search
+  #      list that expansion is rewritten to Traefik's ClusterIP by coredns-custom
+  #      — the documented reason marketplace-ui's GOGS_URL carried this dot. The
+  #      absolute form is correct whether or not a given device is exposed to that,
+  #      and an ssh url could not take the dot at all without re-keying
+  #      known_hosts, since host keys are bound to the exact name given.
+  #   3. ssh was adopted for "no baked-in credential", but the flux account's
+  #      password is a committed literal (apps/gogs/components/bootstrap-admin/
+  #      secret.env) reflected into two namespaces — the keypair bought ceremony,
+  #      not secrecy.
+  # Trade-off accepted: basic auth crosses the pod network in plaintext. Revisit
+  # when that credential is rotated. See issue #182 and docs/DECISIONS_LOG.md
+  # row 7 (2026-08-22) for the full rationale and the probes behind it.
+  url: http://gogs.gogs.svc.cluster.local.:80/flux/user-apps.git
   ref:
     branch: master
   secretRef:
-    name: user-apps-ssh-key
+    name: user-apps-source-auth

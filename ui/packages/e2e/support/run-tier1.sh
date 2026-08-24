@@ -22,6 +22,13 @@ echo "==> Building client + server"
 npm run build:client
 npm run build
 
+# The server keeps a persistent git working copy of the app-store repo under
+# packages/e2e/.tmp. `compose down -v` wipes the Gogs volume, so a copy left by a
+# previous run points at a repo that no longer exists — clear it so every run
+# starts from a genuine cold clone, matching a fresh pod.
+echo "==> Clearing the previous run's app-store working copy"
+rm -rf "$E2E/.tmp"
+
 echo "==> Starting Gogs (seeded runtime)"
 # Detached, deliberately WITHOUT --wait: gogs-seed is a one-shot with no
 # healthcheck, and `up --wait` rejects healthcheck-less services on some docker

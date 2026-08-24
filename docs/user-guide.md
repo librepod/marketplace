@@ -133,8 +133,8 @@ For example, to install **Vaultwarden**:
 
 1. Create a directory structure:
 ```bash
-mkdir -p vaultwarden
-cd vaultwarden
+mkdir -p apps/vaultwarden
+cd apps/vaultwarden
 ```
 
 2. Copy the four templates from Vaultwarden's `metadata.yaml`:
@@ -160,8 +160,14 @@ Edit the templates to set your values:
 ```bash
 git add .
 git commit -m "Add vaultwarden"
-git push origin main
+git push origin master
 ```
+
+There is **no root `kustomization.yaml`** to edit. FluxCD generates one from the
+whole repository tree, so committing `apps/<name>/` is the entire installation —
+and deleting that directory is the entire uninstall. (One consequence: because
+the whole tree is the build input, a malformed YAML file anywhere in it fails the
+build for every app.)
 
 ### 3.4 Verify installation
 
@@ -206,12 +212,12 @@ To uninstall an app:
 # Clone user-apps repo
 cd user-apps
 
-# Delete the app directory
-rm -rf vaultwarden
+# Delete the app directory — that alone is the uninstall
+git rm -r apps/vaultwarden
 
 # Commit and push
-git commit -am -m "Remove vaultwarden"
-git push origin main
+git commit -m "Remove vaultwarden"
+git push origin master
 ```
 
 FluxCD will delete the app's resources after reconciliation.

@@ -15,14 +15,12 @@ spec:
         app.kubernetes.io/name: marketplace-ui
     spec:
       serviceAccountName: marketplace-ui
-      # NOTE: the `wait-for-gogs-user` initContainer that used to live here was
-      # removed (issue #180). It polled a Gogs-only endpoint (the flux admin
-      # USER) and never gated on the seeded flux/user-apps REPO, so the server
-      # could still become Ready against a commitless repo and the first install
-      # would 500. Repo readiness is now enforced provider-neutrally by the
-      # marketplace-ui Kustomization's `dependsOn: user-apps` (a Flux Kustomization
-      # that is Ready ⇔ the repo is cloned+applied — works for Gogs/GitHub/GitLab
-      # alike). The server also self-heals its token lazily (GogsService.ensureToken).
+      # NOTE: repo readiness is enforced provider-neutrally by the marketplace-ui
+      # Kustomization's `dependsOn: user-apps-source`, whose Ready condition is a
+      # selective healthCheck on GitRepository/user-apps-source — i.e. "Flux
+      # cloned a seeded repo". It deliberately does NOT depend on `user-apps`:
+      # that Kustomization builds every installed app's YAML, so one broken app
+      # would block re-applying the installer UI (issue #182).
       # The CA-merge initContainer is added by overlays/librepod/deployment-auth-patch.yaml.
       containers:
         - name: marketplace-ui
@@ -35,21 +33,19 @@ spec:
           envFrom:
             - configMapRef:
                 name: marketplace-ui-env
-          env:
-            - name: GOGS_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: gogs-auth
-                  key: username
-            - name: GOGS_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: gogs-auth
-                  key: password
           volumeMounts:
             - name: catalog
               mountPath: /data
               readOnly: true
+            # The same credential Flux uses for this repo, as `username`/`password`
+            # files (GitRemoteService reads exactly those two names).
+            - name: user-apps-git-credentials
+              mountPath: /etc/user-apps-git
+              readOnly: true
+            # Working copy of the app-store repo (shallow clone) + the generated
+            # .git-credentials. Disposable: rebuilt on demand.
+            - name: user-apps-work
+              mountPath: /var/lib/user-apps
           startupProbe:
             httpGet:
               path: /api/health
@@ -92,3 +88,18 @@ spec:
             # watches the mount directory) as soon as kubelet mounts it.
             name: marketplace-catalog
             optional: true
+        # user-apps-git-auth is generated EMPTY by this app's kustomization and
+        # filled by Reflector from gogs/user-apps-source-auth. Two guards, because
+        # data-less and missing are different failures: the empty placeholder covers
+        # an EMPTY Secret (mounts fine), `optional: true` covers an ABSENT one — a
+        # missing Secret blocks the mount and the pod never starts. That window is
+        # real: this release's gogs-auth → user-apps-git-auth rename, a rotation, or
+        # cold-boot-repro.sh, which deletes it in all three namespaces. The server
+        # already tolerates both — GitRemoteService throws a named "no
+        # username/password in env or /etc/user-apps-git" on writes, reads degrade.
+        - name: user-apps-git-credentials
+          secret:
+            secretName: user-apps-git-auth
+            optional: true
+        - name: user-apps-work
+          emptyDir: {}

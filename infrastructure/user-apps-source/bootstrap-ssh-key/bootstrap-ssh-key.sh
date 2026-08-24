@@ -1,9 +1,14 @@
 #!/bin/sh
-# Bootstraps Secret/user-apps-ssh-key (ed25519 keypair + Gogs host known_hosts)
-# so Flux's GitRepository/user-apps-source can clone flux/user-apps.git over SSH
-# instead of HTTP basic auth. Provider-agnostic: this provisions the Gogs default;
-# an operator can pre-create the Secret to point Flux at an external git provider
-# (GitHub/GitLab), in which case this Job is a no-op.
+# Bootstraps the flux/user-apps repo: creates it if missing, seeds its first commit,
+# and provisions Secret/user-apps-ssh-key (ed25519 keypair + Gogs host known_hosts).
+#
+# NOTE ON THE KEYPAIR: since #182 Flux clones this repo over HTTP with
+# Secret/user-apps-source-auth, and the marketplace-ui installer writes to the same
+# HTTP url — so NOTHING currently reads the keypair. It is still provisioned because
+# (a) the Secret's existence is this Job's idempotency guard and the operator's
+# override hook, (b) cold-boot-repro.sh deletes it to force a reseed, and (c) it is
+# the provisioning half of the deferred ssh transport. Removing it is a follow-up
+# with its own cold-boot verification, deferred out of #182.
 #
 # Flow: apk add openssh-client curl jq git -> download kubectl -> wait until the
 # Gogs API accepts flux basic auth -> skip if Secret exists (idempotent + override
@@ -17,8 +22,12 @@
 # ENDPOINT-SPECIFIC — do not read this as "token auth is broken." Live-verified
 # on the pinned build (issue #180):
 #   - token bootstrap: POST /api/v1/users/<u>/tokens        → Basic auth: 201 OK
-#   - raw / contents : GET/PUT/DELETE /api/v1/repos/.../{raw,contents}/...
-#                                                           → token <sha1>: 200/201/204 OK
+#   - raw / contents : GET /api/v1/repos/.../raw/...       → token <sha1>: 200 OK
+#                      PUT /api/v1/repos/.../contents/...  → token <sha1>: 201 OK
+#     NOTE: there is NO DELETE route on the contents API in this gogs release —
+#     a DELETE returns an unrouted HTML 404 (live-probed, issue #182). File
+#     REMOVAL is therefore impossible over this API, which is why the installer
+#     performs all repo mutations over git instead of the provider's REST API.
 #   - the /api/v1/user/* SELF endpoints reject Basic auth (401)
 # So `token <sha1>` DOES work for repo file ops (the marketplace-ui server relies
 # on exactly that and is correct). This Job simply stays on Basic auth for the
@@ -177,10 +186,15 @@ if [ ! -s /tmp/known_hosts ]; then
 fi
 
 # Seed the initial commit so Flux's user-apps Kustomization (path ./, branch
-# master, prune+wait) has a valid empty target from day one. Only when the repo
-# is truly empty (REPO_EMPTY from the "empty" field above) — never rewrite
-# existing history on an adopted cluster. Authenticates with the key registered
-# above, so a short retry absorbs Gogs' key-propagation lag.
+# master, prune) has a valid target from day one. README.md ONLY — deliberately
+# no root kustomization.yaml: Flux auto-generates one from the tree, and a
+# committed `resources: []` would be an empty ALLOW-LIST that silently prevents
+# every future install from being applied (issue #182). A README-only repo
+# builds clean and empty, so the seeded-source health gate still opens on a
+# cluster with zero apps installed.
+# Only when the repo is truly empty (REPO_EMPTY from the "empty" field above) —
+# never rewrite existing history on an adopted cluster. Authenticates with the key
+# registered above, so a short retry absorbs Gogs' key-propagation lag.
 if [ "$REPO_EMPTY" = "1" ]; then
   echo "Seeding initial commit on master..."
   export GIT_SSH_COMMAND="ssh -i /tmp/id -o UserKnownHostsFile=/tmp/known_hosts -o IdentitiesOnly=yes"
@@ -188,23 +202,27 @@ if [ "$REPO_EMPTY" = "1" ]; then
   rm -rf "$SEED_DIR"
   mkdir -p "$SEED_DIR"
   cd "$SEED_DIR"
-  cat > kustomization.yaml <<'YAML'
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources: []
-YAML
   cat > README.md <<'MD'
 # LibrePod user apps
 
-This repository holds user-installed apps for this LibrePod cluster. It is
-managed by the LibrePod marketplace UI — app installs append entries to
-`kustomization.yaml`. FluxCD reconciles this repo into the cluster.
+This repository holds user-installed apps for this LibrePod cluster. Each app is
+a directory under `apps/<name>/` containing its Flux objects. There is no root
+`kustomization.yaml`: FluxCD generates one from the whole tree, so an app's
+presence IS its declaration — adding a directory installs it, removing the
+directory uninstalls it.
+
+One consequence worth knowing before editing by hand: because the whole tree is
+the build input, a malformed YAML file anywhere in it fails the build for every
+app. The marketplace UI writes exactly one app directory per commit.
+
+Managed by the LibrePod marketplace UI. FluxCD reconciles this repo into the
+cluster.
 MD
   git init -q
   git config user.email "flux@libre.pod"
   git config user.name "flux"
   git checkout -q -b master
-  git add kustomization.yaml README.md
+  git add README.md
   git commit -q -m "Initial commit"
   REMOTE="ssh://git@gogs.${NS}.svc.cluster.local:22/${FLUX_USER}/user-apps.git"
   PUSHED=0

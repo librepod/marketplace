@@ -1,9 +1,13 @@
 // Waits for Gogs AND for the seed (support/gogs/seed.sh, run as the gogs-seed
-// compose service) to complete, then verifies the state is usable by the
-// marketplace server: (1) the token bootstrap (Basic auth flux:<password>)
-// works exactly as GogsService.onModuleInit does it, and (2) the root
-// kustomization.yaml in flux/user-apps is readable and in the clean empty state
-// (resources: []). Exits 0 only when the server can install against this Gogs.
+// compose service) to complete, then verifies the state the server expects to
+// find: (1) the flux user authenticates, and (2) the root kustomization.yaml is
+// present in the clean empty state (resources: []).
+//
+// (2) asserts the PRE-#182 layout ON PURPOSE. Tier 1 seeds the old shape so the
+// server's boot-time migration has something to migrate; this gate confirms the
+// seed got there, and tests/app-level/repo-layout.spec.ts then asserts the
+// migration removed it. Do not "modernise" this check to expect the new layout —
+// it runs BEFORE the server starts, so the old shape is the correct expectation.
 //
 // Polling matters: `docker compose up --wait` returns when the gogs service is
 // healthy, which can be several seconds BEFORE the one-shot gogs-seed service

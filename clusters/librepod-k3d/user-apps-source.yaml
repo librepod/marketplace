@@ -12,12 +12,25 @@ spec:
     - name: gogs
   interval: 1h
   retryInterval: 2m
-  timeout: 5m
+  # Do NOT lower back to 5m: `timeout` bounds the health check below, which waits
+  # on the seeding Job (that Job alone polls up to 300s for Gogs). At 5m every cold
+  # boot showed a spurious Ready=False timeout. Why: docs/DECISIONS_LOG.md row 8.
+  timeout: 15m
   sourceRef:
     kind: OCIRepository
     name: librepod-bootstrap
   path: ./infrastructure/user-apps-source
   prune: true
+  # Ready ⇔ Flux cloned a SEEDED repo, and that is all. Do NOT "fix" this to
+  # `wait: true`: the CRD ignores healthChecks when wait is enabled, so it would
+  # health-check every applied object — Kustomization/user-apps included — which is
+  # exactly the coupling #182 removes. Why: docs/DECISIONS_LOG.md row 8.
+  wait: false
+  healthChecks:
+    - apiVersion: source.toolkit.fluxcd.io/v1
+      kind: GitRepository
+      name: user-apps-source
+      namespace: flux-system
   patches: []
   postBuild:
     substitute:
