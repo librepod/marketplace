@@ -95,7 +95,7 @@ jobs:
               --revision="$(git rev-parse HEAD)" \
               --output json | jq -r '.repository + "@" + .digest')
 
-            if [ "$DIGEST_V" = "$DIGEST_L" ]; then
+            if [ -n "$DIGEST_L" ] && [ "$DIGEST_V" = "$DIGEST_L" ]; then
               echo "latest shares the versioned digest - skipping redundant sign"
             else
               echo "Signing latest artifact by digest: $DIGEST_L"
