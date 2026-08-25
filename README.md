@@ -322,6 +322,11 @@ Publishes a thin orchestration artifact containing:
 No app code is bundled. All apps (system and user) are fetched at runtime via
 their individual OCI artifacts.
 
+**Stable releases:** pushing a `vX.Y.Z` git tag publishes a cosign-signed
+`marketplace/bootstrap:vX.Y.Z` artifact via `release-bootstrap.yaml`. Production
+clusters pin a fixed `vX.Y.Z` tag (configured in the os repo); `latest` remains
+the rolling dev stream, and `pr-<N>` artifacts are published per PR for testing.
+
 ---
 
 ## 🏷️ Labeling Convention
