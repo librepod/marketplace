@@ -89,6 +89,12 @@ reconciliation — see @docs/FLUX_WORKFLOW.md
   the catalog updates on all clusters within ~5 min of merge. For local UI development run
   `bash ./scripts/generate-catalog.sh` — the root `catalog.yaml` it writes is gitignored.
 - **Commit, PR & public-doc hygiene**: never reference specific device or cluster hostnames (e.g. `librepod-dev`, `librepod-beelink`) in commit messages, PR titles/descriptions, or public-facing docs (READMEs). Use abstract environment pointers instead — `dev`, `prod`, `staging`. (Internal dev workflow docs like `docs/FLUX_WORKFLOW.md` may keep the operational cluster name.)
+- **Bootstrap versioning**: OCI streams for `marketplace/bootstrap` are
+  `latest` / `0.0.0-<sha>` (rolling, master pushes via `publish-bootstrap.yaml`),
+  `pr-<N>` (per PR, keyless), and `vX.Y.Z` (stable cuts: push a git tag
+  `vX.Y.Z` — `release-bootstrap.yaml` builds, pushes, and COSIGN-key-signs it;
+  `latest` is never moved). os pins a fixed `vX.Y.Z` in
+  `modules/k3s/charts/flux-instance.nix`.
 
 ### PVC/PV Deletion with NFS Storage
 
