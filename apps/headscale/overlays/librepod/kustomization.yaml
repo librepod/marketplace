@@ -33,9 +33,9 @@ images:
   # in the Docker container, you can use the -debug variant:
   # docker.io/headscale/headscale:v0.28.0-debug
 - name: headscale/headscale
-  newTag: v0.28.0-debug
+  newTag: v0.29.3-debug
 - name: ghcr.io/tale/headplane
-  newTag: 0.6.3
+  newTag: 0.7.1
 
 components:
   - ../../components/frp-upstreams
