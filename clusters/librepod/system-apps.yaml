@@ -12,7 +12,7 @@ spec:
   timeout: 5m
   sourceRef:
     kind: OCIRepository
-    name: librepod-bootstrap
+    name: marketplace-bootstrap
   path: ./infrastructure/system-apps
   prune: true
   patches: []

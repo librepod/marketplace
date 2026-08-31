@@ -15,7 +15,7 @@ spec:
       sync:
         interval: 1m
         kind: OCIRepository
-        name: librepod-bootstrap
+        name: marketplace-bootstrap
         path: ./clusters/librepod-k3d
         ref: latest
         url: oci://ghcr.io/librepod/marketplace/bootstrap
@@ -30,4 +30,4 @@ spec:
                     name: cosign-pub
             target:
               kind: OCIRepository
-              name: librepod-bootstrap
+              name: marketplace-bootstrap
