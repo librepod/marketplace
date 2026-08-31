@@ -18,7 +18,7 @@ spec:
   timeout: 15m
   sourceRef:
     kind: OCIRepository
-    name: librepod-bootstrap
+    name: marketplace-bootstrap
   path: ./infrastructure/user-apps-source
   prune: true
   # Ready ⇔ Flux cloned a SEEDED repo, and that is all. Do NOT "fix" this to

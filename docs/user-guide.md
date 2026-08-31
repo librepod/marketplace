@@ -28,7 +28,7 @@ spec:
   prune: true
   sourceRef:
     kind: OCIRepository
-    name: librepod-bootstrap
+    name: marketplace-bootstrap
   postBuild:
     substitute:
       BASE_DOMAIN: "example.com"  # Replace with your domain

@@ -1,15 +1,19 @@
 name: Release Bootstrap Artifact
 
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (bare X.Y.Z, e.g. 0.1.1 — no "v" prefix)'
+        required: true
+        type: string
 
 jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
       packages: write
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v6
 
@@ -26,12 +30,21 @@ jobs:
         with:
           cosign-release: 'v3.0.6'
 
-      - name: Validate tag
+      - name: Validate version and guard against reuse
         env:
-          TAG: ${{ github.ref_name }}
+          VERSION: ${{ inputs.version }}
         run: |
-          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Refusing to release: tag '$TAG' is not semver vX.Y.Z"; exit 1
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Refusing to release: version '$VERSION' is not bare X.Y.Z (no 'v' prefix)"; exit 1
+          fi
+          if [ "$VERSION" = "0.0.0" ]; then
+            echo "::error::Refusing to release: 0.0.0 is reserved for dev pseudo-versions"; exit 1
+          fi
+          if git ls-remote --tags origin "refs/tags/marketplace-bootstrap-v$VERSION" | grep -q .; then
+            echo "::error::Refusing to release: git tag marketplace-bootstrap-v$VERSION already exists"; exit 1
+          fi
+          if docker manifest inspect "ghcr.io/${{ github.repository_owner }}/marketplace/bootstrap:$VERSION" > /dev/null 2>&1; then
+            echo "::error::Refusing to release: OCI tag $VERSION already exists"; exit 1
           fi
 
       - name: Build bootstrap artifact directory
@@ -44,12 +57,19 @@ jobs:
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-          TAG: ${{ github.ref_name }}
+          VERSION: ${{ inputs.version }}
         run: |
           DIGEST=$(flux push artifact \
-            oci://ghcr.io/${{ github.repository_owner }}/marketplace/bootstrap:"$TAG" \
+            oci://ghcr.io/${{ github.repository_owner }}/marketplace/bootstrap:"$VERSION" \
             --path=/tmp/bootstrap \
             --source="$(git config --get remote.origin.url)" \
             --revision="$(git rev-parse HEAD)" \
             --output json | jq -r '.repository + "@" + .digest')
           cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST"
+
+      - name: Bookmark release with a git tag
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git tag "marketplace-bootstrap-v$VERSION" "$GITHUB_SHA"
+          git push origin "marketplace-bootstrap-v$VERSION"

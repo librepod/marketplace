@@ -126,7 +126,7 @@ jobs:
 
             \`\`\`bash
             # Test in dev cluster:
-            flux reconcile source oci librepod-bootstrap --tag ${tag}
+            flux reconcile source oci marketplace-bootstrap --tag ${tag}
             \`\`\``;
 
             // Find existing comment with our marker

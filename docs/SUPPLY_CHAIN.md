@@ -110,7 +110,7 @@ All 13 OCIRepository resources in the cluster have verification enabled:
 - **12 marketplace app OCIRepositories** — defined in `infrastructure/system-apps/*.yaml`
   (traefik, cert-manager, step-certificates, step-issuer, casdoor, oauth2-proxy,
   gogs, nfs-provisioner, reflector, wg-easy, whoami, flux-operator-mcp)
-- **1 bootstrap OCIRepository** — `librepod-bootstrap`, configured via a
+- **1 bootstrap OCIRepository** — `marketplace-bootstrap`, configured via a
   FluxInstance kustomize patch (not a static YAML file, since the bootstrap
   OCIRepository is managed by the FluxInstance operator)
 
