@@ -80,7 +80,7 @@ The architecture separates concerns into three layers:
 1. BOOTSTRAP (one-time, via helm install)
    ┌──────────────────────────────────────────────────────┐
    │ flux-instance Helm chart creates:                     │
-   │   OCIRepository: librepod-bootstrap                   │
+   │   OCIRepository: marketplace-bootstrap                │
    │     url: oci://ghcr.io/<owner>/marketplace/bootstrap  │
    │     contains: clusters/ + infrastructure/             │
    └────────────────────┬─────────────────────────────────┘
@@ -92,7 +92,7 @@ The architecture separates concerns into three layers:
    │ system-configs.yaml  │──→ ./infrastructure/system-configs
    │ user-apps-source.yaml│──→ ./infrastructure/user-apps-source
    └──────────────────────┘
-   All sourceRef → OCIRepository "librepod-bootstrap"
+   All sourceRef → OCIRepository "marketplace-bootstrap"
    All use postBuild.substitute to inject per-cluster variables
 
                         ▼
@@ -141,7 +141,7 @@ spec:
   timeout: 5m
   sourceRef:
     kind: OCIRepository
-    name: librepod-bootstrap     # The bootstrap OCI artifact
+    name: marketplace-bootstrap       # The bootstrap OCI artifact
   path: ./infrastructure/system-apps  # Where to find manifests
   prune: true
   postBuild:
@@ -372,7 +372,7 @@ metadata, version, dependencies, and templates for dynamic resource generation.
 ## Dependency Chain
 
 ```
-librepod-bootstrap OCI artifact (clusters/ + infrastructure/)
+marketplace-bootstrap OCI artifact (clusters/ + infrastructure/)
 │
 ├── system-apps Kustomization
 │   ├── nfs-provisioner (independent)

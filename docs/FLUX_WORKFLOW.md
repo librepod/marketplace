@@ -79,7 +79,7 @@ helm install flux-instance oci://ghcr.io/controlplaneio-fluxcd/charts/flux-insta
   --version 0.57.0 \
   --set instance.sync.interval=1m \
   --set instance.sync.kind=OCIRepository \
-  --set instance.sync.name=librepod-bootstrap \
+  --set instance.sync.name=marketplace-bootstrap \
   --set instance.sync.path=./clusters/librepod-dev \
   --set instance.sync.ref=latest \
   --set instance.sync.url=oci://ghcr.io/librepod/marketplace/bootstrap \
@@ -90,7 +90,7 @@ helm install flux-instance oci://ghcr.io/controlplaneio-fluxcd/charts/flux-insta
 
 After applying the FluxInstance, the operator will:
 1. Deploy Flux controllers (source, kustomize, helm, notification)
-2. Create an OCIRepository named `librepod-bootstrap`
+2. Create an OCIRepository named `marketplace-bootstrap`
 3. Pull the bootstrap artifact from `ghcr.io`
 4. Create Kustomizations from the cluster path (`system-apps`, `system-configs`, etc.)
 5. Begin deploying system apps following the dependency chain
@@ -102,7 +102,7 @@ Check progress:
 kubectl --kubeconfig ./librepod-dev.config get fluxinstance flux -n flux-system
 
 # OCIRepository — should show the latest artifact pulled
-kubectl --kubeconfig ./librepod-dev.config get ocirepository librepod-bootstrap -n flux-system
+kubectl --kubeconfig ./librepod-dev.config get ocirepository marketplace-bootstrap -n flux-system
 
 # Kustomizations — system-apps and system-configs should appear and reconcile
 flux get kustomizations --kubeconfig ./librepod-dev.config -n flux-system
