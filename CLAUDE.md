@@ -91,14 +91,17 @@ reconciliation — see @docs/FLUX_WORKFLOW.md
 - **Commit, PR & public-doc hygiene**: never reference specific device or cluster hostnames (e.g. `librepod-dev`, `librepod-beelink`) in commit messages, PR titles/descriptions, or public-facing docs (READMEs). Use abstract environment pointers instead — `dev`, `prod`, `staging`. (Internal dev workflow docs like `docs/FLUX_WORKFLOW.md` may keep the operational cluster name.)
 - **Bootstrap versioning**: OCI streams for `marketplace/bootstrap` are
   `latest` / `0.0.0-<sha>` (rolling, master pushes via `publish-bootstrap.yaml`),
-  `pr-<N>` (per PR, keyless), and `marketplace-bootstrap-X.Y.Z` (stable cuts:
-  push a git tag `marketplace-bootstrap-X.Y.Z` — `release-bootstrap.yaml`
-  builds, pushes, and COSIGN-key-signs it; `latest` is never moved). Each
-  marketplace component prefixes its git release tags with its own name
-  (`marketplace-<component>-X.Y.Z`); plain `v*` is unclaimed. os pins a fixed
-  `marketplace-bootstrap-X.Y.Z` in `modules/k3s/charts/flux-instance.nix`, and
-  the Flux bootstrap source (OCIRepository / FluxInstance sync name) is
-  `marketplace-bootstrap` to match the OCI path.
+  `pr-<N>` (per PR, keyless), and bare `X.Y.Z` (stable cuts: dispatch
+  `release-bootstrap.yaml` with a version — it validates, guards against
+  version reuse, pushes + COSIGN-key-signs `marketplace/bootstrap:X.Y.Z`, then
+  creates the git tag `marketplace-bootstrap-vX.Y.Z` at the released SHA;
+  `latest` is never moved). Release git tags are CI-created and
+  component-prefixed (`marketplace-<component>-vX.Y.Z`) so components can't
+  collide in the flat git tag namespace; hand-pushed release tags are not
+  used. os pins a fixed bare version in
+  `modules/k3s/charts/flux-instance.nix`, and the Flux bootstrap source
+  (OCIRepository / FluxInstance sync name) is `marketplace-bootstrap` to match
+  the OCI path.
 
 ### PVC/PV Deletion with NFS Storage
 

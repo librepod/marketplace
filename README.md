@@ -322,13 +322,16 @@ Publishes a thin orchestration artifact containing:
 No app code is bundled. All apps (system and user) are fetched at runtime via
 their individual OCI artifacts.
 
-**Stable releases:** pushing a `marketplace-bootstrap-X.Y.Z` git tag publishes a
-cosign-signed `marketplace/bootstrap:marketplace-bootstrap-X.Y.Z` artifact via
-`release-bootstrap.yaml`. Each marketplace component prefixes its git release tags
-with its own name (`marketplace-<component>-X.Y.Z`). Production clusters pin a
-fixed `marketplace-bootstrap-X.Y.Z` tag (configured in the os repo); `latest`
-remains the rolling dev stream, and `pr-<N>` artifacts are published per PR for
-testing.
+**Stable releases:** dispatch the `Release Bootstrap Artifact` workflow
+(Actions → *Release Bootstrap Artifact* → *Run workflow* → version `X.Y.Z`).
+It validates the version, refuses if the OCI tag or the release git tag
+already exists, publishes a cosign-signed `marketplace/bootstrap:X.Y.Z`
+artifact, and bookmarks the released commit with a CI-created git tag
+(`marketplace-bootstrap-vX.Y.Z` — component-prefixed so marketplace
+components can't collide in the flat git tag namespace; release tags are
+never hand-pushed). Production clusters pin a fixed `X.Y.Z` version
+(configured in the os repo); `latest` remains the rolling dev stream, and
+`pr-<N>` artifacts are published per PR for testing.
 
 ---
 
