@@ -2,7 +2,7 @@ name: Release Bootstrap Artifact
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["marketplace-bootstrap-*"]
 
 jobs:
   release:
@@ -30,8 +30,8 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Refusing to release: tag '$TAG' is not semver vX.Y.Z"; exit 1
+          if ! [[ "$TAG" =~ ^marketplace-bootstrap-[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Refusing to release: tag '$TAG' is not marketplace-bootstrap-X.Y.Z"; exit 1
           fi
 
       - name: Build bootstrap artifact directory
