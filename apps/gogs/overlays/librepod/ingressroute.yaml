@@ -8,7 +8,7 @@ spec:
   - websecure
   routes:
   - kind: Rule
-    match: Host(`git.${BASE_DOMAIN}`)
+    match: Host(`gogs.${BASE_DOMAIN}`)
     priority: 1
     middlewares:
     - name: oauth2-errors
