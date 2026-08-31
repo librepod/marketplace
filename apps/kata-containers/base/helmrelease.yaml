@@ -1,0 +1,26 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kata-deploy
+  namespace: kata-containers
+spec:
+  interval: 12h
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  chartRef:
+    kind: OCIRepository
+    name: kata-deploy
+  values:
+    k8sDistribution: k3s
+    snapshotter:
+      setup: []
+    shims:
+      disableAll: true
+      qemu:
+        enabled: true
+      qemu-runtime-rs:
+        enabled: true
