@@ -9,4 +9,4 @@ resources:
 images:
 - name: baikal
   newName: ghcr.io/aalmenar/baikal
-  newTag: "0.11.1-nginx"
+  newTag: "0.12.1-nginx"
