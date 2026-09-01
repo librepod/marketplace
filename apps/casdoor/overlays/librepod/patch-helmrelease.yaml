@@ -24,6 +24,15 @@ spec:
     extraVolumeMounts:
     - name: data
       mountPath: /data
+    # Casdoor keeps beego sessions as files in ./tmp (hardcoded in main.go,
+    # relative to CWD=/). Container-local /tmp dies with every pod restart —
+    # the nightly borgmatic backup scales this deployment to 0, wiping all
+    # SSO sessions cluster-wide. Mount the PVC over /tmp so sessions persist
+    # (the browser cookie is already valid for 30 days: cookieExpireInHours).
+    # No subPath: a kubelet-created subPath dir would be root-owned on NFS
+    # and unwritable by the casdoor process.
+    - name: data
+      mountPath: /tmp
     # - name: init-data
     #   mountPath: /init_data.json
     #   subPath: init_data.json
