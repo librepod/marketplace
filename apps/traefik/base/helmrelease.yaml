@@ -34,6 +34,16 @@ spec:
         expose:
           default: true
         protocol: UDP
+      # SSH TCP 2222 entryPoint for Git-over-SSH (gogs). Port 22 is taken by
+      # the host's own sshd, so Git SSH is exposed on 2222 via the same
+      # LoadBalancer mechanism as 80/443 and routed by the gogs
+      # IngressRouteTCP to the gogs Service.
+      ssh:
+        port: 2222
+        exposedPort: 2222
+        expose:
+          default: true
+        protocol: TCP
 
     providers:
       kubernetesCRD:

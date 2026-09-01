@@ -6,6 +6,7 @@ namespace: gogs
 resources:
 - ../../base
 - ingressroute.yaml
+- ingressroute-tcp.yaml
 
 images:
 - name: gogs/gogs
