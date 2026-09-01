@@ -1,0 +1,31 @@
+# Front door for raw device-IP access — a fresh cluster has no DNS for
+# <BASE_DOMAIN> yet, so the first thing a user types is http://<device-ip>.
+# This serves the marketplace UI there over plain http, with no cert warning
+# (the shared default cert only covers <BASE_DOMAIN>/*.<BASE_DOMAIN>, so
+# https://<ip> warns about the cert name).
+#
+# Separate IngressRoute, deliberately WITHOUT tls: the main route's spec-level
+# tls:{} marks all its routers TLS-only, so they never match on the plaintext
+# web entrypoint. websecure terminates TLS at the entrypoint itself
+# (--entryPoints.websecure.http.tls), so https://<ip> matches here too.
+#
+# priority must exceed the global web->websecure redirect router's priority
+# (100, set in apps/traefik/base/helmrelease.yaml — default MaxInt32-1 beats
+# everything); every named-host route keeps default rule-length priority
+# (<100) and still redirects to https. IPv4 only — IPv6 literal hosts
+# ([::1]) are not matched.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: marketplace-ui-ip
+spec:
+  entryPoints:
+  - web
+  - websecure
+  routes:
+  - kind: Rule
+    match: HostRegexp(`^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$`)
+    priority: 200
+    services:
+    - name: marketplace-ui
+      port: 80
