@@ -10,7 +10,7 @@ spec:
   website: "https://docs.renovatebot.com/"
 
   # renovate: datasource=docker depName=renovate/renovate
-  version: "44.14.3"
+  version: "44.62.0"
 
   source:
     type: oci-kustomize
