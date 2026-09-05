@@ -1,0 +1,117 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: remnawave
+spec:
+  displayName: "Remnawave"
+  description: "Proxy and user management panel built on Xray Core"
+  icon: "https://docs.rw/assets/images/favicon.ico"
+  category: "Network"
+  website: "https://remnawave.com"
+
+  # renovate: datasource=docker depName=remnawave/backend
+  # serge: notesRepo=remnawave/backend
+  version: "3.4.3"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/remnawave"
+    path: ./overlays/librepod
+
+  params:
+    required:
+      - name: BASE_DOMAIN
+        description: "Base domain (panel will be at remnawave.BASE_DOMAIN)"
+        type: string
+        example: "example.com"
+
+  secrets:
+    - name: APP_SECRET
+      description: "Panel-wide secret — signs admin auth JWTs and API tokens"
+      required: true
+      generate:
+        type: random
+        length: 64
+    - name: DB_PASSWORD
+      description: "PostgreSQL password (A-Za-z0-9 only — no special chars, since it is URL-embedded in DATABASE_URL). Shared by the bundled postgres and the panel."
+      required: true
+      generate:
+        type: random
+        length: 40
+
+  dependencies:
+    required:
+      - kind: IngressController
+        description: "Traefik (provided by bootstrap)"
+      - kind: StorageClass
+        description: "nfs-client (provided by bootstrap)"
+      - kind: SSOProvider
+        description: "Casdoor SSO (provided by casdoor-sso-controller)"
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-remnawave
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "remnawave"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/remnawave
+        ref:
+          tag: "__VERSION__"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-remnawave
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "remnawave"
+      spec:
+        dependsOn:
+          - name: traefik
+          - name: storage
+          # SSOClient CR + Secret need the CRD/controller to exist first
+          - name: casdoor-sso-controller
+        force: true
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        targetNamespace: remnawave
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-remnawave
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+        postBuild:
+          substitute:
+            BASE_DOMAIN: "${BASE_DOMAIN}"
+          substituteFrom:
+            - kind: Secret
+              name: remnawave-config
+    secret: |
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: remnawave-config
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "remnawave"
+      type: Opaque
+      stringData:
+        APP_SECRET: "${APP_SECRET}"
+        DB_PASSWORD: "${DB_PASSWORD}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml
+        - secret.yaml

@@ -1,0 +1,70 @@
+# Strategic-merge patch: give the remnawave pod trust for the private LibrePod
+# root+intermediate CA so its server-side OIDC token exchange to
+# https://id.${BASE_DOMAIN} passes TLS verification (Node axios — without this
+# the OAuth2 callback fails with "unable to get local issuer certificate").
+#
+# Canonical LibrePod CA-trust pattern (same as litellm/headscale/vaultwarden):
+# an init container (alpine) fuses the system CA bundle with the LibrePod root
+# AND intermediate CA (from configMap/step-certificates-certs, Reflector-
+# replicated from step-ca), then the remnawave container mounts the merged
+# bundle over the system bundle path. Trust env vars for a Node.js app:
+# SSL_CERT_FILE + NODE_EXTRA_CA_CERTS (Node's tls module ignores SSL_CERT_FILE)
+# — see docs/sso-app-author-guide.md §4.
+#
+# The valkey sidecar needs no CA (unix socket only). The patch targets the
+# remnawave container by name.
+#
+# Known cosmetic effect (strategic-merge list reordering): the CA items land
+# before the base's valkey-socket items in volumeMounts/volumes. Functionally
+# inert — k8s treats the order as irrelevant — but the pod-template hash
+# changes, so the pod restarts once when this patch is first applied.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remnawave
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: merge-ca-bundle
+          image: alpine:3.19
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              cat /etc/ssl/certs/ca-certificates.crt > /mnt/merged-ca/ca-certificates.crt
+              echo "" >> /mnt/merged-ca/ca-certificates.crt
+              echo "# LibrePod Root CA" >> /mnt/merged-ca/ca-certificates.crt
+              cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+              echo "" >> /mnt/merged-ca/ca-certificates.crt
+              echo "# LibrePod Intermediate CA" >> /mnt/merged-ca/ca-certificates.crt
+              cat /mnt/root-ca/intermediate_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+          volumeMounts:
+            - name: root-ca-cert
+              mountPath: /mnt/root-ca
+              readOnly: true
+            - name: merged-ca-bundle
+              mountPath: /mnt/merged-ca
+      containers:
+        - name: remnawave
+          volumeMounts:
+            - name: merged-ca-bundle
+              mountPath: /etc/ssl/certs/ca-certificates.crt
+              subPath: ca-certificates.crt
+              readOnly: true
+          env:
+            - name: SSL_CERT_FILE
+              value: /etc/ssl/certs/ca-certificates.crt
+            - name: NODE_EXTRA_CA_CERTS
+              value: /etc/ssl/certs/ca-certificates.crt
+      volumes:
+        - name: root-ca-cert
+          configMap:
+            name: step-certificates-certs
+            items:
+              - key: root_ca.crt
+                path: root_ca.crt
+              - key: intermediate_ca.crt
+                path: intermediate_ca.crt
+        - name: merged-ca-bundle
+          emptyDir: {}
