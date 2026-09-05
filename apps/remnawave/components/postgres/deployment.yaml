@@ -25,9 +25,20 @@ spec:
             - name: postgres
               containerPort: 5432
           volumeMounts:
+            # Single mount at /var/lib/postgresql (not .../data): postgres 18
+            # images store data in versioned subdirs (18/docker) and hard-error
+            # on a volume mounted at the legacy .../data path. Matches upstream
+            # compose.
             - name: postgres-data
-              mountPath: /var/lib/postgresql/data
+              mountPath: /var/lib/postgresql
+            - name: shm
+              mountPath: /dev/shm
       volumes:
         - name: postgres-data
           persistentVolumeClaim:
             claimName: remnawave-postgres-data
+        # Upstream compose sets shm_size: 512mb; k8s defaults /dev/shm to 64Mi.
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 512Mi
