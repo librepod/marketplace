@@ -26,9 +26,25 @@ spec:
               containerPort: 3000
             - name: metrics
               containerPort: 3001
+          # /health on the metrics port pings Postgres (terminus PrismaHealthIndicator),
+          # matching the upstream docker-compose healthcheck.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            periodSeconds: 10
+            failureThreshold: 3
           volumeMounts:
             - name: valkey-socket
               mountPath: /var/run/valkey
+        # Valkey over a unix socket — mirrors the upstream compose "remnawave-redis"
+        # service (no TCP port, no persistence; cache only).
         - name: valkey
           image: valkey/valkey
           imagePullPolicy: IfNotPresent

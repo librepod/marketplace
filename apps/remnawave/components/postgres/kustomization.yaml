@@ -1,14 +1,14 @@
-# PostgreSQL component for Remnawave
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
+# PostgreSQL component for Remnawave (matches the upstream compose "remnawave-db").
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
 
 namespace: remnawave
 
-labels:
-- includeSelectors: true
-  pairs:
-    app.kubernetes.io/component: postgres
-
+# No `labels:` transformer here on purpose. A Component's transformers merge into
+# the overlay root and would stamp app.kubernetes.io/name=remnawave onto the
+# postgres pod — leaking it into the remnawave Service selector (which matches on
+# that label). Labels are hardcoded on the postgres Deployment/Service as
+# component=postgres. Same pattern as litellm's postgres component.
 configMapGenerator:
 - name: remnawave-postgres-env
   envs:

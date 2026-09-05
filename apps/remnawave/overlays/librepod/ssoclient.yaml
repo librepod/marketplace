@@ -1,0 +1,35 @@
+# Declares the remnawave OIDC client. The casdoor-sso-controller reconciles
+# this CR into a Casdoor Application (owner/name = admin/remnawave) and writes
+# clientId / clientSecret / issuer into Secret/remnawave-sso in THIS namespace.
+#
+# Remnawave's OAuth2 settings live in its own database (panel UI → Remnawave
+# Settings → Authentication), NOT in env vars — so the app cannot consume the
+# Secret directly. The credentials are pasted into the panel UI once, by hand,
+# as described in apps/remnawave/docs/sso-setup.md. The Casdoor side of the
+# wiring (application, redirect URI, token format) is fully automated here.
+#
+# Provider choice: remnawave's dedicated "pocketid" connector hardcodes
+# PocketID's endpoint paths (https://<domain>/authorize, /api/oidc/token) and
+# cannot point at Casdoor. The "generic" provider takes explicit
+# authorizationUrl/tokenUrl — that is the Casdoor-compatible path, with the
+# callback below. See docs/sso-setup.md for the exact UI values.
+apiVersion: marketplace.librepod.org/v1alpha1
+kind: SSOClient
+metadata:
+  name: remnawave-sso
+  namespace: remnawave
+spec:
+  clientId: remnawave              # Casdoor app name (id=admin/remnawave) AND OIDC client_id
+  organization: librepod           # platform org (created at bootstrap); login users must live here
+  redirectUris:
+    - "https://remnawave.${BASE_DOMAIN}/oauth2/callback/generic"
+  grantTypes: [authorization_code, refresh_token]
+  tokenFormat: JWT-Standard        # remnawave decodes the ID token for the email claim; JWT-Standard emits it (scopes requested: openid email profile) without the plain-JWT address-claim trap
+  expireInHours: 168               # 7 days
+  output:
+    secretName: remnawave-sso      # written to THIS namespace (remnawave)
+    keys:
+      clientId: CLIENT_ID          # pasted into the panel UI (generic provider)
+      clientSecret: CLIENT_SECRET
+      issuer: ISSUER               # discovery URL; unused by remnawave (endpoints are entered explicitly)
+  casdoorPolicy: retain            # keep the Casdoor app if this CR is deleted

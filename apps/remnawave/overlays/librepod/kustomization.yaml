@@ -1,18 +1,34 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: remnawave
-
 resources:
 - ../../base
-- ../../components/postgres
 - ingressroute.yaml
+- ssoclient.yaml
+
+components:
+- ../../components/postgres
+
+namespace: remnawave
+
+configMapGenerator:
+# Self-service the LibrePod private CA into this namespace. Reflector pulls
+# root_ca.crt + intermediate_ca.crt from the source (step-ca/step-certificates-certs,
+# which carries reflection-allowed: "true") into this stub. Mirrors litellm/
+# open-webui/headscale.
+# disableNameSuffixHash keeps the name stable so the Deployment volume mount in
+# deployment-ca-patch.yaml references the exact same object Reflector populates.
+- name: step-certificates-certs
+  options:
+    disableNameSuffixHash: true
+    annotations:
+      reflector.v1.k8s.emberstack.com/reflects: "step-ca/step-certificates-certs"
 
 images:
 - name: remnawave/backend
-  newTag: "2.7.4"
+  newTag: "3.4.3"
 - name: postgres
-  newTag: "17.6"
+  newTag: "18.4-alpine"
 - name: valkey/valkey
   newTag: "9-alpine"
 
@@ -20,3 +36,7 @@ patches:
 - path: ./patch-storage-class.yaml
   target:
     kind: PersistentVolumeClaim
+# Inject the LibrePod root+intermediate CA trust (init container + volumes) into
+# the remnawave container so its server-side OIDC token exchange to
+# id.${BASE_DOMAIN} passes TLS verification (see deployment-ca-patch.yaml).
+- path: ./deployment-ca-patch.yaml
