@@ -5,13 +5,29 @@ resources:
 - ../../base
 - ingressroute-http.yaml
 - ingressroute-udp.yaml
+- ssoclient.yaml
+
+configMapGenerator:
+# Reflector stub replicating the LibrePod root CA from step-ca into this
+# namespace (docs/sso-app-author-guide.md §4). disableNameSuffixHash is
+# required: the volume mounts the configMap by this exact name and Reflector
+# keys replication off the reflects annotation on this exact object.
+- name: step-certificates-certs
+  options:
+    disableNameSuffixHash: true
+    annotations:
+      reflector.v1.k8s.emberstack.com/reflects: "step-ca/step-certificates-certs"
 
 images:
 - name: ghcr.io/wg-easy/wg-easy
-  newTag: "15.3"
+  newTag: "15.4"
 
 components:
   - ../../components/frp-upstreams
 
 patches:
 - path: patch-pvc.yaml
+- path: deployment-ca-patch.yaml
+  target:
+    kind: Deployment
+    name: wg-easy

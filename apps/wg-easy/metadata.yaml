@@ -11,7 +11,7 @@ spec:
 
   # renovate: datasource=docker depName=ghcr.io/wg-easy/wg-easy
   # serge: notesRepo=wg-easy/wg-easy
-  version: "15.3.0"
+  version: "15.4.0"
 
   source:
     type: oci-kustomize
@@ -48,6 +48,8 @@ spec:
         description: "Traefik (provided by traefik app)"
       - kind: StorageClass
         description: "nfs-client (provided by nfs-provisioner app)"
+      - kind: SSOProvider
+        description: "Casdoor SSO (provided by casdoor-sso-controller)"
 
   templates:
     source: |
@@ -77,6 +79,8 @@ spec:
         dependsOn:
           - name: traefik
           - name: storage
+          # SSOClient CR + Secret need the CRD/controller to exist first
+          - name: casdoor-sso-controller
         interval: 1h
         retryInterval: 2m
         timeout: 5m

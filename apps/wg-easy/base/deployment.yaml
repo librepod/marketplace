@@ -58,6 +58,23 @@ spec:
             name: wg-easy
         - secretRef:
             name: wg-easy-admin
+        # OIDC client credentials, written by casdoor-sso-controller from the
+        # SSOClient CR in the overlay. Not optional on purpose: until the
+        # controller writes the secret the pod stays in
+        # CreateContainerConfigError and self-heals within seconds of the
+        # secret appearing (wg-easy skips unconfigured providers, so there is
+        # no broken half-SSO state).
+        env:
+        - name: OAUTH_OIDC_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: wg-easy-sso
+              key: OAUTH_OIDC_CLIENT_ID
+        - name: OAUTH_OIDC_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: wg-easy-sso
+              key: OAUTH_OIDC_CLIENT_SECRET
         volumeMounts:
         - name: config
           mountPath: /etc/wireguard

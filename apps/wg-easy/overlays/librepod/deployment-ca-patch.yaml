@@ -1,0 +1,50 @@
+# Merge the LibrePod Step CA (root + intermediate) into the pod's CA bundle
+# so wg-easy's Node runtime trusts https://id.<BASE_DOMAIN> for OIDC
+# discovery/token exchange — docs/sso-app-author-guide.md §4.
+# Env vars SSL_CERT_FILE + NODE_EXTRA_CA_CERTS live in base/wg-easy.env.
+# The merge init container reuses the app image (alpine node, has sh+cat) so
+# the overlay's images: transformer keeps it version-locked, like the sysctl
+# init container in base.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wg-easy
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: merge-ca-bundle
+          image: ghcr.io/wg-easy/wg-easy
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              # Node alpine base ships the system bundle; guard anyway so a
+              # future base without ca-certificates can't fail the merge.
+              cat /etc/ssl/certs/ca-certificates.crt > /mnt/merged-ca/ca-certificates.crt 2>/dev/null || true
+              echo "" >> /mnt/merged-ca/ca-certificates.crt
+              echo "# LibrePod Root CA" >> /mnt/merged-ca/ca-certificates.crt
+              cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+              echo "" >> /mnt/merged-ca/ca-certificates.crt
+              echo "# LibrePod Intermediate CA" >> /mnt/merged-ca/ca-certificates.crt
+              cat /mnt/root-ca/intermediate_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+          volumeMounts:
+            - { name: root-ca-cert, mountPath: /mnt/root-ca, readOnly: true }
+            - { name: merged-ca-bundle, mountPath: /mnt/merged-ca }
+      containers:
+        - name: wg-easy
+          volumeMounts:
+            - name: merged-ca-bundle
+              mountPath: /etc/ssl/certs/ca-certificates.crt
+              subPath: ca-certificates.crt
+              readOnly: true
+      volumes:
+        - name: root-ca-cert
+          configMap:
+            name: step-certificates-certs
+            items:
+              - { key: root_ca.crt, path: root_ca.crt }
+              - { key: intermediate_ca.crt, path: intermediate_ca.crt }
+        - name: merged-ca-bundle
+          emptyDir: {}
