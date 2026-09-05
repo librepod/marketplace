@@ -1,0 +1,36 @@
+# The casdoor-sso-controller reconciles this CR: it provisions the Casdoor
+# OIDC Application (clientId "wg-easy") and writes client id/secret into
+# Secret/wg-easy-sso in this namespace. The deployment consumes those via
+# secretKeyRef (OAUTH_OIDC_CLIENT_ID/SECRET, see base/deployment.yaml).
+#
+# No issuer key: the controller's issuer value is the full discovery URL
+# (.../.well-known/openid-configuration), but wg-easy's OAUTH_OIDC_SERVER
+# expects the bare server URL and appends the well-known path itself — so the
+# server URL is a literal in base/wg-easy.env instead (same arrangement as
+# vaultwarden's unused SSO_ISSUER).
+#
+# Redirect URIs are https because INSECURE=false in the env: wg-easy derives
+# the redirect scheme from that flag (v15.4 oauth.ts) and Casdoor rejects
+# mismatches.
+apiVersion: marketplace.librepod.org/v1alpha1
+kind: SSOClient
+metadata:
+  name: wg-easy-sso
+  namespace: wg-easy
+spec:
+  clientId: wg-easy
+  organization: librepod
+  redirectUris:
+    - "https://wg-easy.${BASE_DOMAIN}/api/auth/oidc/callback"
+    - "https://wg-easy.${BASE_DOMAIN}/api/auth/oidc/link"
+  grantTypes: [authorization_code, refresh_token]
+  # JWT-Standard per docs/sso-app-author-guide.md: spec-compliant OIDC claims,
+  # no "address": [] (openid-client is strict-typed) and no password leak.
+  tokenFormat: JWT-Standard
+  expireInHours: 168
+  output:
+    secretName: wg-easy-sso
+    keys:
+      clientId: OAUTH_OIDC_CLIENT_ID
+      clientSecret: OAUTH_OIDC_CLIENT_SECRET
+  casdoorPolicy: retain
