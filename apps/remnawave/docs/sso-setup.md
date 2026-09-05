@@ -50,7 +50,17 @@ kubectl -n remnawave get secret remnawave-sso \
 | Authorization URL | `https://id.<BASE_DOMAIN>/login/oauth/authorize` |
 | Token URL | `https://id.<BASE_DOMAIN>/api/login/oauth/access_token` |
 | Frontend Domain | `remnawave.<BASE_DOMAIN>` |
-| Allowed Emails | your Casdoor account's email |
+| Allowed Emails | your Casdoor account's email — **required, see below** |
+
+> **Allowed Emails is mandatory with Casdoor.** An empty list does *not* mean
+> "allow everyone": Remnawave then requires a `remnawaveAccess: true` custom
+> claim in the ID token (`auth.service.ts`, v3.4.3 gate:
+> `hasCustomClaim || allowedEmails.includes(email)`), and Casdoor's
+> `JWT-Standard` tokens cannot carry arbitrary claims — only user-schema
+> fields. With the list empty, **every** OAuth2 login fails with `Forbidden`
+> (code `E000`) on `/api/auth/oauth2/callback`. List the Casdoor emails of
+> the admins who may sign in (`kubectl -n casdoor exec deploy/casdoor -- …`
+> or the Casdoor UI shows each user's email).
 
 ## 4. Log in
 
