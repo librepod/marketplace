@@ -30,6 +30,33 @@ spec:
           volumeMounts:
             - name: postgredb
               mountPath: /var/lib/postgresql/data
+        # NFS-backed PVCs survive uninstall (a same-named PVC rebinds to the
+        # old folder), but POSTGRES_PASSWORD only takes effect at initdb — so
+        # a reinstall that generates a fresh password is rejected by the old
+        # data dir (app sees auth failures on the first query). This container
+        # converges the stored password to the declared one on every boot: the
+        # official postgres image trusts loopback connections (pg_hba:
+        # 127.0.0.1/::1 trust), and containers in one pod share a network
+        # namespace, so no old password is needed. Also self-heals future
+        # secret rotation. SQL goes via stdin because psql does not expand
+        # :'vars' inside -c; $VAR without braces so Flux postBuild substitution
+        # leaves it alone.
+        - name: converge-db-password
+          image: postgres
+          imagePullPolicy: "IfNotPresent"
+          envFrom:
+            - configMapRef:
+                name: postgres-config
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              until psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c '\q' 2>/dev/null; do
+                sleep 1
+              done
+              printf "ALTER USER %s PASSWORD :'pw';\n" "$POSTGRES_USER" | \
+                psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+                  -v on_error_stop=1 -v pw="$POSTGRES_PASSWORD"
+              while sleep 3600; do :; done
       volumes:
         - name: postgredb
           persistentVolumeClaim:
