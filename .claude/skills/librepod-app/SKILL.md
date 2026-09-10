@@ -832,6 +832,56 @@ For Helm-based apps, check the chart's values for `initContainers` or `extraInit
 
 ---
 
+## Bundled PostgreSQL
+
+When an app bundles its own database as a sibling Deployment (conventionally `components/postgres/` with its own `deployment.yaml`, `service.yaml`, `pvc.yaml`), two rules apply.
+
+### Rule 1 — `converge-db-password` container is REQUIRED with a generated password secret
+
+**The failure it prevents:** LibrePod's default storageClass is NFS, and deleting a PVC does not delete the underlying NFS folder — a same-named PVC rebinds to the old data on reinstall. The official postgres image consumes `POSTGRES_PASSWORD` **only at `initdb`** (first boot of an empty data dir). The marketplace generates a fresh `${DB_PASSWORD}` on every install. Result: a reinstalled app presents the new password to a data dir that still enforces the old one → auth failure (`P1000`-style) → permanent CrashLoopBackOff that no env change can fix.
+
+**The rule:** any Deployment running the official `postgres` image (or a derivative that inherits its entrypoint — e.g. Immich's `ghcr.io/immich-app/postgres`) whose `POSTGRES_PASSWORD` comes from a generated `${DB_PASSWORD}` secret MUST include this container in the same pod:
+
+```yaml
+- name: converge-db-password
+  image: <same image as the postgres container>
+  imagePullPolicy: IfNotPresent
+  envFrom:
+    - configMapRef:
+        name: <same ConfigMap the postgres container loads POSTGRES_* from>
+  command: ["/bin/sh", "-c"]
+  args:
+    - |
+      until psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c '\q' 2>/dev/null; do
+        sleep 1
+      done
+      printf "ALTER USER %s PASSWORD :'pw';\n" "$POSTGRES_USER" | \
+        psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+          -v on_error_stop=1 -v pw="$POSTGRES_PASSWORD"
+      while sleep 3600; do :; done
+```
+
+It works because the official image's `pg_hba.conf` trusts loopback TCP (127.0.0.1/::1) — and containers in one pod share a network namespace — so the container reaches postgres at `127.0.0.1:5432` as superuser with no password, then converges the stored password to the declared one on every boot. Non-loopback connections (the app's, via the Service) still require scram. Verified on the 16-alpine and 18.4-alpine entrypoints and on Immich's derived image.
+
+**Do not deviate from the script — each of these details fixed a real bug:**
+
+| Detail | Why it's load-bearing |
+|---|---|
+| `-d "$POSTGRES_DB"` on both psql calls | psql defaults the *database* to the *username* when `-d` is omitted. A superuser without a same-named database (litellm's `llmproxy`) makes the wait-loop spin forever — silently. |
+| SQL via `printf \| psql` (stdin), never `-c` | psql does not expand `:'vars'` inside `-c`; the server receives the literal `:'pw'` and errors with `syntax error at or near ":"`. |
+| `$VAR` without braces | Flux `postBuild.substitute` rewrites `${VAR}` patterns in all manifest content, including this script. `$VAR` is invisible to it. |
+| Same `image:` as the postgres container | The overlay's `images:` transformer pins the tag on every container with that image name — both stay on the same pinned version. |
+
+**When NOT to add it:**
+- **Static/hardcoded passwords** (e.g. a password fixed in the env file, never regenerated) — the drift cannot occur, and the container is dead weight.
+- **Non-postgres engines** (MariaDB, CouchDB) — different auth mechanics; loopback-trust + `ALTER USER` does not transfer.
+
+### Rule 2 — mount path for postgres ≥ 18
+
+Postgres 18+ images store data in versioned subdirs (`18/docker`) and **hard-error on a PVC mounted at the legacy `/var/lib/postgresql/data` path**. Mount the data volume at `/var/lib/postgresql` instead (matches upstream compose).
+
+---
+
 ## Conventions
 
 ### ConfigMap — always use generators, never literals
@@ -975,6 +1025,7 @@ If no, leave it running. Note that the namespace now exists on the cluster and F
 | `unknown field` error on apply | CRD not installed (e.g. `IngressRoute` needs Traefik) | Skip IngressRoute during verification: pipe through `grep -v 'kind: IngressRoute'` before apply, or use `--dry-run=server` |
 | `ImagePullBackOff` | Wrong image name or tag | Check `images[].newTag` in overlay |
 | `CrashLoopBackOff` | Missing required env var | Check pod logs, add missing var to `.env` |
+| App CrashLoops with DB auth failure (`P1000`-style) after reinstall | Rebound NFS volume holds the old password; `POSTGRES_PASSWORD` only applies at `initdb` | Add the `converge-db-password` container — see [Bundled PostgreSQL](#bundled-postgresql) |
 | `envsubst` eating `$` in values | Env vars in `.env` files that use `$` notation | Scope `envsubst` to only known variables: `envsubst '${BASE_DOMAIN}'` |
 
 ### Scoping `envsubst` safely
@@ -996,7 +1047,7 @@ Add any additional substitution variables from `metadata.yaml`'s `postBuild.subs
 1. **Gather info**: source app details from the upstream URL/docs (or by asking the user) — app name, image/chart, port, storage needs, env vars, secrets needed. **Never gather conventions/structure from a sibling app under `apps/`; this skill is the only pattern source** (see the Authority section).
 2. **Research SSO**: check the app's docs for OIDC/OAuth2/SSO support — native SSO takes priority over oauth2-proxy (see [SSO Configuration](#sso-configuration))
 3. **Confirm with user**: present a summary of what will be created (name, image, port, storage, SSO approach, deployment type) and wait for approval before writing any files
-4. **Create base**: `namespace.yaml`, `deployment.yaml`+`service.yaml` (or `ocirepository.yaml`+`helmrelease.yaml`), optionally `pvc.yaml`, `.env`, `kustomization.yaml`
+4. **Create base**: `namespace.yaml`, `deployment.yaml`+`service.yaml` (or `ocirepository.yaml`+`helmrelease.yaml`), optionally `pvc.yaml`, `.env`, `kustomization.yaml`. If the app bundles a PostgreSQL database with a generated `${DB_PASSWORD}` secret, the postgres Deployment MUST include the `converge-db-password` container (see [Bundled PostgreSQL](#bundled-postgresql))
 5. **Create overlay**: `kustomization.yaml` (with image tag or Helm patches), `ingressroute.yaml` (with `${BASE_DOMAIN:=libre.pod}` and SSO middlewares or native OIDC as appropriate), `patch-storage-class.yaml` (if PVC)
 6. **Create `metadata.yaml`**: fill AppDefinition, params, secrets, dependencies (including oauth2-proxy or casdoor if needed), all four template blocks
 7. **Verify**: deploy to `librepod-dev` using the verification workflow above, confirm pods reach `Running`, ask user about cleanup
