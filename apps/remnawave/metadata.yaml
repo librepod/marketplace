@@ -24,6 +24,11 @@ spec:
         description: "Base domain (panel will be at remnawave.BASE_DOMAIN)"
         type: string
         example: "example.com"
+    optional:
+      - name: SUB_PUBLIC_DOMAIN
+        description: "Public domain of the subscription page when it runs on a separate server (bare domain, no scheme/path). Default: panel serves subscriptions at remnawave.BASE_DOMAIN/api/sub. To set after install, add the key to the remnawave-config Secret in the user-apps repo."
+        type: string
+        example: "subscription.example.com"
 
   secrets:
     - name: APP_SECRET
