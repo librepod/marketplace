@@ -1,0 +1,48 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+namespace: wg-easy
+
+# Transparent traffic router — optional component for the wg-easy app.
+#
+# Adds two native sidecars (initContainers with restartPolicy: Always) to the
+# wg-easy Deployment:
+#
+#   sing-box    runs sing-box with a tproxy inbound. Uses the committed
+#               neutral-passthrough config (sing-box-default-config ConfigMap)
+#               unless Secret/sing-box-router exists in this namespace, whose
+#               config.json then takes precedence. Presence of that Secret is
+#               the activation switch — see example/ for the user-apps kit.
+#
+#   router-init applies TPROXY interception of client traffic arriving on wg0
+#               (TCP + non-DNS UDP -> sing-box; UDP/53 -> sing-box DNS inbound)
+#               and the fwmark policy routing TPROXY needs. Applies rules only
+#               when the custom Secret exists; otherwise exits immediately and
+#               traffic flows through the kernel NAT exactly as before.
+#
+# WireGuard clients need no configuration change: they stay connected to the
+# single wg-easy tunnel; routing decisions (geoip/geosite/DNS/SNI) happen
+# server-side in sing-box.
+#
+# Usage in an overlay kustomization.yaml:
+#   components:
+#     - ../../components/sing-box-router
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+- name: sing-box-default-config
+  files:
+  - config.json=default-config.json
+
+images:
+# Version pin — patch-deployment.yaml references the bare image name; the tag
+# is set here so there is exactly one place to bump. The transformer matches
+# by image name, which only the sing-box sidecar uses. ghcr tags are v-prefixed.
+# renovate: datasource=docker depName=ghcr.io/sagernet/sing-box
+- name: ghcr.io/sagernet/sing-box
+  newTag: "v1.14.0"
+
+patches:
+- path: patch-deployment.yaml
