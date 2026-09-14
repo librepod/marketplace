@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wg-easy
+spec:
+  template:
+    spec:
+      # Order matters: sidecars start before the base's sysctl init runs to
+      # completion, which is fine — neither needs ip_forward. router-init must
+      # wait for wg0 inside its script (created later by the wg-easy container);
+      # gating the pod on a probe instead would deadlock (main containers would
+      # never start, so wg0 would never appear).
+      initContainers:
+      - name: sing-box
+        # Bare name — pinned via the images: transformer in this component's
+        # kustomization.yaml (never renders :latest because the overlay always
+        # applies the transformer, same as the wg-easy image itself).
+        image: ghcr.io/sagernet/sing-box
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -c
+        - >-
+          CFG=/etc/sing-box/custom/config.json;
+          if [ -f "$CFG" ]; then echo "sing-box: custom config active";
+          else CFG=/etc/sing-box/default/config.json; echo "sing-box: default passthrough config (router disabled)";
+          fi;
+          exec sing-box run -c "$CFG"
+        securityContext:
+          capabilities:
+            add:
+            - NET_ADMIN
+            - NET_RAW
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: sing-box-default
+          mountPath: /etc/sing-box/default
+          readOnly: true
+        - name: sing-box-custom
+          mountPath: /etc/sing-box/custom
+          readOnly: true
+        restartPolicy: Always
+      - name: router-init
+        # Reuses the app image (ships iptables pinned to iptables-legacy, same
+        # backend wg-easy uses, and busybox ip that handles fwmark rules and
+        # local-table routes — verified on the dev cluster) — the overlay
+        # images: transformer keeps it version-locked, same as the sysctl init
+        # in base. No new image, no runtime package installs.
+        image: ghcr.io/wg-easy/wg-easy
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          if [ ! -f /etc/sing-box/custom/config.json ]; then
+            echo "router-init: no Secret/sing-box-router - router disabled, traffic flows via kernel NAT"
+            exit 0
+          fi
+          echo "router-init: custom config present, activating transparent routing"
+          echo "router-init: waiting for wg0 interface..."
+          until ip link show wg0 > /dev/null 2>&1; do sleep 1; done
+          echo "router-init: waiting for sing-box tproxy listener on :12345..."
+          # ponytail: /proc/net/udp grep instead of nc (not installed); anchored
+          # to the local_address field so ephemeral ports can't false-positive.
+          until grep -qE '^[0-9a-fA-F]+:3039 ' /proc/net/udp; do sleep 1; done
+          # Idempotent: router-init restarts must not duplicate rules.
+          ip rule show | grep -q 'fwmark 0x1' || ip rule add fwmark 0x1/0x1 table 100
+          ip route show table 100 | grep -q local || ip route add local 0.0.0.0/0 dev lo table 100
+          iptables -t mangle -C PREROUTING -i wg0 -p tcp -j TPROXY --on-port 12345 --tproxy-mark 0x1/0x1 2>/dev/null || \
+            iptables -t mangle -A PREROUTING -i wg0 -p tcp -j TPROXY --on-port 12345 --tproxy-mark 0x1/0x1
+          iptables -t mangle -C PREROUTING -i wg0 -p udp ! --dport 53 -j TPROXY --on-port 12345 --tproxy-mark 0x1/0x1 2>/dev/null || \
+            iptables -t mangle -A PREROUTING -i wg0 -p udp ! --dport 53 -j TPROXY --on-port 12345 --tproxy-mark 0x1/0x1
+          iptables -t nat -C PREROUTING -i wg0 -p udp --dport 53 -j REDIRECT --to-port 5353 2>/dev/null || \
+            iptables -t nat -A PREROUTING -i wg0 -p udp --dport 53 -j REDIRECT --to-port 5353
+          echo "router-init: rules applied"
+          ip rule show
+          exit 0
+        securityContext:
+          capabilities:
+            add:
+            - NET_ADMIN
+            - NET_RAW
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
+        volumeMounts:
+        - name: sing-box-custom
+          mountPath: /etc/sing-box/custom
+          readOnly: true
+        restartPolicy: Always
+      volumes:
+      - name: sing-box-default
+        configMap:
+          name: sing-box-default-config
+      - name: sing-box-custom
+        secret:
+          secretName: sing-box-router
+          optional: true
