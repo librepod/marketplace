@@ -1,0 +1,53 @@
+# Optional tailscale client as a sidecar of the panel Deployment — lets the
+# panel originate traffic into an external tailnet (kernel TUN in the shared
+# pod netns; the userspace-netstack tailscale pods can only proxy inbound).
+# Disabled by default. Enable per install WITHOUT touching this app's
+# kustomizations: add to spec.components of the install's Flux Kustomization
+# (release.yaml in the user-apps repo):
+#
+#   spec:
+#     path: ./overlays/librepod          # unchanged
+#     components:
+#       - ../../components/tailscale    # relative to spec.path
+#
+# Flux appends the component before building, so this overlay's own
+# transformers/patches (image pinning aside — the component pins its own —
+# and the kind-wide storageClassName patch) apply to its resources too.
+# A plain kustomize build from a git checkout can instead uncomment the
+# component entry in overlays/librepod — never both, kustomize rejects the
+# double add.
+#
+# Mirrors apps/tailscale (the standalone app) wherever the sidecar context
+# allows: same image pin, same env interface (TS_HOSTNAME / TS_EXTRA_ARGS /
+# TS_AUTHKEY via Flux substitution), same kube-secret state with an RBAC trio.
+# State on the PVC AND the remnawave-tailscale-state Secret: containerboot
+# syncs local state to the secret, so the node identity and tailnet IP
+# survive both pod restarts and PVC loss/rebind.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+namespace: remnawave
+
+# No `labels:` transformer here on purpose (same as the postgres component) —
+# it would stamp app.kubernetes.io/name=remnawave onto sibling resources and
+# leak into the Service selector.
+configMapGenerator:
+- name: remnawave-tailscale
+  envs:
+  - tailscale.env
+
+resources:
+- serviceaccount.yaml
+- role.yaml
+- rolebinding.yaml
+- pvc.yaml
+
+patches:
+- path: patch-deployment.yaml
+
+images:
+# Bare name — patch-deployment.yaml references it without tag; pinned here so
+# there is exactly one place to bump. Same tag as apps/tailscale overlay.
+# renovate: datasource=docker depName=tailscale/tailscale
+- name: tailscale/tailscale
+  newTag: "v1.98.4"

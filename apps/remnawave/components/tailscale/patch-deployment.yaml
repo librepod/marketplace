@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remnawave
+spec:
+  template:
+    spec:
+      # Dedicated SA for containerboot's kube-secret state sync (Role grants
+      # access to the remnawave-tailscale-state Secret only). The panel
+      # itself never talks to the Kubernetes API.
+      serviceAccountName: remnawave-tailscale
+      containers:
+        - name: tailscale
+          # Bare name — pinned via the images: transformer in this component.
+          image: tailscale/tailscale
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: remnawave-tailscale
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
+          volumeMounts:
+            - name: tun
+              mountPath: /dev/net/tun
+            - name: tailscale-state
+              mountPath: /var/lib/tailscale
+      volumes:
+        - name: tun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice
+        - name: tailscale-state
+          persistentVolumeClaim:
+            claimName: remnawave-tailscale-state

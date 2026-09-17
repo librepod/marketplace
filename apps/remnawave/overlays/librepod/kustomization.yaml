@@ -8,6 +8,13 @@ resources:
 
 components:
 - ../../components/postgres
+# Optional tailscale sidecar (panel originates traffic into an external
+# tailnet via kernel TUN) — disabled by default. Per-install enablement
+# without editing this app: add ../../components/tailscale to spec.components
+# of the install's release.yaml (user-apps repo; paths are relative to
+# spec.path). Uncomment here only when building from a git checkout — never
+# both, kustomize rejects the double add.
+# - ../../components/tailscale
 
 namespace: remnawave
 

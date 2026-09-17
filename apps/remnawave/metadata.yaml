@@ -29,6 +29,24 @@ spec:
         description: "Public domain of the subscription page when it runs on a separate server (bare domain, no scheme/path). Default: panel serves subscriptions at remnawave.BASE_DOMAIN/api/sub. To set after install, add the key to the remnawave-config Secret in the user-apps repo."
         type: string
         example: "subscription.example.com"
+      # The TS_* params apply only when the optional tailscale component
+      # (apps/remnawave/components/tailscale) is enabled: add
+      # ../../components/tailscale to spec.components of the install's
+      # release.yaml in the user-apps repo. Same interface as the standalone
+      # tailscale app. All are set by adding the key to the remnawave-config
+      # Secret in the same repo.
+      - name: TS_EXTRA_ARGS
+        description: "Raw flags for the tailscale sidecar — you provide everything, e.g. --login-server (required when the component is enabled; point it at your tailnet control server). Default: --accept-dns=false (cluster DNS must never be overwritten)."
+        type: string
+        example: "--login-server=https://headscale.example.com --accept-dns=false"
+      - name: TS_AUTHKEY
+        description: "Preauth key for the tailscale sidecar (reusable, long expiry, dedicated tag). Required when the tailscale component is enabled."
+        type: string
+        example: "tskey-auth-..."
+      - name: TS_HOSTNAME
+        description: "Node name the tailscale sidecar uses in the tailnet. Default: remnawave-panel."
+        type: string
+        example: "my-panel"
 
   secrets:
     - name: APP_SECRET
