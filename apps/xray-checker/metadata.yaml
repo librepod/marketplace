@@ -1,0 +1,100 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: xray-checker
+spec:
+  displayName: "Xray Checker"
+  description: "Prometheus exporter and status dashboard for monitoring Xray VPN proxies (VLESS, VMess, Trojan, Shadowsocks)"
+  icon: "https://xray-checker.kutovoy.dev/favicon.svg"
+  category: "Networking"
+  website: "https://github.com/kutovoys/xray-checker"
+
+  version: "1.3.1"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/xray-checker"
+    path: ./overlays/librepod
+
+  params:
+    required:
+      - name: BASE_DOMAIN
+        description: "Base domain (app will be at xray-checker.BASE_DOMAIN)"
+        type: string
+        example: "example.com"
+
+  secrets:
+    - name: SUBSCRIPTION_URL
+      description: "Proxy subscription URL (https://, base64 string, or file path). For Remnawave panels use the JSON subscription link."
+      required: true
+
+  dependencies:
+    required:
+      - kind: IngressController
+        description: "Traefik (provided by traefik app)"
+      - kind: AuthProxy
+        description: "oauth2-proxy (provided by oauth2-proxy app)"
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-xray-checker
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "xray-checker"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/xray-checker
+        ref:
+          tag: "__VERSION__"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-xray-checker
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "xray-checker"
+      spec:
+        dependsOn:
+          - name: traefik
+          - name: oauth2-proxy
+        force: true
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-xray-checker
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+        postBuild:
+          substitute:
+            BASE_DOMAIN: "${BASE_DOMAIN}"
+          substituteFrom:
+            - kind: Secret
+              name: xray-checker-config
+    secret: |
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: xray-checker-config
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "xray-checker"
+      type: Opaque
+      stringData:
+        SUBSCRIPTION_URL: "${SUBSCRIPTION_URL}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml
+        - secret.yaml
