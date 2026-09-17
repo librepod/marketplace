@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: xray-checker
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    spec:
+      containers:
+        - name: xray-checker
+          image: kutovoys/xray-checker
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 2112
+          envFrom:
+            - configMapRef:
+                name: xray-checker
+            - secretRef:
+                name: xray-checker-secret

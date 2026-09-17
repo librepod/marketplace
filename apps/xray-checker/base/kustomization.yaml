@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: xray-checker
+
+labels:
+- includeSelectors: true
+  includeTemplates: true
+  pairs:
+    app.kubernetes.io/name: xray-checker
+
+configMapGenerator:
+- name: xray-checker
+  envs:
+  - xray-checker.env
+
+resources:
+- namespace.yaml
+- secret.yaml
+- service.yaml
+- deployment.yaml
