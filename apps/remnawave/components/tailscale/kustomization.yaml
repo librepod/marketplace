@@ -50,4 +50,4 @@ images:
 # there is exactly one place to bump. Same tag as apps/tailscale overlay.
 # renovate: datasource=docker depName=tailscale/tailscale
 - name: tailscale/tailscale
-  newTag: "v1.98.4"
+  newTag: "v1.102.4"
