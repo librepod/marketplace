@@ -24,7 +24,10 @@ spec:
     - name: cert-manager
   interval: 1h
   retryInterval: 2m
-  timeout: 5m
+  # ≥ the bootstrap initContainer's worst-case runtime (bounded stall-detection
+  # download ladder; see components/bootstrap-cluster-issuer/job.sh): a shorter
+  # timeout reports spurious Ready=False on slow networks.
+  timeout: 35m
   sourceRef:
     kind: OCIRepository
     name: step-issuer

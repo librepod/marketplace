@@ -13,8 +13,13 @@ spec:
         name: external-secrets
   interval: 50m
   install:
-    remediation:
-      retries: 3
+    # RetryOnFailure: a failed install (e.g. --wait timing out on slow image
+    # pulls through flaky egress) is retried as an upgrade instead of wedging
+    # terminal in Stalled/RetriesExceeded (repo convention; see
+    # apps/oauth2-proxy/overlays/librepod/helmrelease.yaml).
+    strategy:
+      name: RetryOnFailure
+      retryInterval: 2m
   # Default values
   # https://github.com/external-secrets/external-secrets/blob/main/deploy/charts/external-secrets/values.yaml
   values:

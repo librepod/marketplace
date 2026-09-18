@@ -6,8 +6,15 @@ metadata:
 spec:
   interval: 12h
   install:
-    remediation:
-      retries: 3
+    # RetryOnFailure: a failed install (e.g. --wait timing out on slow image
+    # pulls through flaky egress) is retried as an upgrade instead of wedging
+    # terminal in Stalled/RetriesExceeded — everything downstream dependsOn
+    # this release, so a terminal install blocks the whole bootstrap until the
+    # spec is hand-patched (repo convention; see
+    # apps/oauth2-proxy/overlays/librepod/helmrelease.yaml).
+    strategy:
+      name: RetryOnFailure
+      retryInterval: 2m
   upgrade:
     remediation:
       retries: 3

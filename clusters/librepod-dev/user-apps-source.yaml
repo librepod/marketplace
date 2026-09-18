@@ -10,10 +10,13 @@ spec:
     - name: gogs
   interval: 1h
   retryInterval: 2m
-  # Do NOT lower back to 5m: `timeout` bounds the health check below, which waits
-  # on the seeding Job (that Job alone polls up to 300s for Gogs). At 5m every cold
-  # boot showed a spurious Ready=False timeout. Why: docs/DECISIONS_LOG.md row 8.
-  timeout: 15m
+  # Do NOT lower: `timeout` bounds the health check below, which waits on the
+  # seeding Job (whose own worst case is now apk + the 4-attempt download
+  # ladder ≈ 20 min all-stalled + the 300s Gogs poll, bounded by its
+  # activeDeadlineSeconds: 1800 — see bootstrap-ssh-key/job.yaml). Keep the
+  # timeout ≥ that deadline or cold boots show spurious Ready=False.
+  # Why: docs/DECISIONS_LOG.md row 8.
+  timeout: 35m
   sourceRef:
     kind: OCIRepository
     name: marketplace-bootstrap
