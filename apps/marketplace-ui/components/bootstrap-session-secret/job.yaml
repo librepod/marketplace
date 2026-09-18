@@ -29,6 +29,7 @@ spec:
   # delete BOTH this Job and Secret/marketplace-ui-session, then `flux
   # reconcile kustomization marketplace-ui --with-source`: Flux recreates the
   # Job and it mints a fresh key (an existing real key is otherwise preserved).
+  ttlSecondsAfterFinished: 600
   template:
     metadata:
       name: marketplace-ui-bootstrap-session

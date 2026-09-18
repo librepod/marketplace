@@ -32,6 +32,7 @@ spec:
   # Secret/headscale-api-key, then `flux reconcile kustomization
   # marketplace-headscale --with-source`: Flux recreates the Job and it mints
   # a fresh key.
+  ttlSecondsAfterFinished: 600
   template:
     metadata:
       name: headscale-bootstrap-api-key
