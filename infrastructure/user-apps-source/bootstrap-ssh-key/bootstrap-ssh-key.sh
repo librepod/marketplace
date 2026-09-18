@@ -49,28 +49,94 @@ GOGS_API="http://gogs.${NS}.svc.cluster.local:80"
 SECRET_NAME="user-apps-ssh-key"
 KEY_TITLE="librepod-flux"
 
+SA=/var/run/secrets/kubernetes.io/serviceaccount
+# busybox wget has no --ca-certificate flag and verifies TLS strictly, so build
+# a bundle that trusts the cluster CA (for in-cluster API calls) on top of the
+# system CAs, and point wget at it via SSL_CERT_FILE.
+cat /etc/ssl/certs/ca-certificates.crt "$SA/ca.crt" > /tmp/ca-bundle.crt 2>/dev/null || cat "$SA/ca.crt" > /tmp/ca-bundle.crt
+export SSL_CERT_FILE=/tmp/ca-bundle.crt
+AUTH="Authorization: Bearer $(cat "$SA/token")"
+
+# Cheap idempotency BEFORE apk+download, via the raw API: with
+# ttlSecondsAfterFinished (job.yaml), Flux recreates this Job after every TTL
+# GC — re-runs stay ~free instead of re-installing packages and re-fetching the
+# ~60MB kubectl. This is also the operator override hook (Secret present =
+# "hands off"). Rotate the key: delete the Job AND the Secret, then reconcile.
+if wget -q -O /dev/null --header="$AUTH" \
+  "https://kubernetes.default.svc/api/v1/namespaces/${NS}/secrets/${SECRET_NAME}"; then
+  echo "Secret/${SECRET_NAME} already exists; nothing to do (operator override or prior run)."
+  exit 0
+fi
+
 # openssh-client: ssh-keygen + ssh-keyscan. curl: Gogs API (captures HTTP status
 # on key registration). jq: branch-count JSON parsing. git: seed the initial
 # commit over SSH.
 echo "Installing openssh-client curl jq git..."
 apk add --no-cache openssh-client curl jq git >/dev/null
 
-# Download kubectl matching the cluster's actual minor version (repo bootstrap
-# convention; see apps/headscale/components/bootstrap-api-key/job.sh).
+# Download kubectl matching the cluster's actual version (repo bootstrap
+# convention; see apps/headscale/components/bootstrap-api-key/job.sh — the
+# download ladder below is byte-identical across the three wget-flavour
+# bootstrap scripts; keep it that way when editing).
 if ! command -v kubectl >/dev/null 2>&1; then
-  SA=/var/run/secrets/kubernetes.io/serviceaccount
-  cat /etc/ssl/certs/ca-certificates.crt "$SA/ca.crt" > /tmp/ca-bundle.crt 2>/dev/null || cat "$SA/ca.crt" > /tmp/ca-bundle.crt
-  export SSL_CERT_FILE=/tmp/ca-bundle.crt
-  VER_JSON="$(wget -q -O - --header="Authorization: Bearer $(cat "$SA/token")" https://kubernetes.default.svc/version)"
-  MAJ="$(echo "$VER_JSON" | sed -n 's/.*"major": *"\([0-9]*\)".*/\1/p')"
-  MIN="$(echo "$VER_JSON" | sed -n 's/.*"minor": *"\([0-9]*\)".*/\1/p')"
-  if [ -z "$MAJ" ] || [ -z "$MIN" ]; then
-    echo "ERROR: could not parse cluster version from /version: $VER_JSON" >&2
+  # system:authenticated can read /version (discovery), so the SA token is enough.
+  VER_JSON="$(wget -q -O - --header="$AUTH" https://kubernetes.default.svc/version)"
+  # Full version from /version's gitVersion, keeping any prerelease suffix
+  # (v1.37.1-rc.0+k3s1 -> 1.37.1-rc.0): dl.k8s.io publishes rc binaries, while
+  # the old strip-to-GA 404'd on clusters riding a prerelease channel whose
+  # X.Y.Z had no GA yet. The mirror does not carry rc — the ladder below falls
+  # through to dl.k8s.io for those. dl.k8s.io channel files (stable-M.N.txt)
+  # are not served by the mirror and live on the same flaky host, so we never
+  # fetch them.
+  KV="$(echo "$VER_JSON" | sed -n 's/.*"gitVersion": *"v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\(-[A-Za-z0-9.]*\)\?\).*/\1/p' | head -n 1)"
+  if [ -z "$KV" ]; then
+    echo "ERROR: could not parse gitVersion from /version: $VER_JSON" >&2
     exit 1
   fi
-  KV="$(wget -qO- "https://dl.k8s.io/release/stable-${MAJ}.${MIN}.txt")"
-  echo "Downloading kubectl ${KV} (matching server ${MAJ}.${MIN})..."
-  wget -qO /tmp/kubectl "https://dl.k8s.io/release/${KV}/bin/linux/amd64/kubectl"
+  echo "Downloading kubectl v${KV}..."
+  UP="https://dl.k8s.io/release/v${KV}/bin/linux/amd64/kubectl"
+  MI="https://mirror.yandex.ru/mirrors/dl.k8s.io/v${KV}/bin/linux/amd64/kubectl"
+  # Interleaved upstream/mirror ladder: under the motivating RU failure
+  # (upstream AAAA-only resolve, healthy mirror) the working mirror is reached
+  # on attempt 2, not 3. -T 300 is a per-read inactivity bound, NOT a total
+  # cap: slow-but-alive links are never killed, a stalled transfer dies within
+  # 300s, and the whole Job is bounded by activeDeadlineSeconds (job.yaml).
+  n=0
+  DL_OK=0
+  for u in "$UP" "$MI" "$UP" "$MI"; do
+    n=$((n + 1))
+    if [ "$n" -gt 1 ]; then sleep $((n - 1)); fi
+    if ! wget -q -T 300 -O /tmp/kubectl "$u"; then
+      echo "kubectl download from $u failed (attempt $n/4)"
+      continue
+    fi
+    # Verify against the .sha256 published by the OTHER host — a checksum from
+    # the serving host cannot detect that host serving a corrupt binary.
+    # Same-host fallback covers rc tags (the mirror 404s those); if no
+    # checksum is reachable at all, warn and accept rather than hard-fail the
+    # bootstrap on a flaky checksum fetch.
+    case "$u" in
+      https://dl.k8s.io/*) S="$MI" ;;
+      *) S="$UP" ;;
+    esac
+    if wget -q -T 60 -O /tmp/kubectl.sha256 "${S}.sha256" \
+      || wget -q -T 60 -O /tmp/kubectl.sha256 "${u}.sha256"; then
+      SUM="$(set -- $(cat /tmp/kubectl.sha256); echo "${1:-}")"
+      if [ -n "$SUM" ] && echo "$SUM  /tmp/kubectl" | sha256sum -c - >/dev/null 2>&1; then
+        DL_OK=1
+        break
+      fi
+      echo "checksum mismatch for $u (attempt $n/4)"
+    else
+      echo "WARNING: no .sha256 reachable for $u; accepting unverified kubectl" >&2
+      DL_OK=1
+      break
+    fi
+  done
+  if [ "$DL_OK" != 1 ]; then
+    echo "ERROR: could not download kubectl from any mirror" >&2
+    exit 1
+  fi
   chmod +x /tmp/kubectl
   export PATH=/tmp:$PATH
 fi

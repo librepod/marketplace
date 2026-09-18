@@ -7,6 +7,19 @@ spec:
   interval: 1h
   releaseName: step-certificates
   targetNamespace: step-ca
+  # Self-heal a slow first converge: without a retry policy, a failed install
+  # (e.g. helm --wait timing out on slow image pulls) lands in terminal
+  # Stalled/RetriesExceeded and wedges every downstream kustomization until
+  # the spec is hand-patched. RetryOnFailure retries the failed install as an
+  # upgrade — never terminal (repo convention; see casdoor/gatus).
+  install:
+    strategy:
+      name: RetryOnFailure
+      retryInterval: 2m
+  upgrade:
+    strategy:
+      name: RetryOnFailure
+      retryInterval: 3m
   chart:
     spec:
       chart: step-certificates

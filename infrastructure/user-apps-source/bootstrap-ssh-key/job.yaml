@@ -13,10 +13,20 @@ metadata:
     app.kubernetes.io/component: bootstrap-ssh-key
 spec:
   backoffLimit: 3
+  # Bound the whole Job (all pod attempts) so a hang surfaces as a failure
+  # instead of eternal InProgress. Sized above the script's own worst case —
+  # apk + 4-attempt download ladder ≈ 20 min all-stalled + 5 min Gogs readiness
+  # poll ≈ 25 min (see bootstrap-ssh-key.sh) — so the deadline only fires on
+  # genuinely hopeless links.
+  activeDeadlineSeconds: 1800
   parallelism: 1
   completions: 1
-  # NOTE: deliberately NO ttlSecondsAfterFinished — a Completed Job persists so
-  # Flux does NOT recreate+re-run it on later reconciles.
+  # Self-healing failure: a DeadlineExceeded/Failed Job is TTL-GC'd and
+  # recreated by the next Flux reconcile (kustomize apply alone is a no-op on
+  # an unchanged existing Job, so without TTL a failed Job wedges until an
+  # operator deletes it by hand). The script's pre-download idempotency check
+  # keeps those TTL-driven re-runs ~free (it skips apk + the kubectl fetch
+  # when the Secret exists).
   #
   # To ROTATE the key: delete this Job AND Secret/user-apps-ssh-key, then
   # `flux reconcile kustomization user-apps-source --with-source`. The recreated
@@ -24,6 +34,7 @@ spec:
   # in Gogs (it deletes the old key by title before registering the new one), so
   # the new Secret's private key always matches what Gogs has. A stray re-run
   # while the Secret exists is a harmless no-op (the script exits early).
+  ttlSecondsAfterFinished: 600
   template:
     metadata:
       name: gogs-bootstrap-ssh-key

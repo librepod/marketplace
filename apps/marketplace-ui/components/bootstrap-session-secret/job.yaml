@@ -14,15 +14,21 @@ metadata:
     app.kubernetes.io/component: bootstrap-session
 spec:
   backoffLimit: 3
+  # Bound the whole Job (all pod attempts) so a hang surfaces as a failure
+  # instead of eternal InProgress. Sized above the script's own worst case:
+  # the 4-attempt download ladder ≈ 20 min all-stalled (see job.sh) — the
+  # deadline only fires on genuinely hopeless links.
+  activeDeadlineSeconds: 1800
   parallelism: 1
   completions: 1
-  # NOTE: deliberately NO ttlSecondsAfterFinished. Letting the Completed Job
-  # persist means Flux does NOT recreate it on later reconciles — a TTL-GC'd Job
-  # would be rebuilt by Flux and re-run on every reconcile. To force key
-  # rotation, delete BOTH this Job and Secret/marketplace-ui-session, then
-  # `flux reconcile kustomization marketplace-ui --with-source`: Flux recreates
-  # the Job and it mints a fresh key. The script is idempotent, so a stray
-  # re-run is a harmless no-op (an existing real key is preserved).
+  # Self-healing failure: a DeadlineExceeded/Failed Job is TTL-GC'd and
+  # recreated by the next Flux reconcile (kustomize apply alone is a no-op on
+  # an unchanged existing Job, so without TTL a failed Job wedges until an
+  # operator deletes it by hand). The script's pre-download idempotency check
+  # (job.sh) keeps those TTL-driven re-runs ~free. To force key rotation,
+  # delete BOTH this Job and Secret/marketplace-ui-session, then `flux
+  # reconcile kustomization marketplace-ui --with-source`: Flux recreates the
+  # Job and it mints a fresh key (an existing real key is otherwise preserved).
   template:
     metadata:
       name: marketplace-ui-bootstrap-session
@@ -40,8 +46,9 @@ spec:
           # container) + a runtime kubectl download — the repo's bootstrap
           # convention (apps/headscale/components/bootstrap-api-key/job.sh,
           # apps/step-certificates/.../job.sh). We avoid third-party kubectl
-          # images. busybox wget handles dl.k8s.io fine, and the script pins
-          # kubectl to the cluster's minor version at runtime.
+          # images. The script matches kubectl to the cluster's version
+          # (gitVersion from /version) and falls back to the Yandex mirror of
+          # dl.k8s.io — see the script for the network rationale.
           image: alpine:3.19
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "/scripts/bootstrap-session.sh"]

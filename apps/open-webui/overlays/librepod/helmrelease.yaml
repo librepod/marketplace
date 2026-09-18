@@ -6,6 +6,16 @@ spec:
   interval: 1h
   releaseName: open-webui
   targetNamespace: open-webui
+  # Self-heal a slow first install (RetryOnFailure retries a failed install
+  # as an upgrade — never terminal; repo convention, see casdoor/gatus).
+  install:
+    strategy:
+      name: RetryOnFailure
+      retryInterval: 2m
+  upgrade:
+    strategy:
+      name: RetryOnFailure
+      retryInterval: 3m
   chart:
     spec:
       chart: open-webui

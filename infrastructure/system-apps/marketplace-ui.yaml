@@ -35,7 +35,11 @@ spec:
     - name: user-apps-source
   interval: 1m
   retryInterval: 2m
-  timeout: 5m
+  # ≥ the session-secret bootstrap Job's activeDeadlineSeconds (1800s): with
+  # wait:true the health check waits on that Job, and a shorter timeout reports
+  # spurious Ready=False on slow networks (see
+  # components/bootstrap-session-secret/job.yaml).
+  timeout: 35m
   sourceRef:
     kind: OCIRepository
     name: marketplace-ui
