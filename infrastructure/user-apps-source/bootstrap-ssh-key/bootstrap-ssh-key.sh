@@ -68,9 +68,38 @@ if ! command -v kubectl >/dev/null 2>&1; then
     echo "ERROR: could not parse cluster version from /version: $VER_JSON" >&2
     exit 1
   fi
-  KV="$(wget -qO- "https://dl.k8s.io/release/stable-${MAJ}.${MIN}.txt")"
-  echo "Downloading kubectl ${KV} (matching server ${MAJ}.${MIN})..."
-  wget -qO /tmp/kubectl "https://dl.k8s.io/release/${KV}/bin/linux/amd64/kubectl"
+  # Full version from /version's gitVersion (e.g. v1.34.3+k3s2 -> v1.34.3):
+  # dl.k8s.io channel files (stable-M.N.txt) are not served by the mirror
+  # fallback below and live on the same flaky host, so we never fetch them.
+  # Some networks (seen on RU residential ISPs) intermittently resolve
+  # dl.k8s.io AAAA-only with no IPv6 route; busybox wget has no -4, so bound
+  # each attempt with -T and fall back to the Yandex mirror (same binaries,
+  # no /release/ prefix). Upstream stays primary for non-RU clusters.
+  KV="$(echo "$VER_JSON" | sed -n 's/.*"gitVersion": *"v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -n 1)"
+  if [ -z "$KV" ]; then
+    echo "ERROR: could not parse gitVersion from /version: $VER_JSON" >&2
+    exit 1
+  fi
+  echo "Downloading kubectl v${KV} (matching server ${MAJ}.${MIN})..."
+  DL_OK=0
+  for u in \
+    "https://dl.k8s.io/release/v${KV}/bin/linux/amd64/kubectl" \
+    "https://mirror.yandex.ru/mirrors/dl.k8s.io/v${KV}/bin/linux/amd64/kubectl"
+  do
+    for attempt in 1 2; do
+      # 50MB binary: -T 300 (the Yandex mirror measures ~1MB/s).
+      if wget -q -T 300 -O /tmp/kubectl "$u"; then
+        DL_OK=1
+        break
+      fi
+      echo "kubectl download from $u failed (attempt $attempt); retrying..."
+    done
+    if [ "$DL_OK" = 1 ]; then break; fi
+  done
+  if [ "$DL_OK" != 1 ]; then
+    echo "ERROR: could not download kubectl from any mirror" >&2
+    exit 1
+  fi
   chmod +x /tmp/kubectl
   export PATH=/tmp:$PATH
 fi

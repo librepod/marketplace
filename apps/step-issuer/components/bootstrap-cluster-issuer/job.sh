@@ -7,15 +7,48 @@ set -e
 
 echo "Welcome to StepClusterIssuer bootstrapper."
 
-# Download kubectl if not already available
+# Download kubectl if not already available.
+#
+# Version comes from the cluster itself (/version gitVersion, e.g.
+# v1.34.3+k3s2 -> v1.34.3): dl.k8s.io channel files (stable.txt) are not
+# served by the mirror fallback below and live on the same flaky host.
+#
+# On some networks (seen on RU residential ISPs) DNS intermittently returns
+# AAAA-only for dl.k8s.io while the host has no IPv6 route, making curl hang
+# indefinitely. Every attempt is bounded (-4, --connect-timeout, --max-time)
+# and falls back to the Yandex mirror, which serves the same binaries at
+# /mirrors/dl.k8s.io/<ver>/... (no /release/ prefix). Upstream stays primary
+# so non-RU clusters are unaffected.
 if ! command -v kubectl &> /dev/null; then
   echo -e "\e[1mDownloading kubectl...\e[0m"
+  SA=/var/run/secrets/kubernetes.io/serviceaccount
+  VER_JSON="$(curl -fsS --connect-timeout 5 --max-time 15 --cacert "$SA/ca.crt" \
+    -H "Authorization: Bearer $(cat "$SA/token")" \
+    https://kubernetes.default.svc/version)"
+  KUBECTL_VERSION="$(echo "$VER_JSON" | sed -n 's/.*"gitVersion": *"v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -n1)"
+  if [ -z "$KUBECTL_VERSION" ]; then
+    echo "Error: could not parse server version from /version: ${VER_JSON}"
+    exit 1
+  fi
+  echo "Cluster is v${KUBECTL_VERSION}; downloading matching kubectl..."
   cd /tmp
-  echo "Fetching stable version of kubectl..."
-  KUBECTL_VERSION=$(curl -L -s https://dl.k8s.io/release/stable.txt)
-  echo "Stable version of curl is" $KUBECTL_VERSION
-  echo "Fetching it..."
-  curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+  KUBECTL_URLS=(
+    "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+    "https://mirror.yandex.ru/mirrors/dl.k8s.io/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+  )
+  DL_OK=0
+  for u in "${KUBECTL_URLS[@]}"; do
+    # 50MB binary: --max-time 300 (the Yandex mirror measures ~1MB/s).
+    if curl -4 --fail --connect-timeout 10 --max-time 300 --retry 2 -o kubectl "$u"; then
+      DL_OK=1
+      break
+    fi
+    echo "Download from ${u} failed; trying next mirror..."
+  done
+  if [ "$DL_OK" != 1 ]; then
+    echo "Error: failed to download kubectl from any mirror."
+    exit 1
+  fi
   chmod +x kubectl
   export PATH=/tmp:$PATH
   cd -

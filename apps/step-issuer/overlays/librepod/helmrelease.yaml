@@ -9,8 +9,16 @@ spec:
   targetNamespace: step-ca
   install:
     crds: Create
+    # RetryOnFailure: a failed install (e.g. --wait timeout on slow pulls) is
+    # retried as an upgrade instead of wedging terminal (repo convention).
+    strategy:
+      name: RetryOnFailure
+      retryInterval: 2m
   upgrade:
     crds: CreateReplace
+    strategy:
+      name: RetryOnFailure
+      retryInterval: 3m
   chart:
     spec:
       chart: step-issuer

@@ -9,6 +9,10 @@ spec:
   # automatically cleaned up on re-sync, so the TTL controller handles it.
   ttlSecondsAfterFinished: 600
   backoffLimit: 3
+  # Bound the whole Job (all attempts + backoff): an unbounded hang (e.g. a
+  # network-blackholed download) otherwise shows as eternal InProgress
+  # instead of a failure. Generous: wait-for-ca alone polls up to 5 min.
+  activeDeadlineSeconds: 1800
   parallelism: 1
   completions: 1
   template:

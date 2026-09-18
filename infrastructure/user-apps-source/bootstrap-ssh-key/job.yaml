@@ -13,6 +13,10 @@ metadata:
     app.kubernetes.io/component: bootstrap-ssh-key
 spec:
   backoffLimit: 3
+  # Bound the Job so a hung step (apk/download/Gogs wait) surfaces as a
+  # failure (retried by Flux) instead of eternal InProgress. Generous: the
+  # Gogs readiness poll alone can run 5 min.
+  activeDeadlineSeconds: 900
   parallelism: 1
   completions: 1
   # NOTE: deliberately NO ttlSecondsAfterFinished — a Completed Job persists so

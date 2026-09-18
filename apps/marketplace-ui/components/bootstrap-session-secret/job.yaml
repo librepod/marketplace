@@ -14,6 +14,9 @@ metadata:
     app.kubernetes.io/component: bootstrap-session
 spec:
   backoffLimit: 3
+  # Bound the Job so a hung download surfaces as a failure (retried by Flux)
+  # instead of eternal InProgress.
+  activeDeadlineSeconds: 900
   parallelism: 1
   completions: 1
   # NOTE: deliberately NO ttlSecondsAfterFinished. Letting the Completed Job
@@ -40,8 +43,9 @@ spec:
           # container) + a runtime kubectl download — the repo's bootstrap
           # convention (apps/headscale/components/bootstrap-api-key/job.sh,
           # apps/step-certificates/.../job.sh). We avoid third-party kubectl
-          # images. busybox wget handles dl.k8s.io fine, and the script pins
-          # kubectl to the cluster's minor version at runtime.
+          # images. The script matches kubectl to the cluster's version
+          # (gitVersion from /version) and falls back to the Yandex mirror of
+          # dl.k8s.io — see the script for the network rationale.
           image: alpine:3.19
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "/scripts/bootstrap-session.sh"]
