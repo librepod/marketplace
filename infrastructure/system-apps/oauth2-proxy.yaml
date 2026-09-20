@@ -22,6 +22,13 @@ spec:
   dependsOn:
     - name: traefik
     - name: casdoor
+    # Gate on step-certificates: this Kustomization applies an EMPTY
+    # step-certificates-certs stub that Reflector fills from the step-ca
+    # source, and Reflector warns-and-drops (never retries) if the stub
+    # applies before the source exists — wedging consumer pods in Init
+    # forever. step-certificates waits on its bootstrap Job (wait: true),
+    # so Ready ⇒ the source ConfigMap exists and the stub mirrors on apply.
+    - name: step-certificates
   interval: 1h
   retryInterval: 2m
   timeout: 5m
