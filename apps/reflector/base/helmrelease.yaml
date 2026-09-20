@@ -27,3 +27,4 @@ spec:
     # Deleted/Validated"), healing all of those states every 15 min.
     cron:
       enabled: true
+      schedule: "*/10 * * * *"
