@@ -17,5 +17,14 @@ spec:
       name: RetryOnFailure
       retryInterval: 2m
   # Default values
-  # https://github.com/emberstack/kubernetes-reflector/blob/main/src/helm/values.yaml
-  values: {}
+  # https://github.com/emberstack/kubernetes-reflector/blob/main/src/helm/reflector/values.yaml
+  values:
+    # Periodic full reconciliation. Reflector is otherwise purely
+    # event-driven: a destination whose event fires while the source is
+    # missing is warned-and-dropped (never retried), and a deleted
+    # auto-mirror is never recreated. The cron runs the same full sweep the
+    # deployment performs at startup ("Auto-reflected ... Created/Updated/
+    # Deleted/Validated"), healing all of those states every 15 min.
+    cron:
+      enabled: true
+      schedule: "*/10 * * * *"
