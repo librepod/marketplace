@@ -33,7 +33,7 @@ configMapGenerator:
 
 images:
 - name: remnawave/backend
-  newTag: "3.4.3"
+  newTag: "3.4.4"
 - name: postgres
   newTag: "18.4-alpine"
 - name: valkey/valkey
