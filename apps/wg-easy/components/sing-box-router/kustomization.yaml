@@ -42,7 +42,7 @@ images:
 # by image name, which only the sing-box sidecar uses. ghcr tags are v-prefixed.
 # renovate: datasource=docker depName=ghcr.io/sagernet/sing-box
 - name: ghcr.io/sagernet/sing-box
-  newTag: "v1.14.0"
+  newTag: "v1.14.2"
 
 patches:
 - path: patch-deployment.yaml
