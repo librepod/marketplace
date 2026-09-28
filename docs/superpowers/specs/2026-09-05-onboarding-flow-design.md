@@ -2,7 +2,7 @@
 
 Companion plan: `docs/superpowers/plans/2026-09-05-onboarding-flow.md`.
 Product record: `ui/PRODUCT.md`.
-Date: 2026-09-02 (shaped) · 2026-09-05 (amended, user-directed) · Status: approved
+Date: 2026-09-02 (shaped) · 2026-09-05 (amended, user-directed) · 2026-09-28 (amended: device-admin credential model after wg-easy SSO #204; Reflector #214 pattern) · Status: approved
 
 ## Problem
 
@@ -29,7 +29,7 @@ first SSO login — no terminals involved.
 | Security model | Open claim window on the LAN, closes on completion (Synology/TrueNAS first-boot model). Race accepted. |
 | Wizard shape | Full-service: the NestJS server proxies the wg-easy API (creates the peer, renders QR) and serves the root CA from the pod-mounted cert. The user never leaves the tab — the browser cannot reach any other host mid-tour. |
 | Admin identity | **Single fixed owner**: `admin` in org `librepod`, `admin@<base-domain>`, `isAdmin: true`. The wizard asks for a password only — no username or email fields. The built-in admin's password is then randomized. (User-directed 2026-09-05.) |
-| One password for the device | wg-easy has no SSO, so at claim time the SAME chosen password is adopted as wg-easy's admin password: persisted to Secret `marketplace-ui-wg-easy` **first**, rotation best-effort. Trade-offs accepted: the SSO admin password lives (base64) in that Secret (RBAC-scoped), and a later Casdoor password change does NOT propagate to wg-easy. |
+| One device-admin credential | The device has ONE human admin identity — `admin` / the password chosen at claim — provisioned into every system app that keeps a local single-admin account: the Casdoor owner (created in org `librepod`) and wg-easy's local admin (rotated away from the committed factory default). wg-easy gained native Casdoor SSO in #204 — SSO is the primary login there; the local account is the fallback/recovery path. The password is persisted once to Secret `marketplace-ui-admin-credential` (RBAC-scoped, not in Git) — the server's durable copy for lazy retries after pod restarts, a future Users-panel re-sync, and eventual install-time provisioning of user apps. Machine credentials are deliberately NOT the user's password: the sso-controller self-mints an independent AccessKey, and gogs's `flux` account is woven into Flux auth (rotating it at runtime would desync GitOps; its committed value is tunnel-only exposure — per-device generation at bootstrap is the honest future fix). Trade-off accepted: the chosen password exists in Casdoor, wg-easy's DB, and that Secret; a later Casdoor password change does not propagate to wg-easy (future Users panel re-syncs). |
 | Finale | Graduation: same tab redirects to the **apex domain** (`https://<base-domain>`, not a subdomain — confirmed) → first SSO login as the new owner → MyApps. First-app install is post-tour. |
 | Tour scope | Owner-only. Other users are a later Users control-panel feature reusing the Casdoor proxy. |
 
@@ -70,9 +70,12 @@ pod restarts resume for free; no wizard-local progress state.
   peer-creation endpoint 401s for cookie-less clients.
 - **wg-easy default-password hole closed**: the factory password
   (`ChangeMeOnFirstLogin!`, committed to a public repo) is rotated at claim
-  time to the user's chosen password. Persist-before-rotate ordering means a
-  wg-easy outage during claim defers rotation (the lazy `ensurePassword()`
-  completes it from the Secret) rather than losing the credential.
+  time to the user's chosen password (Basic-auth `POST /api/me/password` —
+  re-verified against the live wg-easy v15.4.0 source; Basic auth on `/api/*`
+  survived the 15.3→15.4 rewrite, the rename only affected the session login
+  route). Persist-before-rotate ordering means a wg-easy outage during claim
+  defers rotation (the lazy `ensurePassword()` completes it from the Secret)
+  rather than losing the credential.
 - **No rotation side effects in GET polls** — the status probe is write-free;
   rotation happens only in `claim` or lazily inside the wg API paths.
 
