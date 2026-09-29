@@ -27,15 +27,14 @@ test('authenticated visit renders the app, never an SSO redirect', async ({ page
 
 test('the wizard renders for an unauthenticated visitor, no SSO redirect', async ({ browser }) => {
   // Fresh context — no minted session cookie: the deep-linked wizard is the
-  // pre-auth experience and must not bounce into /api/auth/login.
+  // pre-auth experience and must not bounce into /api/auth/login. Which STEP
+  // renders depends on shared-server state (an earlier authenticated poll
+  // latches claimed), so pin the mode-agnostic invariant: the wizard's
+  // progress rail is on screen — not the app, not a redirect.
   const context = await browser.newContext()
   const page = await context.newPage()
   await page.goto('/onboarding')
-  // A fresh context also has empty localStorage → the wizard replays the
-  // Welcome step (its floor logic) — the literal first-run first paint.
-  await expect(
-    page.getByRole('heading', { name: /welcome to your librepod/i }),
-  ).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('list', { name: 'setup progress' })).toBeVisible({ timeout: 15_000 })
   await expect(page).not.toHaveURL(/api\/auth/)
   await context.close()
 })
