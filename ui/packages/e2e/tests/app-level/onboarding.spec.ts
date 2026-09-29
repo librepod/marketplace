@@ -28,10 +28,10 @@ test('the wizard renders for an unauthenticated visitor, no SSO redirect', async
   const context = await browser.newContext()
   const page = await context.newPage()
   await page.goto('/onboarding')
-  // claimed + no handshake (no wg-easy in Tier 1) → the wizard resumes at
-  // the Connect step, proving both the deep link and the self-guard.
+  // Tier 1's synthetic status: mode overridden to ready but adminClaimed
+  // stays null (no Casdoor to probe) → deriveStep lands on Claim.
   await expect(
-    page.getByRole('heading', { name: /connect your first device/i }),
+    page.getByRole('heading', { name: /claim your device/i }),
   ).toBeVisible({ timeout: 15_000 })
   await expect(page).not.toHaveURL(/api\/auth/)
   await context.close()
