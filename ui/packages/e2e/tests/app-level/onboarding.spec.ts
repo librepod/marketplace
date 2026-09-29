@@ -28,10 +28,10 @@ test('the wizard renders for an unauthenticated visitor, no SSO redirect', async
   const context = await browser.newContext()
   const page = await context.newPage()
   await page.goto('/onboarding')
-  // Tier 1's synthetic status: mode overridden to ready but adminClaimed
-  // stays null (no Casdoor to probe) → deriveStep lands on Claim.
+  // A fresh context also has empty localStorage → the wizard replays the
+  // Welcome step (its floor logic) — the literal first-run first paint.
   await expect(
-    page.getByRole('heading', { name: /claim your device/i }),
+    page.getByRole('heading', { name: /welcome to your librepod/i }),
   ).toBeVisible({ timeout: 15_000 })
   await expect(page).not.toHaveURL(/api\/auth/)
   await context.close()
