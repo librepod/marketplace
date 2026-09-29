@@ -15,8 +15,14 @@ export function useBootstrapStatus() {
       return res.json()
     },
     // Keep polling through the tour: mode "ready" + IP arrival still drives
-    // the wizard (peer + handshake telemetry lives in this status).
-    refetchInterval: (query) =>
-      query.state.data?.mode === "ready" && query.state.data.arrival === "domain" ? false : 4000,
+    // the wizard (peer + handshake telemetry lives in this status). Stop
+    // once there is nothing left to watch — the graduated domain app, or a
+    // seen handshake on the raw IP (UseDomainScreen is static; polling it
+    // forever would hammer wg-easy via the server for no UI change).
+    refetchInterval: (query) => {
+      const d = query.state.data
+      if (d?.mode === "ready" && (d.arrival === "domain" || d.lastHandshakeAt)) return false
+      return 4000
+    },
   })
 }

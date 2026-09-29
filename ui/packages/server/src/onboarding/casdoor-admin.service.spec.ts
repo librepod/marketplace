@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ConflictException } from '@nestjs/common';
 import { CasdoorAdminService } from './casdoor-admin.service';
 
-function jsonRes(body: unknown, opts: { setCookie?: string[] } = {}) {
+function jsonRes(body: unknown, opts: { setCookie?: string[]; status?: number } = {}) {
   const headers = new Headers();
   (opts.setCookie ?? []).forEach((c) => headers.append('set-cookie', c));
-  return new Response(JSON.stringify(body), { status: 200, headers });
+  return new Response(JSON.stringify(body), { status: opts.status ?? 200, headers });
 }
 
 describe('CasdoorAdminService', () => {
@@ -32,6 +32,19 @@ describe('CasdoorAdminService', () => {
     vi.spyOn(global, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
     expect(await new CasdoorAdminService().probeFactoryLogin()).toBe('unreachable');
     delete process.env.CASDOOR_BASE_URL;
+    expect(await new CasdoorAdminService().probeFactoryLogin()).toBe('unreachable');
+  });
+
+  it('probeFactoryLogin: a degraded casdoor (5xx / HTML) is unreachable, NOT claimed', async () => {
+    // A half-booted casdoor returning 500 or an error page must never latch
+    // "rejected" (claimed) — that would freeze the wizard out of Claim.
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      jsonRes({ status: 'error', msg: 'db not ready' }, { status: 500 }),
+    );
+    expect(await new CasdoorAdminService().probeFactoryLogin()).toBe('unreachable');
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response('<html>502 Bad Gateway</html>', { status: 502 }),
+    );
     expect(await new CasdoorAdminService().probeFactoryLogin()).toBe('unreachable');
   });
 

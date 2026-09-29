@@ -64,7 +64,7 @@ describe('BootstrapController.status', () => {
     expect(res.cookie).toHaveBeenCalledWith('mp_onboarding', 'signed-token', expect.anything());
   });
 
-  it('ready (claimed): does NOT mint the cookie, queries wg peer state', async () => {
+  it('ready (claimed) + ip arrival: peer telemetry included, tour closed by handshake → no mint', async () => {
     const peers: WgPeer[] = [
       { clientId: 'a', name: 'phone', enabled: true, latestHandshakeAt: '2026-09-05T10:00:00Z' },
       { clientId: 'b', name: 'lap', enabled: true, latestHandshakeAt: '2026-09-05T09:00:00Z' },
@@ -74,13 +74,71 @@ describe('BootstrapController.status', () => {
       wg: { listClients: vi.fn().mockResolvedValue(peers) },
     });
     const res = fakeRes();
-    const status = await controller.status(reqWithHost('libre.pod'), res);
+    const status = await controller.status(reqWithHost('192.168.2.10'), res);
     expect(status).toMatchObject({
-      mode: 'ready', arrival: 'domain', adminClaimed: true, peerCount: 2, wgEasyUp: true,
+      mode: 'ready', arrival: 'ip', adminClaimed: true, peerCount: 2, wgEasyUp: true,
       lastHandshakeAt: '2026-09-05T10:00:00Z',
     });
     expect(res.cookie).not.toHaveBeenCalled();
     expect(wgEasy.listClients).toHaveBeenCalled();
+  });
+
+  it('ready (claimed) + domain arrival: telemetry withheld (privacy), no mint', async () => {
+    const { controller, wgEasy } = makeController({
+      probe: vi.fn().mockResolvedValue('rejected'),
+      wg: { listClients: vi.fn().mockResolvedValue([]) },
+    });
+    const res = fakeRes();
+    const status = await controller.status(reqWithHost('libre.pod'), res);
+    expect(status).toMatchObject({ arrival: 'domain', peerCount: null, lastHandshakeAt: null });
+    expect(wgEasy.listClients).not.toHaveBeenCalled();
+    expect(res.cookie).not.toHaveBeenCalled();
+  });
+
+  it('ready (claimed) + ip + NO handshake: the tour is still open → re-mints the cookie', async () => {
+    // The wizard owns ready+ip until the tunnel connects; a cookie that
+    // expired mid-tour must be re-mintable or Connect 401-dead-ends.
+    const peers: WgPeer[] = [
+      { clientId: 'a', name: 'phone', enabled: true, latestHandshakeAt: null },
+    ];
+    const { controller } = makeController({
+      probe: vi.fn().mockResolvedValue('rejected'),
+      wg: { listClients: vi.fn().mockResolvedValue(peers) },
+    });
+    const res = fakeRes();
+    const status = await controller.status(reqWithHost('192.168.2.10'), res);
+    expect(status).toMatchObject({ adminClaimed: true, lastHandshakeAt: null });
+    expect(res.cookie).toHaveBeenCalledWith('mp_onboarding', 'signed-token', expect.anything());
+  });
+
+  it('a valid session short-circuits the probe — a casdoor outage never shows Waking to authed users', async () => {
+    const probe = vi.fn().mockResolvedValue('unreachable');
+    const { controller, session } = makeController({ probe });
+    (session.verify as ReturnType<typeof vi.fn>).mockReturnValue({
+      sub: 'admin', name: 'admin', email: 'a@b.c', iat: 1, exp: 2,
+    });
+    const status = await controller.status(reqWithHost('libre.pod'), fakeRes());
+    expect(status).toMatchObject({ mode: 'ready', adminClaimed: true, casdoorUp: true });
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  it('the onboarding token does NOT short-circuit the probe (wrong audience)', async () => {
+    const probe = vi.fn().mockResolvedValue('unreachable');
+    const { controller, session } = makeController({ probe });
+    (session.verify as ReturnType<typeof vi.fn>).mockReturnValue({
+      sub: 'onboarding', name: 'onboarding', email: '', iat: 1, exp: 2,
+    });
+    const status = await controller.status(reqWithHost('libre.pod'), fakeRes());
+    expect(status.mode).toBe('waiting');
+    expect(probe).toHaveBeenCalled();
+  });
+
+  it('IPv6 raw addresses are ip arrivals, not domain', async () => {
+    const { controller } = makeController({ probe: vi.fn().mockResolvedValue('ok') });
+    const status = await controller.status(reqWithHost('[2001:db8::1]'), fakeRes());
+    expect(status.arrival).toBe('ip');
+    const status2 = await controller.status(reqWithHost('[2001:db8::1]:8080'), fakeRes());
+    expect(status2.arrival).toBe('ip');
   });
 
   it('caches the rejected probe (no login storm after claim)', async () => {
@@ -125,6 +183,8 @@ describe('BootstrapController.claim', () => {
     const { controller, casdoorAdmin } = makeController({});
     await expect(controller.claim({ password: 'short' }, fakeRes())).rejects.toThrow(BadRequestException);
     await expect(controller.claim({ password: 'has space1' }, fakeRes())).rejects.toThrow(BadRequestException);
+    // bodyless POST (no parser matched) must 400, not TypeError→500
+    await expect(controller.claim(undefined as never, fakeRes())).rejects.toThrow(BadRequestException);
     expect(casdoorAdmin.claim).not.toHaveBeenCalled();
   });
 });

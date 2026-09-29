@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useState, type FormEvent } from "react"
 import { Navigate } from "react-router-dom"
 import type { OnboardingStatus, WgPeer } from "@librepod/shared"
 import { useBootstrapStatus } from "@/hooks/useBootstrapStatus"
@@ -16,7 +16,9 @@ const STEPS = ["Welcome", "Claim", "Trust", "Connect", "Graduate"] as const
 
 function deriveStep(s: OnboardingStatus): number {
   if (!s.adminClaimed) return 1
-  if (s.peerCount === 0) return 2
+  // unknown (wg-easy unreachable → null) lands on Trust, the step before
+  // Connect — never skip the CA install just because the peer list is blank
+  if (s.peerCount == null || s.peerCount === 0) return 2
   if (!s.lastHandshakeAt) return 3
   return 4
 }
@@ -203,8 +205,8 @@ function ConnectStep({ status, onConnected }: { status: OnboardingStatus; onConn
   const [name, setName] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const peersQuery = usePeers(status)
-  const peers = peersQuery ?? []
+  const { peers, refresh } = usePeers(status)
+  const list = peers ?? []
   const connected = !!status.lastHandshakeAt
 
   async function createPeer() {
@@ -216,6 +218,8 @@ function ConnectStep({ status, onConnected }: { status: OnboardingStatus; onConn
         body: JSON.stringify({ name: name || "my-device" }),
       })
       if (!res.ok) throw new Error(`creating the key failed (${res.status})`)
+      await refresh() // swap the create form for the QR immediately —
+                      // waiting for the 5s tick invites duplicate peers
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -230,7 +234,7 @@ function ConnectStep({ status, onConnected }: { status: OnboardingStatus; onConn
         A private network between this device and yours. It also carries the name
         resolution that turns <span className="font-mono">*.{status.baseDomain}</span> into real addresses.
       </p>
-      {peers.length === 0 ? (
+      {list.length === 0 ? (
         <div className="mt-6 space-y-3">
           <label htmlFor="peer-name" className="text-sm font-medium">Name this device (e.g. “phone”)</label>
           <Input id="peer-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="phone" />
@@ -238,7 +242,7 @@ function ConnectStep({ status, onConnected }: { status: OnboardingStatus; onConn
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         </div>
       ) : (
-        <PeerPanel peers={peers} />
+        <PeerPanel peers={list} />
       )}
       <div className="mt-6 rounded-lg border border-border p-4">
         <p className="flex items-center gap-2 text-sm">
@@ -259,9 +263,17 @@ function ConnectStep({ status, onConnected }: { status: OnboardingStatus; onConn
   )
 }
 
-/** Polls the peer list only while this step needs to show it. */
-function usePeers(status: OnboardingStatus): WgPeer[] | undefined {
+/** Polls the peer list only while this step needs to show it. `refresh`
+ * lets a successful create swap the form for the QR without waiting for
+ * the 5s tick (which invites duplicate peers). */
+function usePeers(status: OnboardingStatus): { peers: WgPeer[] | undefined; refresh: () => Promise<void> } {
   const [peers, setPeers] = useState<WgPeer[] | undefined>(undefined)
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch("/api/bootstrap/wireguard")
+      if (res.ok) setPeers(((await res.json()) as { peers: WgPeer[] }).peers)
+    } catch { /* transient — the interval retries */ }
+  }, [])
   useEffect(() => {
     if (!status.adminClaimed) return
     let alive = true
@@ -275,7 +287,7 @@ function usePeers(status: OnboardingStatus): WgPeer[] | undefined {
     const t = setInterval(tick, 5000)
     return () => { alive = false; clearInterval(t) }
   }, [status.adminClaimed])
-  return peers
+  return { peers, refresh }
 }
 
 function PeerPanel({ peers }: { peers: WgPeer[] }) {

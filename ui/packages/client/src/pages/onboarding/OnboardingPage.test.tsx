@@ -37,6 +37,11 @@ describe("OnboardingPage", () => {
     expect(screen.getByText(/trust your device/i)).toBeVisible()
   })
 
+  it("resume: unknown peer count (wg-easy unreachable) also lands on Trust — never skips the CA step", () => {
+    withStatus({ ...base, mode: "ready", adminClaimed: true, peerCount: null })
+    expect(screen.getByText(/trust your device/i)).toBeVisible()
+  })
+
   it("resume: peer exists + no handshake lands on Connect and shows the QR", async () => {
     vi.spyOn(global, "fetch").mockResolvedValue({
       ok: true,

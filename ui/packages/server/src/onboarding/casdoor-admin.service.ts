@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import * as crypto from 'node:crypto';
 
 interface CasdoorResponse {
@@ -29,8 +29,13 @@ export class CasdoorAdminService {
 
   /** Anonymous password login against the same endpoint the browser login
    * page uses. On success Casdoor sets a beego session cookie — the only
-   * authorization /api/set-password accepts — so capture and return it. */
-  private async login(password: string): Promise<{ ok: boolean; cookie: string; msg?: string }> {
+   * authorization /api/set-password accepts — so capture and return it.
+   * `degraded` marks a non-JSON/5xx answer: casdoor is UP but erroring, which
+   * must read as "unreachable", never as "wrong password" — a half-booted
+   * casdoor would otherwise be latched as "claimed" for the process lifetime. */
+  private async login(
+    password: string,
+  ): Promise<{ ok: boolean; degraded: boolean; cookie: string; msg?: string }> {
     const res = await fetch(`${this.baseUrl}/api/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -43,17 +48,21 @@ export class CasdoorAdminService {
         autoSignin: true,
       }),
     });
-    const json = (await res.json().catch(() => ({ status: 'error' }))) as CasdoorResponse;
+    const json = (await res.json().catch(() => null)) as CasdoorResponse | null;
     const setCookies = res.headers.getSetCookie?.() ?? [];
-    return { ok: json.status === 'ok', cookie: setCookies.join('; '), msg: json.msg };
+    if (!res.ok || !json) {
+      return { ok: false, degraded: true, cookie: '', msg: `HTTP ${res.status}` };
+    }
+    return { ok: json.status === 'ok', degraded: false, cookie: setCookies.join('; '), msg: json.msg };
   }
 
   /** 'ok' = factory window open (onboarding mode), 'rejected' = claimed,
-   * 'unreachable' = casdoor still converging (waiting mode). */
+   * 'unreachable' = casdoor still converging or degraded (waiting mode). */
   async probeFactoryLogin(): Promise<FactoryProbe> {
     if (!this.baseUrl) return 'unreachable';
     try {
       const r = await this.login(this.factoryPassword);
+      if (r.degraded) return 'unreachable';
       return r.ok ? 'ok' : 'rejected';
     } catch (err) {
       this.logger.debug(`factory login probe failed: ${String(err)}`);
@@ -67,6 +76,9 @@ export class CasdoorAdminService {
    * closes LAST, so an aborted claim never locks the cluster. */
   async claim(input: ClaimInput): Promise<void> {
     const login = await this.login(this.factoryPassword);
+    if (login.degraded) {
+      throw new ServiceUnavailableException('casdoor is up but erroring — retry shortly');
+    }
     if (!login.ok) {
       throw new ConflictException('bootstrap already claimed');
     }

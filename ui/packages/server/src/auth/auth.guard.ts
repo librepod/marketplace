@@ -11,7 +11,10 @@ export class AuthGuard implements CanActivate {
       return true;
     }
     const claims = this.session.verify(req.cookies?.[SESSION_COOKIE]);
-    if (!claims) {
+    // sub === 'onboarding' is the wizard's mp_onboarding token, signed with
+    // the same HMAC — it must never authenticate as a session (its holder
+    // only proved presence while the factory window was open).
+    if (!claims || claims.sub === 'onboarding') {
       throw new UnauthorizedException();
     }
     (req as { user?: unknown }).user = claims;

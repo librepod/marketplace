@@ -63,11 +63,23 @@ pod restarts resume for free; no wizard-local progress state.
 ## Security mechanics
 
 - **`mp_onboarding` HMAC cookie** (sub `onboarding`, 8h TTL, httpOnly, NOT
-  Secure — the wizard IS the http://IP experience). Minted by status/claim
-  **only while unclaimed**; gates the wizard's WireGuard endpoints
-  (peer-create, config, QR). Proof of presence before the door closed; it
-  dies with the tour — post-graduation nobody can mint one, so the
-  peer-creation endpoint 401s for cookie-less clients.
+  Secure — the wizard IS the http://IP experience). Signed with the same
+  SessionService HMAC as real sessions, so AuthGuard explicitly rejects
+  `sub === 'onboarding'` — the token must never authenticate as a session.
+  Minted by status/claim **while the tour is open and the arrival is the raw
+  IP**: unclaimed, or claimed with no WireGuard handshake yet (the wizard
+  owns ready+ip until the tunnel connects; a cookie that expired mid-tour
+  must be re-mintable or Connect becomes an unrecoverable 401 dead end).
+  Gates the wizard's WireGuard endpoints (peer-create, config, QR). Once a
+  handshake is seen nobody can mint again, so the peer-creation endpoint
+  401s for cookie-less clients.
+- **Status telemetry is arrival-gated**: peer count and last-handshake time
+  are included only for raw-IP arrivals — the pre-auth screens that need
+  them never render over the domain, and domain browsers have no business
+  reading the owner's device-activity metadata. A valid session cookie
+  short-circuits the factory probe (a transient casdoor outage must not
+  tell an authenticated user their device is "waking up"), and a degraded
+  casdoor (5xx/HTML) reads as unreachable, never as "claimed".
 - **wg-easy default-password hole closed**: the factory password
   (`ChangeMeOnFirstLogin!`, committed to a public repo) is rotated at claim
   time to the user's chosen password (Basic-auth `POST /api/me/password` —

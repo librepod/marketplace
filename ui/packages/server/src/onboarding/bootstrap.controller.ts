@@ -14,15 +14,18 @@ import type { Request, Response } from 'express';
 import type { OnboardingStatus } from '@librepod/shared';
 import { CasdoorAdminService } from './casdoor-admin.service';
 import { WgEasyService } from './wg-easy.service';
-import { SessionService } from '../auth/session.service';
+import { SessionService, SESSION_COOKIE } from '../auth/session.service';
 import { ONBOARDING_COOKIE } from './onboarding.guard';
 
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
 
 function arrivalOf(req: Request): 'ip' | 'domain' {
   const xfh = req.headers['x-forwarded-host'];
-  const host = (Array.isArray(xfh) ? xfh[0] : xfh) ?? req.headers.host ?? '';
-  return IPV4.test(host.split(':')[0]) ? 'ip' : 'domain';
+  const raw = (Array.isArray(xfh) ? xfh[0] : xfh) ?? req.headers.host ?? '';
+  // "[2001:db8::1]:8080" → "2001:db8::1"; "192.168.1.1:80" → "192.168.1.1"
+  const host = raw.startsWith('[') ? raw.slice(1, raw.indexOf(']')) : raw.split(':')[0];
+  const ipv6 = host.includes(':') && /^[0-9a-fA-F:]+$/.test(host);
+  return IPV4.test(host) || ipv6 ? 'ip' : 'domain';
 }
 
 @Controller('bootstrap')
@@ -41,7 +44,15 @@ export class BootstrapController {
 
   @Get('status')
   async status(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<OnboardingStatus> {
-    const probe = this.claimedCached ? 'rejected' : await this.casdoorAdmin.probeFactoryLogin();
+    const cookies = req.cookies as Record<string, string> | undefined;
+    // A valid session proves the cluster was claimed — a transient casdoor
+    // outage (or the very first probe after this pod restarts) must not tell
+    // an authenticated user their device is "waking up". The onboarding
+    // token (same HMAC) explicitly does NOT count.
+    const sessionClaims = this.session.verify(cookies?.[SESSION_COOKIE]);
+    const authenticated = !!sessionClaims && sessionClaims.sub !== 'onboarding';
+    const probe =
+      authenticated || this.claimedCached ? 'rejected' : await this.casdoorAdmin.probeFactoryLogin();
     if (probe === 'rejected') this.claimedCached = true;
 
     const status: OnboardingStatus = {
@@ -57,9 +68,12 @@ export class BootstrapController {
     const override = process.env.BOOTSTRAP_MODE_OVERRIDE as OnboardingStatus['mode'] | undefined;
     if (override) status.mode = override;
 
-    // Tour telemetry only — never queried pre-claim (rotation must not be a
-    // side effect of a GET poll; it happens in claim or the wg endpoints).
-    if (status.adminClaimed) {
+    // Tour telemetry, and only for raw-IP arrivals — the pre-auth screens
+    // that need it never appear over the domain, and domain browsers have no
+    // business learning peer counts or the owner's last handshake time.
+    // Never queried pre-claim (rotation must not be a side effect of a GET
+    // poll; it happens in claim or the wg endpoints).
+    if (status.adminClaimed && status.arrival === 'ip') {
       try {
         const peers = await this.wgEasy.listClients();
         status.wgEasyUp = true;
@@ -75,7 +89,17 @@ export class BootstrapController {
       }
     }
 
-    if (status.mode === 'onboarding') {
+    // Mint while the TOUR is open — unclaimed, or claimed with no handshake
+    // yet — and only for raw-IP arrivals (the wizard's home; pre-claim the
+    // domain does not even resolve). A cookie that expired mid-tour must be
+    // re-mintable or the Connect step becomes an unrecoverable 401 dead end.
+    // Once a handshake is seen the tour is over and nobody can mint again —
+    // and domain arrivals never mint, so their withheld telemetry cannot
+    // wedge the tour open.
+    const tourOpen =
+      status.arrival === 'ip' &&
+      (status.mode === 'onboarding' || (status.adminClaimed === true && !status.lastHandshakeAt));
+    if (tourOpen) {
       this.mintOnboardingCookie(res);
     }
     return status;
@@ -86,7 +110,7 @@ export class BootstrapController {
     body: { password?: string },
     @Res({ passthrough: true }) res: Response,
   ): Promise<{ ok: true }> {
-    const password = body.password ?? '';
+    const password = body?.password ?? '';
     if (password.length < 8 || /\s/.test(password)) {
       throw new BadRequestException('password must be at least 8 characters without spaces');
     }

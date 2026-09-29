@@ -12,8 +12,11 @@ import { test, expect } from '@playwright/test'
 // is reachable and renders for an unauthenticated visitor.
 test('authenticated visit renders the app, never an SSO redirect', async ({ page }) => {
   await page.goto('/')
-  // RootGate passed through (ready + domain arrival) and the shell mounted
-  await expect(page).toHaveURL('/')
+  // RootGate passed through (ready + domain arrival) and the shell mounted —
+  // this pins the implicit tier-1 invariant: ORIGIN 'localhost' classifies
+  // as a domain arrival, so the override makes RootGate a pass-through.
+  // Change ORIGIN to an IP and every spec would hang behind the wizard.
+  await expect(page.getByRole('heading', { name: 'My Apps' })).toBeVisible()
   await expect(page).not.toHaveURL(/api\/auth/)
   const status = await page.evaluate(async () => {
     const res = await fetch('/api/bootstrap/status')

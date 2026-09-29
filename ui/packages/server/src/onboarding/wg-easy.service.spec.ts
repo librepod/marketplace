@@ -113,6 +113,53 @@ describe('WgEasyService', () => {
     await expect(makeService({ load }).ensurePassword()).rejects.toThrow(ServiceUnavailableException);
   });
 
+  it('never rotates to a random password when no wanted credential exists (pre-claim guard)', async () => {
+    // Pre-claim there is no chosen/persisted credential — the factory one
+    // authenticates, but rotating it to an invented random value would brick
+    // wg-easy's admin. The service must refuse instead.
+    const save = vi.fn();
+    const calls: string[] = [];
+    vi.spyOn(global, 'fetch').mockImplementation(async (url) => {
+      calls.push(String(url));
+      return ok([]); // everything authenticates
+    });
+    const svc = makeService({ load: vi.fn().mockResolvedValue(undefined), save });
+    await expect(svc.ensurePassword()).rejects.toThrow(ServiceUnavailableException);
+    expect(calls).toEqual([]); // refused without even probing — nothing to achieve
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('adoptPassword rotates from the cached current password to the chosen one', async () => {
+    // An earlier ensurePassword() cached the then-current password; claim
+    // must still rotate wg-easy TO the chosen password (preferred wins over
+    // the cache), using the cached one as the rotation's currentPassword.
+    const save = vi.fn().mockResolvedValue(undefined);
+    const rotations: string[] = [];
+    const oldB64 = Buffer.from('admin:old-pw').toString('base64');
+    const chosenB64 = Buffer.from('admin:chosen-pw1').toString('base64');
+    vi.spyOn(global, 'fetch').mockImplementation(async (url, init) => {
+      const u = String(url);
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      if (u.endsWith('/api/me/password')) {
+        rotations.push(String(init!.body));
+        return ok({ success: true });
+      }
+      const auth = headers['authorization'] ?? '';
+      if (auth.includes(chosenB64)) return new Response('', { status: 401 });
+      if (auth.includes(oldB64)) return ok([]);
+      return new Response('', { status: 401 }); // factory file is dead weight here
+    });
+    const svc = makeService({ load: vi.fn().mockResolvedValue('old-pw'), save });
+    expect(await svc.ensurePassword()).toBe('old-pw'); // caches old-pw
+    await svc.adoptPassword('chosen-pw1');
+    expect(rotations).toHaveLength(1);
+    expect(JSON.parse(rotations[0]!)).toMatchObject({
+      currentPassword: 'old-pw',
+      newPassword: 'chosen-pw1',
+    });
+    expect(save).toHaveBeenCalledWith('chosen-pw1');
+  });
+
   it('createClient posts {name, expiresAt: null} and returns clientId', async () => {
     const svc = makeService({ load: vi.fn().mockResolvedValue('pw') });
     const fetchMock = vi.spyOn(global, 'fetch')

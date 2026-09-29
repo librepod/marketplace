@@ -1,5 +1,4 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import * as crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { WgPeer } from '@librepod/shared';
 import { DeviceAdminStore } from './device-admin.store';
@@ -37,33 +36,45 @@ export class WgEasyService {
     }
   }
 
-  /** A working wg-easy admin password. `preferred` (the user's chosen
-   * password) wins while the factory credential still works; otherwise the
-   * persisted value; random is the never-expected fallback (Secret wiped
-   * mid-tour) that at least closes the factory window. */
+  /** A working wg-easy admin password. The credential we WANT is the user's
+   * choice at claim time, else the persisted one — we never invent one:
+   * rotating to an unknown random value would brick the admin account the
+   * moment this process loses it. If `wanted` already authenticates, done.
+   * Otherwise rotate from whatever still does (cached current, then the
+   * factory file) — persist-before-rotate so a failure is retryable. */
   async ensurePassword(preferred?: string): Promise<string> {
-    if (this.password) return this.password;
-    const persisted = await this.store.load();
-    const candidate = preferred ?? persisted;
-    if (candidate && (await this.tryAuth(candidate))) {
-      this.password = candidate;
-      return candidate;
+    // The cached password is authoritative for routine calls; only a
+    // DIFFERENT preferred value (claim after an earlier cache) must force
+    // the rotation path below.
+    if (this.password && (!preferred || preferred === this.password)) {
+      return this.password;
     }
-    const factory = this.factoryPassword();
-    if (factory && (await this.tryAuth(factory))) {
-      const target = candidate ?? crypto.randomBytes(24).toString('base64url');
-      await this.store.save(target); // persist before rotating (see class comment)
-      const res = await fetch(`${this.baseUrl}/api/me/password`, {
-        method: 'POST',
-        headers: this.authHeaders(factory),
-        body: JSON.stringify({ currentPassword: factory, newPassword: target }),
-      });
-      if (!res.ok) {
-        throw new ServiceUnavailableException(`wg-easy password rotation failed: ${res.status}`);
+    const persisted = await this.store.load();
+    const wanted = preferred ?? persisted;
+    if (wanted && (await this.tryAuth(wanted))) {
+      this.password = wanted;
+      return wanted;
+    }
+    if (wanted) {
+      const cached = this.password;
+      const factory = this.factoryPassword();
+      for (const from of [cached, factory]) {
+        if (!from || from === wanted) continue;
+        if (await this.tryAuth(from)) {
+          await this.store.save(wanted); // persist before rotating (see class comment)
+          const res = await fetch(`${this.baseUrl}/api/me/password`, {
+            method: 'POST',
+            headers: this.authHeaders(from),
+            body: JSON.stringify({ currentPassword: from, newPassword: wanted }),
+          });
+          if (!res.ok) {
+            throw new ServiceUnavailableException(`wg-easy password rotation failed: ${res.status}`);
+          }
+          this.logger.log('adopted the wanted password as the wg-easy admin password');
+          this.password = wanted;
+          return wanted;
+        }
       }
-      this.logger.log('adopted the chosen password as the wg-easy admin password');
-      this.password = target;
-      return target;
     }
     throw new ServiceUnavailableException('wg-easy admin credential unavailable');
   }
