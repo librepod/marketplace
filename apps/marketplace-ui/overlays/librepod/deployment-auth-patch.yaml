@@ -36,6 +36,19 @@ spec:
               mountPath: /etc/ssl/certs/ca-certificates.crt
               subPath: ca-certificates.crt
               readOnly: true
+            # The raw root CA for the onboarding wizard's Trust step
+            # (GET /api/bootstrap/ca streams it). The root-ca-cert volume
+            # already exists in this patch for the init container above —
+            # this mount reuses it in the main container.
+            - name: root-ca-cert
+              mountPath: /mnt/root-ca
+              readOnly: true
+            # wg-easy's factory admin password (INIT_PASSWORD file), mirrored
+            # by Reflector from wg-easy/wg-easy-admin. The wizard rotates it
+            # to the device-admin password at claim time.
+            - name: wg-easy-credentials
+              mountPath: /etc/wg-easy
+              readOnly: true
           env:
             - name: CASDOOR_CLIENT_ID
               valueFrom:
@@ -56,6 +69,10 @@ spec:
               value: /etc/ssl/certs/ca-certificates.crt
             - name: SSL_CERT_FILE
               value: /etc/ssl/certs/ca-certificates.crt
+            # Where the onboarding wizard serves the root CA from
+            # (GET /api/bootstrap/ca).
+            - name: ROOT_CA_PATH
+              value: /mnt/root-ca/root_ca.crt
       volumes:
         - name: root-ca-cert
           configMap:
@@ -65,3 +82,11 @@ spec:
                 path: root_ca.crt
         - name: merged-ca-bundle
           emptyDir: {}
+        # Reflected copy of wg-easy's factory admin password (INIT_PASSWORD).
+        # Optional for the same reason as user-apps-git-credentials in the
+        # base: an absent Secret must not block the pod during bootstrap
+        # windows (Reflector creates it within seconds of wg-easy deploying).
+        - name: wg-easy-credentials
+          secret:
+            secretName: wg-easy-admin
+            optional: true
