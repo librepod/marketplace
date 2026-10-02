@@ -47,6 +47,14 @@ spec:
                 secretKeyRef:
                   name: netronome-sso
                   key: NETRONOME__OIDC_CLIENT_SECRET
+            - name: NETRONOME__TAILSCALE_AUTH_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: netronome-secret
+                  key: NETRONOME__TAILSCALE_AUTH_KEY
+                  # Key is absent when Tailscale is not configured — an
+                  # empty-substituted stringData key is dropped at apply time
+                  optional: true
           volumeMounts:
             - name: data
               mountPath: /data
