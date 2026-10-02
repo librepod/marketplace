@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netronome
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+      initContainers:
+        - name: fix-permissions
+          image: busybox:1.36
+          # pod-level runAsUser: 1000 applies here too; chown needs root
+          securityContext:
+            runAsUser: 0
+          command: ["sh", "-c", "chown -R 1000:1000 /data"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      containers:
+        - name: netronome
+          image: ghcr.io/autobrr/netronome
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 7575
+          envFrom:
+            - configMapRef:
+                name: netronome
+          env:
+            - name: NETRONOME__SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: netronome-secret
+                  key: SESSION_SECRET
+            - name: NETRONOME__OIDC_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: netronome-sso
+                  key: NETRONOME__OIDC_CLIENT_ID
+            - name: NETRONOME__OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: netronome-sso
+                  key: NETRONOME__OIDC_CLIENT_SECRET
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: netronome-data

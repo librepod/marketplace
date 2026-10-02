@@ -1,0 +1,21 @@
+apiVersion: marketplace.librepod.org/v1alpha1
+kind: SSOClient
+metadata:
+  name: netronome-sso
+  namespace: netronome
+spec:
+  clientId: netronome
+  organization: librepod
+  redirectUris:
+    - "https://netronome.${BASE_DOMAIN}/api/auth/oidc/callback"   # ${BASE_DOMAIN} expanded by Flux AND the controller
+  scopes: [openid, profile]
+  grantTypes: [authorization_code, refresh_token]
+  tokenFormat: JWT-Standard
+  expireInHours: 168
+  output:
+    secretName: netronome-sso
+    keys:
+      clientId: NETRONOME__OIDC_CLIENT_ID
+      clientSecret: NETRONOME__OIDC_CLIENT_SECRET
+      issuer: OIDC_DISCOVERY_URL   # unused: controller writes the full discovery URL, but netronome wants the bare issuer (from ${BASE_DOMAIN} in netronome.env)
+  casdoorPolicy: retain

@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: netronome
+
+resources:
+- ../../base
+- ingressroute.yaml
+- ssoclient.yaml
+
+images:
+- name: ghcr.io/autobrr/netronome
+  newTag: v0.15.0
+
+configMapGenerator:
+- name: step-certificates-certs
+  options:
+    disableNameSuffixHash: true   # required: volume mounts this exact name; re-hash would prune+recreate the Reflector stub
+    annotations:
+      reflector.v1.k8s.emberstack.com/reflects: "step-ca/step-certificates-certs"
+
+patches:
+- path: ./patch-storage-class.yaml
+  target:
+    kind: PersistentVolumeClaim
+- path: ./deployment-ca-patch.yaml
+  target:
+    kind: Deployment
+    name: netronome
