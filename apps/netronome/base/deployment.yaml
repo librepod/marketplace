@@ -31,6 +31,14 @@ spec:
           envFrom:
             - configMapRef:
                 name: netronome
+            # Generic per-cluster override channel: create a Secret named
+            # netronome-env in this namespace with any NETRONOME__* keys
+            # (https://netrono.me/reference/environment-variables/) and they
+            # are injected as env vars, overriding the ConfigMap above.
+            # User-created and out-of-band, so Flux pruning leaves it alone.
+            - secretRef:
+                name: netronome-env
+                optional: true
           env:
             - name: NETRONOME__SESSION_SECRET
               valueFrom:
@@ -47,14 +55,6 @@ spec:
                 secretKeyRef:
                   name: netronome-sso
                   key: NETRONOME__OIDC_CLIENT_SECRET
-            - name: NETRONOME__TAILSCALE_AUTH_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: netronome-secret
-                  key: NETRONOME__TAILSCALE_AUTH_KEY
-                  # Key is absent when Tailscale is not configured — an
-                  # empty-substituted stringData key is dropped at apply time
-                  optional: true
           volumeMounts:
             - name: data
               mountPath: /data
