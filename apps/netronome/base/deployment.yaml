@@ -8,6 +8,7 @@ spec:
     type: Recreate
   template:
     spec:
+      automountServiceAccountToken: false
       securityContext:
         runAsUser: 1000
         runAsGroup: 1000
@@ -22,6 +23,54 @@ spec:
             - name: data
               mountPath: /data
       containers:
+        # Kernel-TUN tailscale sidecar: netronome's tsnet mode powers discovery
+        # only — its agent fetches use a bare http.Client and need a real
+        # tailscale0 interface in the pod. Every value here fixed a distinct
+        # outage; see the comments before changing anything.
+        - name: tailscale
+          image: tailscale/tailscale:v1.98.4
+          securityContext:
+            # REQUIRED: pod-level securityContext pins runAsUser/runAsGroup 1000;
+            # without the container-level 0, CapEff stays empty and TUN creation fails EPERM
+            runAsUser: 0
+            capabilities:
+              add: ["NET_ADMIN"]
+          env:
+            # containerboot defaults to userspace networking (no tailscale0) — must be explicit
+            - name: TS_USERSPACE
+              value: "false"
+            # MUST be the explicitly EMPTY string: containerboot enables k8s-operator
+            # mode (needs secret RBAC) whenever KUBERNETES_SERVICE_HOST is set; "" disables it
+            - name: TS_KUBE_SECRET
+              value: ""
+            # on the netronome-data PVC → stable tailnet identity across restarts
+            - name: TS_STATE_DIR
+              value: /data/tailscale
+            - name: TS_SOCKET
+              value: /var/run/tailscale/tailscaled.sock
+            - name: TS_AUTH_ONCE
+              value: "true"
+            # reusable headscale preauthkey from the per-cluster override secret
+            - name: TS_AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: netronome-env
+                  key: NETRONOME__TAILSCALE_AUTH_KEY
+                  optional: true
+          # per-cluster tailscale flags (TS_EXTRA_ARGS: --login-server etc.) come
+          # from the same netronome-env override secret — the login server address
+          # is cluster-specific and must not be baked into this artifact
+          envFrom:
+            - secretRef:
+                name: netronome-env
+                optional: true
+          volumeMounts:
+            - name: tun
+              mountPath: /dev/net/tun
+            - name: ts-socket
+              mountPath: /var/run/tailscale
+            - name: data
+              mountPath: /data
         - name: netronome
           image: ghcr.io/autobrr/netronome
           imagePullPolicy: IfNotPresent
@@ -35,7 +84,7 @@ spec:
             # netronome-env in this namespace with any NETRONOME__* keys
             # (https://netrono.me/reference/environment-variables/) and they
             # are injected as env vars, overriding the ConfigMap above.
-            # User-created and out-of-band, so Flux pruning leaves it alone.
+            # Also carries the tailscale sidecar's TS_EXTRA_ARGS and auth key.
             - secretRef:
                 name: netronome-env
                 optional: true
@@ -55,10 +104,23 @@ spec:
                 secretKeyRef:
                   name: netronome-sso
                   key: NETRONOME__OIDC_CLIENT_SECRET
+            # tsnet cannot carry agent traffic; host method uses the sidecar's
+            # tailscaled via the shared socket. Explicit env overrides any
+            # NETRONOME__TAILSCALE_METHOD arriving from netronome-env.
+            - name: NETRONOME__TAILSCALE_METHOD
+              value: "host"
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: ts-socket
+              mountPath: /var/run/tailscale
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: netronome-data
+        - name: tun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice
+        - name: ts-socket
+          emptyDir: {}
