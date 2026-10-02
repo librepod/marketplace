@@ -26,11 +26,16 @@ spec:
             - configMapRef:
                 name: tailscale-env
           # NOTE: TS_ACCEPT_DNS and TS_USERSPACE are intentionally omitted.
-          # Tailscale defaults to false for both when unset, which is the
-          # desired default. FluxCD's postBuild.substitute does text-level
-          # replacement — bare "true"/"false" values become YAML booleans,
-          # which the API rejects for both ConfigMap.data and EnvVar.value.
-          # Users needing these can pass flags via TS_EXTRA_ARGS.
+          # FluxCD's postBuild.substitute does text-level replacement — bare
+          # "true"/"false" values become YAML booleans, which the API rejects
+          # for both ConfigMap.data and EnvVar.value.
+          # When unset, containerboot defaults:
+          # - TS_ACCEPT_DNS=false — override with --accept-dns in TS_EXTRA_ARGS.
+          # - TS_USERSPACE=true — tailscaled runs with userspace networking:
+          #   no tailscale0 interface or tailnet routes on the node, so
+          #   cluster workloads cannot originate traffic to tailnet peers.
+          #   Inbound subnet routing (TS_ROUTES) still works. This cannot be
+          #   changed via TS_EXTRA_ARGS (those are `tailscale up` flags).
           securityContext:
             capabilities:
               add:
