@@ -37,7 +37,7 @@ kubectl get kustomization marketplace-<app-name> -n flux-system -o yaml
 kubectl get ocirepository marketplace-<app-name> -n flux-system -o yaml
 
 # Recent reconciliation events
-flux logs --kubeconfig ./librepod-dev.config \
+flux logs --kubeconfig ~/.kube/librepod-dev.config \
   --kind=Kustomization --name=marketplace-<app-name> \
   -n flux-system --tail=50
 ```
@@ -104,7 +104,7 @@ headless services or non-HTTP protocols (e.g., wg-easy's WireGuard UDP port).
 kubectl get svc -n <namespace>
 
 # Port-forward
-kubectl --kubeconfig ./librepod-dev.config \
+kubectl --kubeconfig ~/.kube/librepod-dev.config \
   port-forward svc/<svc-name> -n <namespace> 18080:<port> &
 PF_PID=$!
 sleep 3
@@ -158,20 +158,20 @@ curl -s -o /dev/null -w "HTTP %{http_code}\n" \
 ### Commands
 ```bash
 # Recent logs
-kubectl --kubeconfig ./librepod-dev.config \
+kubectl --kubeconfig ~/.kube/librepod-dev.config \
   logs -n <namespace> -l app=<app-name> --tail=100
 
 # Grep for errors
-kubectl --kubeconfig ./librepod-dev.config \
+kubectl --kubeconfig ~/.kube/librepod-dev.config \
   logs -n <namespace> -l app=<app-name> --tail=100 | \
   grep -ciE 'error|fatal|panic|exception'
 
 # Previous container (if restarted)
-kubectl --kubeconfig ./librepod-dev.config \
+kubectl --kubeconfig ~/.kube/librepod-dev.config \
   logs -n <namespace> -l app=<app-name> --previous
 
 # All containers (if pod has sidecars)
-kubectl --kubeconfig ./librepod-dev.config \
+kubectl --kubeconfig ~/.kube/librepod-dev.config \
   logs -n <namespace> -l app=<app-name> --all-containers --tail=50
 ```
 
@@ -197,7 +197,7 @@ kubectl --kubeconfig ./librepod-dev.config \
 
 ### PVCs
 ```bash
-kubectl --kubeconfig ./librepod-dev.config get pvc -n <namespace>
+kubectl --kubeconfig ~/.kube/librepod-dev.config get pvc -n <namespace>
 ```
 All PVCs should be in `Bound` state. If `Pending`, check:
 - StorageClass exists: `kubectl get storageclass`
@@ -205,7 +205,7 @@ All PVCs should be in `Bound` state. If `Pending`, check:
 
 ### ConfigMaps and Secrets
 ```bash
-kubectl --kubeconfig ./librepod-dev.config get configmaps,secrets -n <namespace>
+kubectl --kubeconfig ~/.kube/librepod-dev.config get configmaps,secrets -n <namespace>
 ```
 - ConfigMaps referenced by Deployment should exist
 - Secrets referenced by `substituteFrom` should exist (check `flux-system` namespace
@@ -213,14 +213,14 @@ kubectl --kubeconfig ./librepod-dev.config get configmaps,secrets -n <namespace>
 
 ### Services and Endpoints
 ```bash
-kubectl --kubeconfig ./librepod-dev.config get svc,endpoints -n <namespace>
+kubectl --kubeconfig ~/.kube/librepod-dev.config get svc,endpoints -n <namespace>
 ```
 - Each Service should have associated Endpoints
 - Endpoints with `<none>` addresses → pods not ready or label selector mismatch
 
 ### Deployments and StatefulSets
 ```bash
-kubectl --kubeconfig ./librepod-dev.config get deployments,statefulsets -n <namespace>
+kubectl --kubeconfig ~/.kube/librepod-dev.config get deployments,statefulsets -n <namespace>
 ```
 - `READY` column: should match desired count (e.g., `1/1`)
 - `UP-TO-DATE` should equal desired
@@ -228,15 +228,15 @@ kubectl --kubeconfig ./librepod-dev.config get deployments,statefulsets -n <name
 
 ### Ingress
 ```bash
-kubectl --kubeconfig ./librepod-dev.config get ingress -n <namespace>
+kubectl --kubeconfig ~/.kube/librepod-dev.config get ingress -n <namespace>
 ```
 - Ingress should have an ADDRESS assigned (Traefik assigns one)
 - TLS configuration should reference a valid certificate
 
 ### Full Resource Dump (for debugging)
 ```bash
-kubectl --kubeconfig ./librepod-dev.config get all -n <namespace>
-kubectl --kubeconfig ./librepod-dev.config get pvc,configmaps,secrets -n <namespace>
+kubectl --kubeconfig ~/.kube/librepod-dev.config get all -n <namespace>
+kubectl --kubeconfig ~/.kube/librepod-dev.config get pvc,configmaps,secrets -n <namespace>
 ```
 
 ---

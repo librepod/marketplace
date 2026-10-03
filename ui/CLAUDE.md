@@ -161,18 +161,11 @@ Gotchas / deviations from the original plan:
 - **`confirmUninstall()` self-opens the dialog** (trigger `.first()` → confirm action `.nth(1)`);
   the reconcile spec must NOT pre-open before calling it, or the trigger toggle closes the dialog.
 
-✅ **Previously blocked, now FIXED:** the k3d bootstrap used to never reach `marketplace-ui`
-because flux-operator ≤0.48.0 couldn't assemble the Flux CRDs — `FluxInstance/flux` reported
-`build failed: …eventSources/items/properties/kind/enum/-`, an in-image operator/CRD patch skew,
-so no Flux controllers started. Bumping
-`clusters/librepod-k3d/bootstrap/{flux-operator,flux-instance}.yaml` to **0.57.0** fixes it
-(operator + instance move in lockstep as a matched pair). Verified by an isolated k3d boot: the
-CRD server-side-apply completes (all notification CRDs created, Flux `v2.9.3`) and all four
-controllers come up `Running`. The focused test never reached a literal `Ready=True` only because
-it deliberately omitted `cosign-pub`; the real `k3d-config.yaml` supplies it. Tracked in
-[#48](https://github.com/librepod/marketplace/issues/48). The Tier 2 suite itself is complete and
-statically validated (configs valid, orchestrator `bash -n` clean, Playwright lists all 4 tests,
-selectors verified against the client source).
+- **flux-operator and flux-instance must bump in lockstep** (currently **0.57.0** in
+  `clusters/librepod-k3d/bootstrap/`): an operator/CRD patch skew silently prevents Flux
+  controllers from starting. The Tier 2 suite is statically validated (configs valid, orchestrator
+  `bash -n` clean, Playwright lists all 4 tests, selectors checked against the client source).
+  Background: [#48](https://github.com/librepod/marketplace/issues/48).
 
 ## Architecture
 

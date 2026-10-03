@@ -1,6 +1,6 @@
 ---
 name: verify-app
-description: This skill should be used when the user asks to "test an app", "verify app deployment", "install and verify an app", "e2e test for an app", "integration test an app", "smoke test an app", "validate an app", "run end-to-end test", or mentions testing/verifying a LibrePod marketplace app deployment. Simulates the full user installation flow through the Gogs user-apps repo with multi-layer verification.
+description: Run a full end-to-end deployment test for a LibrePod marketplace app (test / smoke / e2e / install-and-verify). Renders templates from metadata.yaml, commits to the Gogs user-apps repo, lets Flux reconcile, and multi-layer-verifies the result.
 ---
 
 # Verify LibrePod Marketplace App
@@ -31,7 +31,8 @@ networking problems) that static validation alone cannot find. Use cases:
 ## Prerequisites
 
 - Access to the target Kubernetes cluster (default: `librepod-dev`, kubeconfig at
-  `./librepod-dev.config`)
+  `~/.kube/librepod-dev.config` — the sibling `librepod-*.config`
+  symlinks there are production devices; never point at them)
 - `flux` CLI available (enter `nix-shell shell.nix` if not installed)
 - `kubectl` and `jq` CLIs available
 - Gogs service running on the cluster (part of bootstrap, in `gogs` namespace)
@@ -41,7 +42,7 @@ networking problems) that static validation alone cannot find. Use cases:
 **Kubeconfig health check** — run first before any pipeline stage. K3s rotates
 client certificates; if this fails, prompt the user to update the kubeconfig:
 ```bash
-kubectl --kubeconfig ./librepod-dev.config get nodes
+kubectl --kubeconfig ~/.kube/librepod-dev.config get nodes
 # Common failure: "tls: failed to verify certificate: x509: certificate signed by unknown authority"
 # → K3s has rotated server CA. Fetch fresh kubeconfig from the node:
 #   ssh root@<node-ip> "cat /etc/rancher/k3s/k3s.yaml"
@@ -55,12 +56,11 @@ python3 "$SKILL_DIR/scripts/render-templates.py" ...
 bash "$SKILL_DIR/scripts/verify-app.sh" ...
 ```
 
-**CWD safety** — use absolute paths for `--kubeconfig` throughout the
-pipeline. Stage 4 (`cd` into the Gogs clone) changes the working directory,
-breaking relative `./librepod-dev.config` references in subsequent stages.
-Set a variable early:
+**CWD safety** — the kubeconfig path is absolute, so it stays valid when
+Stage 4 (`cd` into the Gogs clone) changes the working directory. In scripts,
+use the expanded form (`~` does not expand inside double quotes):
 ```bash
-KUBECONFIG="$(pwd)/librepod-dev.config"
+KUBECONFIG="$HOME/.kube/librepod-dev.config"
 ```
 
 ## Pipeline Stages
@@ -127,7 +127,7 @@ are different sources.
 Build and validate with kubeconform:
 ```bash
 flux build kustomization <app-name> \
-  --kubeconfig ./librepod-dev.config \
+  --kubeconfig ~/.kube/librepod-dev.config \
   --path ./apps/<app-name>/overlays/librepod \
   --local-sources GitRepository/flux-system/librepod-apps=./ \
   | kubeconform \

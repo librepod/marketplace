@@ -1,16 +1,10 @@
 ---
 name: librepod-app
 description: >-
-  Use when working with LibrePod Marketplace applications — this covers
-  creating new apps, auditing and fixing existing ones, or any question about
-  LibrePod app conventions. Trigger on phrases like "add X to the marketplace",
-  "scaffold a new app", "I want to self-host Gitea/Nextcloud/anything on
-  LibrePod", "create a LibrePod app for...", "validate this app's structure",
-  "does this app follow LibrePod conventions", or "fix this app to match the
-  standard layout". Use this skill even if the user hasn't explicitly said
-  "LibrePod" — if they're working inside this repo and asking about Kustomize
-  base/overlay structure, metadata.yaml, IngressRoute, or HelmRelease files,
-  this skill applies.
+  Use when creating, auditing, fixing, or answering questions about LibrePod
+  Marketplace apps (apps/*: Kustomize base/overlay structure, metadata.yaml,
+  IngressRoute, HelmRelease, SSO wiring). Applies even if the user hasn't said
+  "LibrePod" — working in this repo on those files is enough.
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash, WebFetch, WebSearch
 ---
 
@@ -947,35 +941,34 @@ The `:=libre.pod` default means the manifest is valid even without substitution.
 
 After files are created, verify the app is actually deployable by applying it to the live `librepod-dev` cluster. This uses `kubectl` directly — no FluxCD involved.
 
-### Why `envsubst`
+### Why substitute
 
-Kustomize outputs manifests containing FluxCD variable substitution placeholders like `${BASE_DOMAIN:=libre.pod}`. `kubectl` cannot interpret these — they must be resolved first. `envsubst` replaces them using shell environment variables, falling back to the `:=default` value if the variable is unset.
+Kustomize outputs manifests containing FluxCD variable substitution placeholders like `${BASE_DOMAIN:=libre.pod}`. `kubectl` cannot interpret these — they must be resolved first. Resolve them with explicit `sed` expressions, not `envsubst`: this machine's `envsubst` is not GNU envsubst — it silently ignores its format argument (so `envsubst '${BASE_DOMAIN}'` behaves exactly like bare `envsubst`) and blanks every `${VAR}` it doesn't know, corrupting secret placeholders and `$`-using scripts in ConfigMaps.
 
 ### Verification steps
 
 **1. Build and substitute**
 
 ```bash
-# Set any required variables (BASE_DOMAIN has a default so this is optional)
-export BASE_DOMAIN=libre.pod
-
 kustomize build ./apps/<app-name>/overlays/librepod \
-  | envsubst \
-  | kubectl --kubeconfig ./librepod-dev.config apply -f -
+  | sed -e "s/\${BASE_DOMAIN:=libre.pod}/librepod.dev/g" -e "s/\${BASE_DOMAIN}/librepod.dev/g" \
+  | kubectl --kubeconfig ~/.kube/librepod-dev.config apply -f -
 ```
 
 For Helm-based apps, add `--enable-helm`:
 
 ```bash
 kustomize build --enable-helm ./apps/<app-name>/overlays/librepod \
-  | envsubst \
-  | kubectl --kubeconfig ./librepod-dev.config apply -f -
+  | sed -e "s/\${BASE_DOMAIN:=libre.pod}/librepod.dev/g" -e "s/\${BASE_DOMAIN}/librepod.dev/g" \
+  | kubectl --kubeconfig ~/.kube/librepod-dev.config apply -f -
 ```
+
+The dev cluster's real domain is `librepod.dev` — substituting the `libre.pod` manifest default here causes TLS SAN mismatches. If the app declares secrets, add one `-e "s/\${SECRET_NAME}/<value>/g"` expression per secret from `metadata.yaml`'s `postBuild.substitute` block.
 
 **2. Wait for rollout**
 
 ```bash
-kubectl --kubeconfig ./librepod-dev.config \
+kubectl --kubeconfig ~/.kube/librepod-dev.config \
   rollout status deployment/<app-name> \
   -n <app-name> \
   --timeout=120s
@@ -984,7 +977,7 @@ kubectl --kubeconfig ./librepod-dev.config \
 For Helm-based apps check the HelmRelease status instead:
 
 ```bash
-kubectl --kubeconfig ./librepod-dev.config \
+kubectl --kubeconfig ~/.kube/librepod-dev.config \
   get helmrelease <app-name> -n <app-name> \
   -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
 ```
@@ -992,14 +985,14 @@ kubectl --kubeconfig ./librepod-dev.config \
 **3. Verify pods are running**
 
 ```bash
-kubectl --kubeconfig ./librepod-dev.config \
+kubectl --kubeconfig ~/.kube/librepod-dev.config \
   get pods -n <app-name>
 ```
 
 All pods should show `Running` or `Completed`. If any show `CrashLoopBackOff` or `ImagePullBackOff`, check logs:
 
 ```bash
-kubectl --kubeconfig ./librepod-dev.config \
+kubectl --kubeconfig ~/.kube/librepod-dev.config \
   logs -n <app-name> deployment/<app-name> --tail=50
 ```
 
@@ -1012,7 +1005,7 @@ After verification succeeds, ask:
 If yes:
 
 ```bash
-kubectl --kubeconfig ./librepod-dev.config \
+kubectl --kubeconfig ~/.kube/librepod-dev.config \
   delete namespace <app-name>
 ```
 
@@ -1026,19 +1019,7 @@ If no, leave it running. Note that the namespace now exists on the cluster and F
 | `ImagePullBackOff` | Wrong image name or tag | Check `images[].newTag` in overlay |
 | `CrashLoopBackOff` | Missing required env var | Check pod logs, add missing var to `.env` |
 | App CrashLoops with DB auth failure (`P1000`-style) after reinstall | Rebound NFS volume holds the old password; `POSTGRES_PASSWORD` only applies at `initdb` | Add the `converge-db-password` container — see [Bundled PostgreSQL](#bundled-postgresql) |
-| `envsubst` eating `$` in values | Env vars in `.env` files that use `$` notation | Scope `envsubst` to only known variables: `envsubst '${BASE_DOMAIN}'` |
-
-### Scoping `envsubst` safely
-
-By default `envsubst` replaces **all** `$VAR` occurrences, which can corrupt values that legitimately contain `$`. Scope it to only the variables that FluxCD would substitute:
-
-```bash
-kustomize build ./apps/<app-name>/overlays/librepod \
-  | envsubst '${BASE_DOMAIN}' \
-  | kubectl --kubeconfig ./librepod-dev.config apply -f -
-```
-
-Add any additional substitution variables from `metadata.yaml`'s `postBuild.substitute` block to the `envsubst` argument list.
+| `${VAR}` placeholders blanked in applied manifests | This machine's `envsubst` ignores its format argument and empties unknown `${VAR}`s | Substitute with explicit `sed -e "s/\${VAR}/value/g"` expressions instead of `envsubst` |
 
 ---
 

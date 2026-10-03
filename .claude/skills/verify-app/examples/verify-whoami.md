@@ -17,12 +17,12 @@ cat apps/whoami/metadata.yaml
 # → version: "1.10.1", no secrets, depends on traefik
 
 # Verify cluster is accessible
-kubectl --kubeconfig ./librepod-dev.config get nodes
+kubectl --kubeconfig ~/.kube/librepod-dev.config get nodes
 # → NAME   STATUS   ROLES   AGE   VERSION
 # → dev    Ready    <none>  42d   v1.31.5+k3s1
 
 # Check dependencies
-kubectl --kubeconfig ./librepod-dev.config get pods -n traefik
+kubectl --kubeconfig ~/.kube/librepod-dev.config get pods -n traefik
 # → traefik-xxx  Running
 ```
 
@@ -59,7 +59,7 @@ Rendered 3 files for whoami
 ### Stage 4: COMMIT
 
 ```bash
-KUBECONFIG="$(pwd)/librepod-dev.config"
+KUBECONFIG="$HOME/.kube/librepod-dev.config"
 
 # Port-forward Gogs
 kubectl --kubeconfig "$KUBECONFIG" port-forward svc/gogs -n gogs 3000:80 &
@@ -68,15 +68,10 @@ sleep 2
 
 # Clone, add, commit, push
 git clone http://flux:pass%40w0rd@localhost:3000/flux/user-apps.git /tmp/verify-app/user-apps
-cp -r /tmp/verify-app/whoami /tmp/verify-app/user-apps/whoami
-
-# Update root kustomization.yaml
-cat > /tmp/verify-app/user-apps/kustomization.yaml << 'EOF'
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - whoami/
-EOF
+mkdir -p /tmp/verify-app/user-apps/apps
+cp -r /tmp/verify-app/whoami /tmp/verify-app/user-apps/apps/whoami
+# Nothing else to edit — committing apps/<name>/ IS the install; Flux
+# auto-generates the root kustomization from the tree (see SKILL.md Stage 4)
 
 git -C /tmp/verify-app/user-apps add .
 git -C /tmp/verify-app/user-apps commit -m "test: add whoami (tag: 1.10.1)"
@@ -144,12 +139,8 @@ Resources                ✅ PASS   0 ConfigMap(s), 0 Secret(s)
 ### Stage 8: CLEANUP
 
 ```bash
-# Remove app from Gogs
-rm -rf /tmp/verify-app/user-apps/whoami
-echo 'apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources: []' > /tmp/verify-app/user-apps/kustomization.yaml
-git -C /tmp/verify-app/user-apps add .
+# Remove app from Gogs — deleting apps/<name>/ is the whole uninstall
+git -C /tmp/verify-app/user-apps rm -r --quiet apps/whoami
 git -C /tmp/verify-app/user-apps commit -m "test: remove whoami"
 git -C /tmp/verify-app/user-apps push origin master
 

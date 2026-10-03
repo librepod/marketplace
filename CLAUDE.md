@@ -23,24 +23,24 @@ A development Kubernetes cluster is available for testing:
 
 - **Cluster name**: `librepod-dev`
 - **Access**: hostname `librepod-dev` (IP may change; the kubeconfig file always has the current address)
-- **Kubeconfig**: `./librepod-dev.config` (in repo root, gitignored)
+- **Kubeconfig**: `~/.kube/librepod-dev.config` (symlink to the `librepod-devices` repo, where the real file is gitignored; the sibling `librepod-*.config` symlinks are **production devices** — never point at them)
 
 Always use the kubeconfig flag when interacting with the cluster:
 
 ```bash
-kubectl --kubeconfig ./librepod-dev.config get pods -A
+kubectl --kubeconfig ~/.kube/librepod-dev.config get pods -A
 ```
 
 ## Common Development Commands
 
-### Root-level Commands (run from `/apps`)
+### Root-level Commands (run from the repo root)
 
 ```bash
 # Build kustomize manifests
 kustomize build ./apps/<app-name>/overlays/librepod
 
 # Apply to dev cluster
-kustomize build ./apps/<app-name>/overlays/librepod | kubectl --kubeconfig ./librepod-dev.config apply -f -
+kustomize build ./apps/<app-name>/overlays/librepod | kubectl --kubeconfig ~/.kube/librepod-dev.config apply -f -
 ```
 
 ## Architecture Patterns
@@ -65,8 +65,8 @@ folder) in order to pull its original state.
 
 ## Development Workflow
 
-1. **Create/Edit App**: Modify Kustomization code in `apps/<app-name>/base.yaml` or `overlay/librepod/` files
-2. **Test Build**: Run `kustomize build apps/<app-name>/overlay/librepod` to verify manifests
+1. **Create/Edit App**: Modify Kustomization code in `apps/<app-name>/base/` or `overlays/librepod/` files
+2. **Test Build**: Run `kustomize build apps/<app-name>/overlays/librepod` to verify manifests
 3. **Deploy to Dev**: Apply to `librepod-dev` cluster for testing
 4. **Commit**: Generated YAML in `<app-name>/` is committed to Git
 

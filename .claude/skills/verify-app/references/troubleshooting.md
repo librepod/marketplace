@@ -51,10 +51,10 @@ flux reconcile source oci marketplace-<app-name> -n flux-system
 **Diagnosis**:
 ```bash
 # Status with conditions
-flux get kustomization marketplace-<app-name> --kubeconfig ./librepod-dev.config
+flux get kustomization marketplace-<app-name> --kubeconfig ~/.kube/librepod-dev.config
 
 # Reconciliation logs
-flux logs --kubeconfig ./librepod-dev.config \
+flux logs --kubeconfig ~/.kube/librepod-dev.config \
   --kind=Kustomization --name=marketplace-<app-name> \
   -n flux-system --tail=30
 ```
@@ -73,13 +73,13 @@ fixing the underlying issue.
 **Remediation**:
 ```bash
 # Check HelmRelease status
-kubectl --kubeconfig ./librepod-dev.config get helmrelease -n <namespace> <name>
+kubectl --kubeconfig ~/.kube/librepod-dev.config get helmrelease -n <namespace> <name>
 
 # Delete the stuck HelmRelease (Flux recreates from Kustomization)
-kubectl --kubeconfig ./librepod-dev.config delete helmrelease -n <namespace> <name>
+kubectl --kubeconfig ~/.kube/librepod-dev.config delete helmrelease -n <namespace> <name>
 
 # Trigger reconciliation
-flux reconcile kustomization marketplace-<app-name> --kubeconfig ./librepod-dev.config
+flux reconcile kustomization marketplace-<app-name> --kubeconfig ~/.kube/librepod-dev.config
 ```
 
 ### Gogs Source Not Updating
@@ -89,19 +89,19 @@ flux reconcile kustomization marketplace-<app-name> --kubeconfig ./librepod-dev.
 **Diagnosis**:
 ```bash
 # Check GitRepository status
-flux get source git user-apps-source --kubeconfig ./librepod-dev.config
+flux get source git user-apps-source --kubeconfig ~/.kube/librepod-dev.config
 
 # Check Gogs pod is running
-kubectl --kubeconfig ./librepod-dev.config get pods -n gogs
+kubectl --kubeconfig ~/.kube/librepod-dev.config get pods -n gogs
 ```
 
 **Remediation**:
 ```bash
 # Force reconcile the Gogs source
-flux reconcile source git user-apps-source --kubeconfig ./librepod-dev.config
+flux reconcile source git user-apps-source --kubeconfig ~/.kube/librepod-dev.config
 
 # If Gogs is down, check its pod
-kubectl --kubeconfig ./librepod-dev.config describe pod -n gogs -l app=gogs
+kubectl --kubeconfig ~/.kube/librepod-dev.config describe pod -n gogs -l app=gogs
 ```
 
 **Common causes**:
@@ -125,7 +125,7 @@ kubectl get ocirepository -n flux-system | grep marketplace-<app-name>
 flux get kustomization | grep marketplace-<app-name>
 
 # Check user-apps source revision
-flux get source git user-apps-source --kubeconfig ./librepod-dev.config
+flux get source git user-apps-source --kubeconfig ~/.kube/librepod-dev.config
 ```
 
 **Common causes**:
@@ -287,7 +287,7 @@ If resources were created outside the Kustomization, they persist.
 ```bash
 # Force reconcile to trigger pruning
 flux reconcile kustomization user-apps \
-  --kubeconfig ./librepod-dev.config --with-source
+  --kubeconfig ~/.kube/librepod-dev.config --with-source
 
 # If namespace still exists
 kubectl delete namespace <namespace>
@@ -373,16 +373,19 @@ were manually rotated.
 curl -sk https://<server-ip>:6443/healthz
 
 # If curl works but kubectl fails → cert mismatch
-kubectl --kubeconfig ./librepod-dev.config get nodes
+kubectl --kubeconfig ~/.kube/librepod-dev.config get nodes
 ```
 
 **Remediation**:
 ```bash
-# Fetch fresh kubeconfig from the cluster node (requires SSH access)
-ssh root@<node-ip> "cat /etc/rancher/k3s/k3s.yaml" > ./librepod-dev.config
+# Preferred: refresh via the devices repo (resolves the node IP from ~/.ssh/config)
+cd ../librepod-devices && just copy-kubeconfig-from librepod-dev
 
-# Update the server address if needed (replace 127.0.0.1 with actual IP)
-sed -i 's|server: https://127.0.0.1:6443|server: https://<node-ip>:6443|' ./librepod-dev.config
+# Manual alternative (requires SSH access). Write to the REAL file in the
+# devices repo — sed -i via temp-file+rename would replace the ~/.kube symlink
+# with a divergent plain copy:
+ssh root@<node-ip> "cat /etc/rancher/k3s/k3s.yaml" > ../librepod-devices/librepod-dev.config
+sed -i 's|server: https://127.0.0.1:6443|server: https://<node-ip>:6443|' ../librepod-devices/librepod-dev.config
 ```
 
 ---
