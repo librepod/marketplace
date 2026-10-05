@@ -6,7 +6,7 @@ spec:
   chart:
     spec:
       chart: gatus
-      version: "~1.5.0"          # HTTP Helm repo: pin chart minor here (base can't semver-pin)
+      version: "1.5.0"           # HTTP Helm repo: exact pin — chart patches can change appVersion
       sourceRef:
         kind: HelmRepository
         name: gatus-helm-charts

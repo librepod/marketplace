@@ -21,7 +21,7 @@ spec:
       interval: 12h
   values:
     # No image/agentImage tags anywhere: the pinned chart's baked appVersion
-    # (v2.7.1 at chart ~0.30.x) is the app-version source of truth for both
+    # (v2.7.1 at chart 0.30.2) is the app-version source of truth for both
     # the server image and injected agent sidecars. spec.version in
     # metadata.yaml mirrors it — update both together when bumping the chart.
     # Vault Agent Injector webhook — lets workloads consume secrets as
@@ -30,9 +30,6 @@ spec:
       enabled: true
 
     server:
-      image:
-        repository: openbao/openbao
-
       # annotate the pod with a config checksum so declarative config
       # changes (e.g. the audit stanza) roll the statefulset
       configAnnotation: true

@@ -90,8 +90,7 @@ reconciliation — see @docs/FLUX_WORKFLOW.md
   pin (base `ocirepository.yaml` / `patch-helmrelease.yaml` `chart.spec.version`) drives the
   app version; never override `image.tag` in values, and move `spec.version` to the new chart's
   baked appVersion in the same change. See the librepod-app skill ("Image versions") for the
-  structural exceptions;
-  the catalog updates on all clusters within ~5 min of merge. For local UI development run
+  structural exceptions. The catalog updates on all clusters within ~5 min of merge. For local UI development run
   `bash ./scripts/generate-catalog.sh` — the root `catalog.yaml` it writes is gitignored.
 - **Commit, PR & public-doc hygiene**: never reference specific device or cluster hostnames (e.g. `librepod-dev`, `librepod-beelink`) in commit messages, PR titles/descriptions, or public-facing docs (READMEs). Use abstract environment pointers instead — `dev`, `prod`, `staging`. (Internal dev workflow docs like `docs/FLUX_WORKFLOW.md` may keep the operational cluster name.)
 - **Bootstrap versioning**: OCI streams for `marketplace/bootstrap` are

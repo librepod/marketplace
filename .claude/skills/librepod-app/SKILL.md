@@ -247,10 +247,11 @@ spec:
   interval: 24h
   url: oci://<chart-registry-url>
   ref:
-    # Pin minor version, allow patch updates automatically (e.g. 1.2.x → 1.2.99).
-    # This lets security/bugfix patches in while keeping you in control of minor/major upgrades.
-    # Format: "~<major>.<minor>.0" or equivalently ">=X.Y.0 <X.Z.0"
-    semver: "~<major>.<minor>.0"
+    # Pin the EXACT chart version. Not a ~semver range: chart patch releases can
+    # change the chart's baked appVersion, which would silently roll clusters to
+    # app versions metadata.yaml doesn't advertise. Every bump must be a repo
+    # change that moves spec.version (and any cross-renderer newTag) with it.
+    tag: "<chart-version>"
 ```
 
 **Option B — HTTP Helm repo** (when the chart is not published as OCI):
@@ -448,7 +449,7 @@ spec:
   chart:
     spec:
       chart: <chart-name>
-      version: "~<major>.<minor>.0"                     # Pin chart version (recommended for HTTP Helm repos)
+      version: "<X.Y.Z>"                                 # Pin the EXACT chart version (required for HTTP Helm repos)
       sourceRef:
         kind: HelmRepository                            # or OCIRepository — must match base source type
         name: <app-name>-helm-charts
@@ -464,7 +465,7 @@ spec:
         claimName: <app-name>-data
 ```
 
-**Chart version pinning:** For OCI-based charts, the base `OCIRepository` already pins the semver range. For HTTP Helm repos, add `chart.spec.version` in this patch to pin the chart minor version (e.g. `~1.5.0`). This lets patch updates flow in automatically while keeping control of minor/major upgrades.
+**Chart version pinning:** For OCI-based charts, the base `OCIRepository` pins the exact `ref.tag`. For HTTP Helm repos, add `chart.spec.version` in this patch — also an exact version (e.g. `1.5.0`), never a `~` range: chart patch releases can change the baked `appVersion` (openbao 0.30.0 bakes 2.7.0, 0.30.2 bakes 2.7.1), and a range silently rolls clusters past the version `metadata.yaml` advertises. No renovate manager covers these pins, so every bump is a deliberate repo change that moves `spec.version` in the same commit.
 
 ### Image versions — never override `image.tag` in Helm values
 
