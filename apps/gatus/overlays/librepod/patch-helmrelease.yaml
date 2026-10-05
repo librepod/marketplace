@@ -12,8 +12,9 @@ spec:
         name: gatus-helm-charts
       interval: 12h
   values:
-    image:
-      tag: "v5.36.0"             # chart appVersion is v5.34.0; override with latest upstream
+    # No image.tag override: the chart's baked appVersion (v5.34.0) is the
+    # app-version source of truth. spec.version in metadata.yaml mirrors it —
+    # update both together when bumping the chart pin above.
     persistence:
       storageClassName: nfs-client
     # ${BASE_DOMAIN:=libre.pod} placeholders below are Flux-substituted inside

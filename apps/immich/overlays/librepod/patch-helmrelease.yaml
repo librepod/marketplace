@@ -4,16 +4,10 @@ metadata:
   name: immich
 spec:
   values:
-    # immich app version. The chart deliberately does not bump image.tag with
-    # every Immich release, so it must be set explicitly. Defined at the shared
-    # top-level controllers so it applies to every component (server; ML is off).
-    controllers:
-      main:
-        containers:
-          main:
-            image:
-              tag: v3.0.3
-
+    # No image.tag override: the chart's baked default (its values.yaml ships the
+    # current immich release) is the app-version source of truth. spec.version in
+    # metadata.yaml mirrors the chart's default tag — update both together when
+    # bumping the chart pin in base/ocirepository.yaml.
     immich:
       persistence:
         library:

@@ -9,11 +9,13 @@ spec:
   category: "Media"
   website: "https://immich.app/"
 
-  # Application version (the immich-server container image tag), NOT the Helm
-  # chart version. Chart version is pinned internally in the OCIRepository.
-  # renovate: datasource=docker depName=ghcr.io/immich-app/immich-server
+  # Application version (the immich-server container image tag the chart ships
+  # as its default), NOT the Helm chart version. There is deliberately NO
+  # renovate annotation here: version must move only with the chart pin in
+  # base/ocirepository.yaml, matching the new chart's baked image tag — an
+  # image-datasource annotation would bump version past what the chart deploys.
   # serge: notesRepo=immich-app/immich
-  version: "v3.0.3"
+  version: "v3.2.0"
 
   source:
     type: oci-kustomize
