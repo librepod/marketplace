@@ -165,6 +165,30 @@ describe('InstallDialog', () => {
     expect(toast.error).not.toHaveBeenCalled()
   })
 
+  it('shows errors that belong to no field (whole request, unknown names) in the alert', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      reply(
+        {
+          message: 'Some settings need attention',
+          errors: [
+            { name: 'settings', message: 'All settings together are too large (max 64 KiB)' },
+            { name: 'NEW_QUESTION', message: 'Required' },
+          ],
+        },
+        400,
+      ),
+    )
+    renderDialog()
+
+    await userEvent.type(screen.getByLabelText('Access token'), 't')
+    await userEvent.click(screen.getByRole('button', { name: 'Install' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Some settings need attention')
+    expect(alert).toHaveTextContent('All settings together are too large (max 64 KiB)')
+    expect(alert).toHaveTextContent('NEW_QUESTION: Required')
+  })
+
   it('shows an unavailable store inside the dialog, keeping the typed token', async () => {
     vi.spyOn(global, 'fetch').mockResolvedValueOnce(
       reply({ message: "Couldn't save the settings right now. Try again in a minute.", statusCode: 503 }, 503),

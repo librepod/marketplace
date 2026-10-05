@@ -192,6 +192,16 @@ function InstallForm({
     return index === -1 ? undefined : fieldErrors.get(`custom.${index}`)
   }
   const hasCustomErrors = [...fieldErrors.keys()].some((name) => name === "custom" || name.startsWith("custom."))
+  // Errors no field below can show: whole-request ones ("settings") or names this form
+  // doesn't render (e.g. the catalog changed while the dialog was open). They go in the alert.
+  const isShownByField = (name: string) => {
+    if (items.some((item) => item.name === name)) return true
+    if (!settings.allowCustom) return false
+    if (name === "custom") return true
+    const match = /^custom\.(\d+)$/.exec(name)
+    return match !== null && rows.some((row) => row.id === sentRowIds[Number(match[1])])
+  }
+  const unplacedErrors = (error?.fieldErrors ?? []).filter((e) => !isShownByField(e.name))
 
   const updateRow = (id: number, patch: Partial<CustomRow>) =>
     setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)))
@@ -216,9 +226,16 @@ function InstallForm({
   return (
     <form onSubmit={submit} noValidate className="grid gap-4">
       {error && (
-        <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error.message}
-        </p>
+        <div role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p>{error.message}</p>
+          {unplacedErrors.length > 0 && (
+            <ul className="mt-1 list-disc pl-5 text-xs">
+              {unplacedErrors.map((e) => (
+                <li key={e.name}>{e.name === "settings" ? e.message : `${e.name}: ${e.message}`}</li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       {items.map((item) => (
