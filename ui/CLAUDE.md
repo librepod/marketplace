@@ -204,15 +204,23 @@ Degradation is layered, and the distinction matters:
 - `GET /api/apps/:name` → same, single app.
 - `GET /api/installed` → enriched list filtered to non-`not_installed`.
 - `GET /api/system-apps` → `InstalledService.getSystemApps()` → enriched apps where `system === true` (the read-only Platform panel on `/`).
-- `POST /api/apps/:name/install` | `/uninstall` → `InstalledService` (mutex-serialized).
+- `POST /api/apps/:name/install` | `/uninstall` → `InstalledService` (mutex-serialized). Install
+  takes an optional JSON body `{ settings?, custom? }` (used only by apps with catalog `settings`).
 - `GET /api/health` → Terminus liveness (empty checks array).
 
 ### Install flow (`InstalledService.install`, behind an `async-mutex`)
 1. Validate app exists in catalog and has `templates`.
 2. Refuse if already in the installed set.
-3. Build a `vars` map: `BASE_DOMAIN` from config + one generated secret per
+3. **Apps with `settings` only:** `resolveSettings` (`install-settings.ts`) turns the body into
+   a flat key/value map (answer → question `default` → omitted) and validates it → `400
+   { message, errors: [{ name, message }] }`. The map is written to OpenBao `apps/<name>`
+   (`OpenBaoClient`, whole entry, a new KV v2 version) **before** the Gogs commit → `503` if
+   OpenBao is unset/unreachable/sealed/refuses auth. Settings never enter the Gogs repo or
+   `${VAR}` substitution; apps without `settings` never call OpenBao. Uninstall never touches
+   OpenBao (the entry is kept, like NFS data).
+4. Build a `vars` map: `BASE_DOMAIN` from config + one generated secret per
    `secrets[].generate` (crypto hex).
-4. Render `apps/<name>/{source,release,secret,kustomization}.yaml` (via `${VAR}` regex
+5. Render `apps/<name>/{source,release,secret,kustomization}.yaml` (via `${VAR}` regex
    substitution) and write them all as **one commit** (`UserAppsRepoService.writeApp`).
 
 **"Pitfall 3" is retired.** It was a write-ORDERING rule — app files before the root
@@ -333,6 +341,12 @@ Restart / Users) marked with `SoonTag`. All status dots read from the single
 | `USER_APPS_GIT_CREDENTIALS_DIR` | `/etc/user-apps-git` | mounted Secret with `username`/`password` files (Reflector-populated) |
 | `USER_APPS_WORK_DIR` | `/var/lib/user-apps` | working copy (`repo/`) + the generated `0600 .git-credentials`; disposable emptyDir |
 | `BASE_DOMAIN` | `libre.pod` | `${BASE_DOMAIN}` substituted into templates |
+| `OPENBAO_ADDR` | (empty) | settings store for install questions. Unset ⇒ installing an app that has `settings` returns 503; other apps are unaffected |
+| `OPENBAO_AUTH_MOUNT` | `kubernetes` | OpenBao Kubernetes auth mount |
+| `OPENBAO_AUTH_ROLE` | `marketplace-ui` | role the pod's ServiceAccount logs in as |
+| `OPENBAO_KV_MOUNT` | `secret` | KV v2 mount holding the `apps/<name>` entries |
+| `OPENBAO_SA_TOKEN_PATH` | `/var/run/secrets/kubernetes.io/serviceaccount/token` | ServiceAccount JWT used for the login |
+| `OPENBAO_TOKEN` | (empty) | **test seam only** (Tier 1's dev-mode OpenBao): a static token that skips the Kubernetes login. Never set it in cluster manifests |
 | `KUBERNETES_SERVICE_HOST` | — | presence switches FluxStatusService to in-cluster config |
 
 The transport is **`http(s)` only** — an `ssh://` remote is rejected at resolution rather

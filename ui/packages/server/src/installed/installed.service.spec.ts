@@ -5,6 +5,8 @@ import { FluxStatusService } from './flux-status.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { ConfigService } from '@nestjs/config';
 import { SystemAppsService } from './system-apps.service';
+import { BadRequestException, ConflictException, ServiceUnavailableException } from '@nestjs/common';
+import { OpenBaoClient, OpenBaoUnavailableError } from './openbao.client';
 
 const mockCatalogApps = [
   {
@@ -50,6 +52,30 @@ const mockCatalogApps = [
   },
 ];
 
+// An app with install questions (catalog `settings`) — exercised by the OpenBao path.
+const settingsApp = {
+  name: 'renovate',
+  displayName: 'Renovate',
+  description: 'Dependency updates',
+  category: 'Automation',
+  version: '41.0.0',
+  icon: 'https://example.com/renovate.png',
+  sourceType: 'oci-kustomize',
+  sourceUrl: 'oci://ghcr.io/librepod/marketplace/apps/renovate',
+  templates: {
+    source: 'apiVersion: source.toolkit.fluxcd.io/v1\nkind: OCIRepository',
+    release: 'apiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization\nhost: renovate.${BASE_DOMAIN}',
+    kustomization: 'apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n  - source.yaml\n  - release.yaml',
+  },
+  settings: {
+    allowCustom: true,
+    items: [
+      { name: 'RENOVATE_TOKEN', sensitive: true, required: true },
+      { name: 'LOG_FORMAT', default: 'json' },
+    ],
+  },
+};
+
 describe('InstalledService', () => {
   let service: InstalledService;
   // Exactly the three methods InstalledService calls on the app-store repo.
@@ -66,6 +92,7 @@ describe('InstalledService', () => {
     isSystem: ReturnType<typeof vi.fn>;
   };
   let mockLaunchUrlService: { resolve: ReturnType<typeof vi.fn> };
+  let mockOpenBao: { writeAppSettings: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     mockRepo = {
@@ -95,6 +122,8 @@ describe('InstalledService', () => {
 
     mockLaunchUrlService = { resolve: vi.fn().mockResolvedValue({}) };
 
+    mockOpenBao = { writeAppSettings: vi.fn(async () => undefined) };
+
     service = new InstalledService(
       mockCatalogService as unknown as CatalogService,
       mockRepo as unknown as UserAppsRepoService,
@@ -102,6 +131,7 @@ describe('InstalledService', () => {
       mockConfigService,
       mockSystemAppsService as unknown as SystemAppsService,
       mockLaunchUrlService as unknown as import('./launch-url.service').LaunchUrlService,
+      mockOpenBao as unknown as OpenBaoClient,
     );
   });
 
@@ -293,6 +323,112 @@ describe('InstalledService', () => {
       const [, files] = mockRepo.writeApp.mock.calls[0];
       expect(files['release.yaml']).not.toContain('${BASE_DOMAIN}');
     });
+  });
+
+  describe('install() with settings', () => {
+    beforeEach(() => {
+      mockCatalogService.findOne.mockReturnValue(settingsApp);
+      mockRepo.listInstalledApps.mockResolvedValue([]);
+    });
+
+    it('writes the resolved settings to OpenBao before committing to Gogs', async () => {
+      const calls: string[] = [];
+      mockOpenBao.writeAppSettings.mockImplementation(async () => {
+        calls.push('openbao');
+      });
+      mockRepo.writeApp.mockImplementation(async () => {
+        calls.push('gogs');
+      });
+
+      await service.install('renovate', {
+        settings: { RENOVATE_TOKEN: 's3cr3t' },
+        custom: [{ name: 'HTTP_PROXY', value: 'http://p:3128' }],
+      });
+
+      expect(mockOpenBao.writeAppSettings).toHaveBeenCalledWith('renovate', {
+        RENOVATE_TOKEN: 's3cr3t',
+        LOG_FORMAT: 'json',
+        HTTP_PROXY: 'http://p:3128',
+      });
+      expect(calls).toEqual(['openbao', 'gogs']);
+    });
+
+    it('never puts setting values into the Gogs files', async () => {
+      await service.install('renovate', { settings: { RENOVATE_TOKEN: 's3cr3t' } });
+
+      const [, files] = mockRepo.writeApp.mock.calls[0];
+      expect(Object.keys(files).sort()).toEqual(['kustomization.yaml', 'release.yaml', 'source.yaml']);
+      expect(Object.values(files).join('\n')).not.toContain('s3cr3t');
+      expect(files['release.yaml']).toContain('renovate.libre.pod'); // BASE_DOMAIN still substituted
+    });
+
+    it('rejects invalid settings with 400 field errors and writes nothing', async () => {
+      const err = await service.install('renovate', {}).catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toEqual({
+        message: 'Some settings need attention',
+        errors: [{ name: 'RENOVATE_TOKEN', message: 'Required' }],
+      });
+      expect(mockOpenBao.writeAppSettings).not.toHaveBeenCalled();
+      expect(mockRepo.writeApp).not.toHaveBeenCalled();
+    });
+
+    it('treats a missing body (no JSON sent) as all defaults', async () => {
+      mockCatalogService.findOne.mockReturnValue({
+        ...settingsApp,
+        settings: { items: [{ name: 'LOG_FORMAT', default: 'json' }] },
+      });
+
+      await service.install('renovate', undefined);
+
+      expect(mockOpenBao.writeAppSettings).toHaveBeenCalledWith('renovate', { LOG_FORMAT: 'json' });
+    });
+
+    it('writes an empty entry when every question is optional and unanswered', async () => {
+      mockCatalogService.findOne.mockReturnValue({
+        ...settingsApp,
+        settings: { items: [{ name: 'OPTIONAL_THING' }] },
+      });
+
+      await service.install('renovate', {});
+
+      expect(mockOpenBao.writeAppSettings).toHaveBeenCalledWith('renovate', {});
+    });
+
+    it('returns 503 and commits nothing when OpenBao is unavailable', async () => {
+      mockOpenBao.writeAppSettings.mockRejectedValue(
+        new OpenBaoUnavailableError('write apps/renovate failed: HTTP 503'),
+      );
+
+      await expect(
+        service.install('renovate', { settings: { RENOVATE_TOKEN: 's3cr3t' } }),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(mockRepo.writeApp).not.toHaveBeenCalled();
+    });
+
+    it('lets unexpected errors through unchanged', async () => {
+      mockOpenBao.writeAppSettings.mockRejectedValue(new TypeError('boom'));
+
+      await expect(
+        service.install('renovate', { settings: { RENOVATE_TOKEN: 's3cr3t' } }),
+      ).rejects.toBeInstanceOf(TypeError);
+    });
+
+    it('checks "already installed" before validating settings (409, not 400)', async () => {
+      mockRepo.listInstalledApps.mockResolvedValue(['renovate']);
+
+      await expect(service.install('renovate', {})).rejects.toBeInstanceOf(ConflictException);
+    });
+  });
+
+  it('apps without settings never touch OpenBao, even when a body is sent', async () => {
+    mockRepo.listInstalledApps.mockResolvedValue([]);
+
+    await service.install('vaultwarden', { settings: { ANYTHING: 'x' } });
+
+    expect(mockOpenBao.writeAppSettings).not.toHaveBeenCalled();
+    expect(mockRepo.writeApp).toHaveBeenCalledTimes(1);
   });
 
   describe('uninstall()', () => {
