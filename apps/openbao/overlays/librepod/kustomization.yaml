@@ -1,0 +1,37 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: openbao
+
+resources:
+- ../../base
+- ingressroute.yaml
+- certificate.yaml
+
+components:
+- ../../components/audit-rotation
+- ../../components/bootstrap
+
+configMapGenerator:
+  # Site-specific OpenBao policies: every *.hcl here becomes a policy named
+  # after its file (written by the bootstrap Job).
+  - name: openbao-policies
+    files:
+      - eso-read-apps.hcl=policies/eso-read-apps.hcl
+      - marketplace-ui-write-apps.hcl=policies/marketplace-ui-write-apps.hcl
+    options:
+      # the bootstrap Job mounts this ConfigMap; a name hash would rewrite
+      # the immutable Job spec on every content change and brick the apply
+      disableNameSuffixHash: true
+
+images:
+- name: openbao/openbao
+  newTag: 2.7.1
+
+patches:
+- path: ./patch-helmrelease.yaml
+  target:
+    kind: HelmRelease
+- path: ./patch-storage-class.yaml
+  target:
+    kind: PersistentVolumeClaim

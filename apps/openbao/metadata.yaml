@@ -1,0 +1,87 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: openbao
+spec:
+  displayName: "OpenBao"
+  description: "Open source secrets management (Vault-compatible) with auto-unseal, Kubernetes auth and External Secrets integration"
+  icon: "https://raw.githubusercontent.com/openbao/artwork/refs/heads/main/color/openbao-color.svg"
+  category: "Security"
+  website: "https://openbao.org"
+
+  # renovate: datasource=helm depName=openbao/openbao registryUrl=https://openbao.github.io/openbao-helm
+  # serge: notesRepo=openbao/openbao
+  version: "2.7.1"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/openbao"
+    path: ./overlays/librepod
+
+  params:
+    required:
+      - name: BASE_DOMAIN
+        description: "Base domain (app will be at openbao.BASE_DOMAIN)"
+        type: string
+        example: "example.com"
+
+  dependencies:
+    required:
+      - kind: IngressController
+        description: "Traefik (provided by traefik app)"
+      - kind: StorageClass
+        description: "nfs-client (provided by nfs-provisioner app)"
+      - kind: CertificateIssuer
+        description: "step-issuer (provided by step-issuer app; issues the dedicated openbao certificate)"
+      - kind: SecretStoreOperator
+        description: "external-secrets (provided by the external-secrets system app; provides the ClusterSecretStore CRD)"
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-openbao
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "openbao"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/openbao
+        ref:
+          tag: "__VERSION__"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-openbao
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "openbao"
+      spec:
+        dependsOn:
+          - name: traefik
+          - name: storage
+          - name: step-issuer
+          - name: external-secrets
+        force: true
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-openbao
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+        postBuild:
+          substitute:
+            BASE_DOMAIN: "${BASE_DOMAIN}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml

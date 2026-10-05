@@ -7,3 +7,4 @@ resources:
   - traefik-tlsstore.yaml
   - certificate.yaml
   - cosign-pub.yaml
+  - openbao-clustersecretstore.yaml

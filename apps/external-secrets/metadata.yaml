@@ -3,15 +3,15 @@ kind: AppDefinition
 metadata:
   name: external-secrets
 spec:
-  displayName: "External Secrets"
-  description: "Kubernetes operator that reads secrets from external secret management systems and injects them into Kubernetes"
-  icon: "https://external-secrets.io/img/logo.png"
+  displayName: "External Secrets Operator"
+  description: "Kubernetes operator that synchronizes secrets from external secret stores (such as OpenBao) into native Kubernetes Secrets"
+  icon: "https://raw.githubusercontent.com/external-secrets/external-secrets/main/assets/eso-logo-large.png"
   category: "Infrastructure"
-  website: "https://external-secrets.io/"
+  website: "https://external-secrets.io"
 
   # renovate: datasource=helm depName=external-secrets registryUrl=https://charts.external-secrets.io
   # serge: notesRepo=external-secrets/external-secrets
-  version: "2.2.0"
+  version: "2.11.0"
 
   source:
     type: oci-kustomize
@@ -19,9 +19,14 @@ spec:
     path: ./overlays/librepod
 
   params:
-    required: []
+    required:
+      - name: BASE_DOMAIN
+        description: "Base domain for the cluster (unused by this app; kept for install-template consistency)"
+        type: string
+        example: "example.com"
 
-  dependencies: []
+  dependencies:
+    required: []
 
   templates:
     source: |
@@ -57,6 +62,9 @@ spec:
         path: ./overlays/librepod
         prune: true
         wait: true
+        postBuild:
+          substitute:
+            BASE_DOMAIN: "${BASE_DOMAIN}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization

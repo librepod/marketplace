@@ -5,12 +5,14 @@ resources:
   - casdoor.yaml
   - casdoor-sso-controller.yaml
   - cert-manager.yaml
+  - external-secrets.yaml
   # - flux-operator-mcp.yaml
   # - frpc.yaml  # Removed: requires FRP auth token, will be a user app once LibrePort integration is ready
   - frp-operator.yaml
   - gogs.yaml
   - storage.yaml
   - oauth2-proxy.yaml
+  - openbao.yaml
   - reflector.yaml
   - step-certificates.yaml
   - step-issuer.yaml

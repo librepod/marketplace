@@ -5,3 +5,8 @@ namespace: external-secrets
 
 resources:
 - ../../base
+
+patches:
+- path: ./patch-helmrelease.yaml
+  target:
+    kind: HelmRelease

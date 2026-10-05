@@ -1,0 +1,17 @@
+# Dedicated certificate for openbao.<BASE_DOMAIN>, issued by the cluster's
+# step-ca issuer (the same issuer that signs the shared wildcard default
+# cert) — instead of falling back to the wildcard.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: openbao-tls
+spec:
+  secretName: openbao-tls
+  privateKey:
+    rotationPolicy: Always
+  dnsNames:
+    - openbao.${BASE_DOMAIN:=libre.pod}
+  issuerRef:
+    group: certmanager.step.sm
+    kind: StepClusterIssuer
+    name: step-cluster-issuer

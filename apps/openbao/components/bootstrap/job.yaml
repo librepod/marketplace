@@ -1,0 +1,80 @@
+# Post-deploy bootstrap: initializes OpenBao on first boot (recovery keys +
+# root token land in the openbao-credentials Secret) and configures the KV v2
+# engine, Kubernetes auth, policies and roles. Site-specific policies come
+# from the overlay's openbao-policies ConfigMap (optional mount). (The audit
+# device is declared in the server configuration instead — see
+# helmrelease.yaml.)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openbao-bootstrap
+  namespace: openbao
+  labels:
+    app.kubernetes.io/name: openbao
+spec:
+  backoffLimit: 6
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: openbao
+    spec:
+      restartPolicy: Never
+      serviceAccountName: openbao-bootstrap
+      containers:
+        # Waits for the server, initializes it once and applies all
+        # runtime configuration via the bao CLI.
+        - name: bootstrap
+          image: openbao/openbao   # tag pinned in the overlay
+          env:
+            - name: BAO_ADDR
+              value: http://openbao.openbao.svc.cluster.local:8200
+          command: ["/bin/sh", "/bootstrap/bootstrap.sh"]
+          volumeMounts:
+            - name: bootstrap
+              mountPath: /bootstrap
+            - name: policies
+              mountPath: /policies
+            - name: shared
+              mountPath: /shared
+            # write access only to drop a stale credentials copy when the
+            # data volume turns out to have been wiped (see bootstrap.sh)
+            - name: seal
+              mountPath: /seal
+        # Persists the root token + recovery keys to the openbao-credentials
+        # Secret on first init and mirrors them to the seal PVC, so a
+        # reinstall that preserves the volumes restores the Secret (and thus
+        # admin access) automatically; hands the root token to the bootstrap
+        # container on re-runs.
+        - name: store-credentials
+          image: alpine/k8s:1.34.9
+          # uid/gid 100/1000 match the server's seal-key-init writer; NFS
+          # writes as non-root are proven, root may be squashed
+          securityContext:
+            runAsUser: 100
+            runAsGroup: 1000
+          volumeMounts:
+            - name: bootstrap
+              mountPath: /bootstrap
+            - name: shared
+              mountPath: /shared
+            - name: seal
+              mountPath: /seal
+          command: ["/bin/sh", "/bootstrap/store.sh"]
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: openbao-bootstrap
+        # site-specific policies from the overlay; optional so the component
+        # is complete without them
+        - name: policies
+          configMap:
+            name: openbao-policies
+            optional: true
+        - name: shared
+          emptyDir: {}
+        # seal volume is RWO: the Job pod must schedule on the same node as
+        # the server pod — always true on single-node clusters
+        - name: seal
+          persistentVolumeClaim:
+            claimName: openbao-seal

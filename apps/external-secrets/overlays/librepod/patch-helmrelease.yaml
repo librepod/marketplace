@@ -3,24 +3,17 @@ kind: HelmRelease
 metadata:
   name: external-secrets
 spec:
-  interval: 12h
-  install:
-    crds: CreateReplace
-    strategy:
-      name: RetryOnFailure
-      retryInterval: 2m
-  upgrade:
-    crds: CreateReplace
-    strategy:
-      name: RetryOnFailure
-      retryInterval: 3m
   chart:
     spec:
       chart: external-secrets
+      # HTTP Helm repo: pin the chart minor here. 2.11.x tracks app v2.11.x;
+      # patch updates flow, minors/majors are manual.
+      version: "~2.11.0"
       sourceRef:
         kind: HelmRepository
         name: external-secrets-helm-charts
       interval: 12h
   values:
-    installCRDs: true
-    replicaCount: 1
+    image:
+      # Pin the operator image to the marketplace app version.
+      tag: "v2.11.0"
