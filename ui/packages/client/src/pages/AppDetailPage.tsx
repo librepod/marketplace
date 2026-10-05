@@ -179,7 +179,7 @@ export function AppDetailPage() {
             <>
               {(!data.installedStatus || data.installedStatus === 'not_installed') && (
                 <Button
-                  onClick={() => installMutation.mutate()}
+                  onClick={() => installMutation.mutate(undefined)}
                   disabled={installMutation.isPending}
                 >
                   {installMutation.isPending && (
