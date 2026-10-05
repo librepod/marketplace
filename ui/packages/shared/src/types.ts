@@ -47,8 +47,11 @@ export interface AppSettingItem {
   type?: AppSettingType;
   /** Fixed choices → dropdown. YAML may give numbers/booleans; compare with String(). */
   options?: Array<string | number | boolean>;
-  /** Pre-fills the answer. YAML may give a boolean/number; normalise with String(). */
-  default?: string | number | boolean;
+  /**
+   * Pre-fills the answer. YAML may give a boolean/number; normalise with String().
+   * A bare `default:` parses as null and means "no default".
+   */
+  default?: string | number | boolean | null;
   required?: boolean;
   /** UI masking only — every value is stored the same way. */
   sensitive?: boolean;
@@ -65,7 +68,10 @@ export interface CustomVariable {
   value: string;
 }
 
-/** Body of POST /api/apps/:name/install. Omitted or empty = all defaults. */
+/**
+ * Body of POST /api/apps/:name/install. Omitted or empty = all defaults. A question left
+ * out of `settings` gets its default; an empty answer leaves it unset.
+ */
 export interface InstallRequest {
   settings?: Record<string, string>;
   custom?: CustomVariable[];

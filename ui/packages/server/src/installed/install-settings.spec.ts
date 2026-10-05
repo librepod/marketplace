@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { AppSettings } from '@librepod/shared';
-import { resolveSettings, SETTINGS_LIMITS } from './install-settings';
+import { JSON_BODY_LIMIT_BYTES, resolveSettings, SETTINGS_LIMITS } from './install-settings';
 
 const renovate: AppSettings = {
   allowCustom: true,
@@ -34,8 +34,26 @@ describe('resolveSettings', () => {
       });
     });
 
-    it('treats an empty answer as no answer', () => {
-      expect(ok(renovate, { settings: { RENOVATE_TOKEN: 't', LOG_FORMAT: '' } }).LOG_FORMAT).toBe('json');
+    it('lets an empty answer clear an optional question that has a default', () => {
+      const settings: AppSettings = { items: [{ name: 'HTTP_PROXY', default: 'http://proxy:3128' }] };
+      expect(ok(settings, { settings: { HTTP_PROXY: '' } })).toEqual({});
+      expect(ok(settings, {})).toEqual({ HTTP_PROXY: 'http://proxy:3128' });
+    });
+
+    it('still requires a required question answered with an empty string, even with a default', () => {
+      const settings: AppSettings = { items: [{ name: 'TOKEN', required: true, default: 'x' }] };
+      expect(errorsOf(settings, { settings: { TOKEN: '' } })).toEqual([{ name: 'TOKEN', message: 'Required' }]);
+    });
+
+    it('treats a YAML null default as no default, never the text "null"', () => {
+      const settings: AppSettings = {
+        items: [
+          { name: 'OPTIONAL', default: null },
+          { name: 'NEEDED', required: true, default: null },
+        ],
+      };
+      expect(errorsOf(settings, {})).toEqual([{ name: 'NEEDED', message: 'Required' }]);
+      expect(ok(settings, { settings: { NEEDED: 'v' } })).toEqual({ NEEDED: 'v' });
     });
 
     it.each([undefined, null, {}])('treats a missing body (%s) as all defaults', (body) => {
@@ -73,6 +91,15 @@ describe('resolveSettings', () => {
     it('accepts decimal and negative numbers', () => {
       expect(ok(renovate, { settings: { RENOVATE_TOKEN: 't', WORKERS: '-1.5' } }).WORKERS).toBe('-1.5');
     });
+
+    it.each([' 8080 ', '0x1F', '0b11', '1e3', '+5', '.5', '5.', 'Infinity', '1_000'])(
+      'rejects %j, which apps would not parse as a decimal number',
+      (value) => {
+        expect(errorsOf(renovate, { settings: { RENOVATE_TOKEN: 't', WORKERS: value } })).toEqual([
+          { name: 'WORKERS', message: 'Must be a number' },
+        ]);
+      },
+    );
 
     it('rejects answers to questions the app does not ask', () => {
       expect(errorsOf(renovate, { settings: { RENOVATE_TOKEN: 't', NOPE: 'x' } })).toEqual([
@@ -168,6 +195,29 @@ describe('resolveSettings', () => {
       ]);
     });
 
+    it('flags a repeated name even when its first use was rejected', () => {
+      const big = 'x'.repeat(SETTINGS_LIMITS.valueMaxBytes + 1);
+      expect(
+        errorsOf(renovate, {
+          ...answered,
+          custom: [
+            { name: 'A', value: big },
+            { name: 'A', value: 'x' },
+          ],
+        }),
+      ).toEqual([
+        { name: 'custom.0', message: 'Too long (max 16 KiB)' },
+        { name: 'custom.1', message: 'Duplicate name' },
+      ]);
+    });
+
+    it('keeps a variable named __proto__ like any other', () => {
+      const values = ok(renovate, { ...answered, custom: [{ name: '__proto__', value: 'x' }] });
+      expect(Object.keys(values)).toContain('__proto__');
+      expect(values['__proto__']).toBe('x');
+      expect(JSON.parse(JSON.stringify(values)).__proto__).toBe('x');
+    });
+
     it('rejects names over 128 characters', () => {
       expect(errorsOf(renovate, { ...answered, custom: [{ name: 'A'.repeat(129), value: 'x' }] })).toEqual([
         { name: 'custom.0', message: 'Use letters, digits and _ only, not starting with a digit' },
@@ -186,6 +236,18 @@ describe('resolveSettings', () => {
       expect(errorsOf(renovate, { ...answered, custom: [{ name: 'BIG', value: big }] })).toEqual([
         { name: 'custom.0', message: 'Too long (max 16 KiB)' },
       ]);
+    });
+
+    it('fits the JSON body limit even when every byte of the largest valid request is escaped', () => {
+      // \u0001 is the worst case: one byte of value, six bytes of JSON.
+      const perValue = Math.floor(SETTINGS_LIMITS.totalMaxBytes / SETTINGS_LIMITS.customMaxCount) - 4;
+      const custom = Array.from({ length: SETTINGS_LIMITS.customMaxCount }, (_, i) => ({
+        name: `V${String(i).padStart(2, '0')}`,
+        value: '\u0001'.repeat(perValue),
+      }));
+      const body = { ...answered, custom };
+      expect(ok(renovate, body)).toBeTruthy();
+      expect(Buffer.byteLength(JSON.stringify(body), 'utf8')).toBeLessThanOrEqual(JSON_BODY_LIMIT_BYTES);
     });
 
     it('limits all settings together to 64 KiB', () => {

@@ -28,9 +28,12 @@ export function humanize(name: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1)
 }
 
+/** A bare YAML `default:` is null: no default, never the text "null". */
+const hasDefault = (item: AppSettingItem) => item.default !== undefined && item.default !== null
+
 /** A switch always has an answer, so a boolean without a default starts as "false". */
 function initialValue(item: AppSettingItem): string {
-  if (item.default !== undefined) return String(item.default)
+  if (hasDefault(item)) return String(item.default)
   return item.type === "boolean" ? "false" : ""
 }
 
@@ -118,7 +121,11 @@ function QuestionField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
-        {item.default === undefined && <option value="">{item.required ? "Choose…" : "Not set"}</option>}
+        {!item.required ? (
+          <option value="">Not set</option>
+        ) : (
+          !hasDefault(item) && <option value="">Choose…</option>
+        )}
         {item.options.map(String).map((option) => (
           <option key={option} value={option}>
             {option}
@@ -216,9 +223,9 @@ function InstallForm({
     // Rows left completely blank are dropped, not sent.
     const sent = rows.filter((row) => row.name.trim() !== "" || row.value !== "")
     setSentRowIds(sent.map((row) => row.id))
-    const request: InstallRequest = {
-      settings: Object.fromEntries(Object.entries(values).filter(([, value]) => value !== "")),
-    }
+    // Every answer is sent, empty ones too: the server fills in a default only for a question
+    // left out, so an optional field the user cleared stays unset instead of reverting.
+    const request: InstallRequest = { settings: values }
     if (sent.length > 0) request.custom = sent.map((row) => ({ name: row.name.trim(), value: row.value }))
     mutation.mutate(request, { onSuccess: onClose })
   }

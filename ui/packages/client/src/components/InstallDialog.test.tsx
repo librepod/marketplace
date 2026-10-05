@@ -95,7 +95,35 @@ describe('InstallDialog', () => {
     const select = screen.getByLabelText(/Log format/) as HTMLSelectElement
     expect(select.tagName).toBe('SELECT')
     expect(select.value).toBe('json')
+    // Optional, so "Not set" stays available even with a default.
+    expect(Array.from(select.options).map((o) => o.value)).toEqual(['', 'json', 'pretty'])
+  })
+
+  it('offers no empty choice for a required dropdown that has a default', () => {
+    renderDialog({
+      ...app,
+      settings: { items: [{ name: 'LOG_FORMAT', options: ['json', 'pretty'], default: 'json', required: true }] },
+    })
+    const select = screen.getByLabelText(/Log format/) as HTMLSelectElement
     expect(Array.from(select.options).map((o) => o.value)).toEqual(['json', 'pretty'])
+  })
+
+  it('sends a cleared optional answer as empty, so its default is not put back', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce(reply({ success: true, message: 'ok' }))
+    renderDialog({ ...app, settings: { items: [{ name: 'HTTP_PROXY', default: 'http://proxy:3128' }] } })
+
+    const field = screen.getByLabelText(/Http proxy/)
+    expect(field).toHaveValue('http://proxy:3128')
+    await userEvent.clear(field)
+    await userEvent.click(screen.getByRole('button', { name: 'Install' }))
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1))
+    expect(sentBody(fetchSpy)).toEqual({ settings: { HTTP_PROXY: '' } })
+  })
+
+  it('treats a YAML null default as no default, never showing "null"', () => {
+    renderDialog({ ...app, settings: { items: [{ name: 'EXTRA', default: null }] } })
+    expect(screen.getByLabelText(/Extra/)).toHaveValue('')
   })
 
   it('submits answers: defaults kept, booleans as text, then closes', async () => {
