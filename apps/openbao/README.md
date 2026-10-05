@@ -61,9 +61,9 @@ rotated files older than 30 days.
 ## External Secrets integration
 
 A `ClusterSecretStore` named `openbao` is provisioned cluster-wide from
-`infrastructure/system-configs` (it applies on every cluster and stays
-NotReady until openbao is installed), authenticating via the Kubernetes
-auth method:
+`infrastructure/system-configs` (openbao itself is a system app,
+`infrastructure/system-apps/openbao.yaml`), authenticating via the
+Kubernetes auth method:
 
 ```yaml
 apiVersion: external-secrets.io/v1
