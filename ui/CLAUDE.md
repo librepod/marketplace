@@ -84,6 +84,11 @@ Conventions and gotchas:
   `compose up → readiness check → playwright → compose down -v`, so each run starts from a
   clean seed. The catalog is `packages/e2e/fixtures/catalog.fixture.yaml` (3 user-facing apps
   + 3 Infrastructure; `vaultwarden`/`litellm` have install `templates`).
+- **Hermetic OpenBao:** the same compose runs a dev-mode `openbao/openbao` (in-memory,
+  unsealed, KV v2 at `secret/`) on `127.0.0.1:48200`; `tier1.config.ts` sets `OPENBAO_ADDR`
+  plus the `OPENBAO_TOKEN` test seam (no cluster ⇒ no Kubernetes auth). The `renovate` fixture
+  app has `settings`, and `install-settings.spec.ts` reads its entry back over the OpenBao
+  HTTP API and checks the token never reaches the Gogs repo.
 - **Tier 1 drives the real production credential path.** `tier1.config.ts` sets
   `USER_APPS_GIT_URL=http://127.0.0.1:43000/flux/user-apps.git` +
   `USER_APPS_GIT_USERNAME=flux` / `USER_APPS_GIT_PASSWORD=pass@w0rd` — the same `http`

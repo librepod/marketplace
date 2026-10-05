@@ -33,6 +33,12 @@ export class AppDetailPage {
     return this.page.getByRole("button", { name: "Install App" });
   }
 
+  // The install-questions dialog (apps with catalog `settings`). A plain dialog —
+  // the Uninstall confirmation is an alertdialog, so the roles never collide.
+  installDialog(): Locator {
+    return this.page.getByRole("dialog");
+  }
+
   uninstallButton(): Locator {
     return this.page.getByRole("button", { name: "Uninstall App" });
   }

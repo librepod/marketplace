@@ -63,6 +63,11 @@ export default defineConfig({
       USER_APPS_WORK_DIR: `${process.cwd()}/packages/e2e/.tmp/user-apps-work`,
       USER_APPS_GIT_CREDENTIALS_DIR: `${process.cwd()}/packages/e2e/.tmp/user-apps-creds`,
       BASE_DOMAIN: "libre.pod",
+      // Settings store: the dev-mode OpenBao from the compose. OPENBAO_TOKEN is the
+      // test seam that skips Kubernetes auth (no cluster here) — never set it in
+      // cluster manifests.
+      OPENBAO_ADDR: "http://127.0.0.1:48200",
+      OPENBAO_TOKEN: "tier1-e2e-root-token",
       ALLOWED_ORIGINS: ORIGIN,
       // Auth boot deps (stubs — the minted session cookie authenticates tests;
       // Tier 1 never reaches Casdoor).
