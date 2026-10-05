@@ -72,6 +72,14 @@ export default defineConfig({
       CASDOOR_CLIENT_SECRET: "e2e-stub-secret",
       CASDOOR_ORG_NAME: "librepod",
       CASDOOR_APP_NAME: "marketplace-ui",
+      // RootGate owns the first paint now. Tier 1 has no Casdoor, so the
+      // bootstrap probe would report "waiting" and hold EVERY spec on the
+      // WakingScreen — the authenticated app would never mount. Force the
+      // post-graduation mode (the documented test seam in
+      // bootstrap.controller.ts) so RootGate is a pass-through here. The
+      // waiting-mode first paint is pinned by RootGate.test.tsx instead;
+      // onboarding.spec.ts still proves the wizard renders unauthenticated.
+      BOOTSTRAP_MODE_OVERRIDE: "ready",
       // Force FluxStatusService to degrade to "installing" deterministically:
       // point KUBECONFIG at a closed port (see support/kubeconfig.closed.yaml)
       // so the k8s call ECONNREFUSES instead of querying the host's real cluster.

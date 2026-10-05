@@ -22,3 +22,12 @@ data:
   CASDOOR_ENDPOINT: "https://id.${BASE_DOMAIN:=libre.pod}"
   CASDOOR_ORG_NAME: "librepod"
   CASDOOR_APP_NAME: "marketplace-ui"
+  # In-cluster service URLs for first-run onboarding: the wizard proxies
+  # Casdoor's admin API and wg-easy's API because the browser (raw IP, no DNS
+  # yet) cannot reach either host. http, not https — cluster-internal traffic.
+  CASDOOR_BASE_URL: "http://casdoor.casdoor.svc.cluster.local"
+  WGEASY_BASE_URL: "http://wg-easy.wg-easy.svc.cluster.local"
+  # The Casdoor built-in admin's factory password (same value the
+  # casdoor-sso-controller env carries) — the wizard probes it to tell
+  # onboarding mode from claimed, and randomizes it at claim time.
+  CASDOOR_ADMIN_DEFAULT_PASSWORD: "123"

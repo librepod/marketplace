@@ -82,3 +82,32 @@ export interface User {
   name: string;
   email: string;
 }
+
+/** First-run onboarding. `mode` is derived from one live fact: whether the
+ * server can still log into Casdoor as the built-in admin with the factory
+ * password. `ready` therefore means "claimed", not "tour finished" — the
+ * wizard keeps running under `ready` until the tunnel handshakes. */
+export type OnboardingMode = 'waiting' | 'onboarding' | 'ready'
+
+/** How the browser reached the server: raw device IP vs <name>.<baseDomain>. */
+export type ArrivalKind = 'ip' | 'domain'
+
+export interface OnboardingStatus {
+  mode: OnboardingMode
+  arrival: ArrivalKind
+  baseDomain: string
+  casdoorUp: boolean
+  wgEasyUp: boolean
+  /** null = unknown (casdoor unreachable or wg credentials unavailable) */
+  adminClaimed: boolean | null
+  peerCount: number | null
+  /** ISO timestamp of the most recent WireGuard handshake, null if none */
+  lastHandshakeAt: string | null
+}
+
+export interface WgPeer {
+  clientId: string
+  name: string
+  enabled: boolean
+  latestHandshakeAt: string | null
+}

@@ -18,6 +18,21 @@ secretGenerator:
 - name: wg-easy-admin
   envs:
   - wg-easy-secret.env
+  options:
+    # Stable name: Reflector matches by namespace/name, a hash suffix would
+    # break the cross-namespace copy into marketplace-ui. Content is static
+    # (consumed only by wg-easy's first-boot unattended setup), so losing the
+    # hash-based rollout trigger costs nothing.
+    disableNameSuffixHash: true
+    annotations:
+      # Let the marketplace-ui onboarding wizard read the factory password
+      # (INIT_PASSWORD, mounted at /etc/wg-easy/INIT_PASSWORD there) to drive
+      # wg-easy's API during first-run setup — it rotates this credential to
+      # the device-admin password at claim time. #214 pattern: source
+      # annotations only, Reflector auto-mirrors (no consumer-side stub).
+      reflector.v1.k8s.emberstack.com/reflection-allowed: "true"
+      reflector.v1.k8s.emberstack.com/reflection-auto-enabled: "true"
+      reflector.v1.k8s.emberstack.com/reflection-auto-namespaces: "marketplace-ui"
 
 resources:
 - namespace.yaml
