@@ -163,6 +163,25 @@ describe('OpenBaoClient', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('gives up on a hung OpenBao instead of holding the install forever', async () => {
+    // A server that accepts the connection but never answers: only the abort ends it.
+    const controller = new AbortController();
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
+    fetchMock.mockImplementation(
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+        }),
+    );
+
+    const pending = staticClient().writeAppSettings('demo', { A: '1' });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    controller.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError'));
+
+    await expect(pending).rejects.toBeInstanceOf(OpenBaoUnavailableError);
+    expect(timeoutSpy).toHaveBeenCalledWith(10_000);
+  });
+
   it('never puts the written values into its errors', async () => {
     fetchMock.mockResolvedValueOnce(json({ errors: ['internal error'] }, 500));
     const err = await staticClient()

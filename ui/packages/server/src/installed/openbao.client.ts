@@ -10,6 +10,12 @@ export class OpenBaoUnavailableError extends Error {
   }
 }
 
+/**
+ * Upper bound on one OpenBao request. Installs run behind a global mutex, so a server
+ * that accepts the connection but never answers would otherwise stall every install.
+ */
+const REQUEST_TIMEOUT_MS = 10_000;
+
 interface CachedToken {
   value: string;
   expiresAt: number;
@@ -54,6 +60,7 @@ export class OpenBaoClient {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
     } catch (err) {
       throw new OpenBaoUnavailableError(`OpenBao unreachable: ${(err as Error).message}`);
