@@ -9,25 +9,9 @@ labels:
   pairs:
     app.kubernetes.io/name: openbao
 
-configMapGenerator:
-- name: openbao-bootstrap
-  files:
-  - bootstrap.sh=bootstrap.sh
-  - eso-read-apps.hcl=policies/eso-read-apps.hcl
-  - marketplace-ui-write-apps.hcl=policies/marketplace-ui-write-apps.hcl
-  options:
-    annotations:
-      # shell parameter expansion in the script must not be interpreted by
-      # Flux postBuild.substitute
-      kustomize.toolkit.fluxcd.io/substitute: disabled
-    # the bootstrap Job mounts this ConfigMap; a name hash would rewrite the
-    # immutable Job spec on every content change and brick the apply
-    disableNameSuffixHash: true
-
 resources:
 - namespace.yaml
 - pvc.yaml
+- serviceaccount-eso.yaml
 - helmrepository.yaml
 - helmrelease.yaml
-- clustersecretstore.yaml
-- bootstrap.yaml

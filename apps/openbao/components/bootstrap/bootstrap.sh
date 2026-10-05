@@ -1,8 +1,11 @@
 #!/bin/sh
 # One-time (idempotent) OpenBao bootstrap: init, KV v2 engine, Kubernetes
 # auth, policies, roles. Runs in the bootstrap Job alongside the
-# store-credentials container; they exchange state through /shared. (The
-# audit device is declared in the server config — see helmrelease.yaml.)
+# store-credentials container; they exchange state through /shared. Policies
+# are site-specific: every *.hcl mounted at /policies (openbao-policies
+# ConfigMap from the overlay) becomes an OpenBao policy named after the
+# file. (The audit device is declared in the server config — see
+# helmrelease.yaml.)
 set -e
 
 SA_DIR=/var/run/secrets/kubernetes.io/serviceaccount
@@ -74,9 +77,11 @@ bao write auth/kubernetes/config \
   kubernetes_host="https://kubernetes.default.svc:443" \
   kubernetes_ca_cert=@"$SA_DIR/ca.crt"
 
-# Policies
-bao policy write eso-read-apps /bootstrap/eso-read-apps.hcl
-bao policy write marketplace-ui-write-apps /bootstrap/marketplace-ui-write-apps.hcl
+# Policies: every mounted *.hcl becomes a policy named after its file.
+for hcl in /policies/*.hcl; do
+  [ -f "$hcl" ] || continue   # no policies ConfigMap (optional mount)
+  bao policy write "$(basename "$hcl" .hcl)" "$hcl"
+done
 
 # Roles
 bao write auth/kubernetes/role/external-secrets \

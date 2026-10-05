@@ -1,45 +1,23 @@
 # Post-deploy bootstrap: initializes OpenBao on first boot (recovery keys +
 # root token land in the openbao-credentials Secret) and configures the KV v2
-# engine, Kubernetes auth, policies and roles. (The audit device is declared
-# in the server configuration instead — see helmrelease.yaml.)
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: openbao-bootstrap
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: openbao-bootstrap
-rules:
-  - apiGroups: [""]
-    resources: ["secrets"]
-    resourceNames: ["openbao-credentials"]
-    verbs: ["get"]
-  - apiGroups: [""]
-    resources: ["secrets"]
-    verbs: ["create"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: openbao-bootstrap
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: openbao-bootstrap
-subjects:
-  - kind: ServiceAccount
-    name: openbao-bootstrap
----
+# engine, Kubernetes auth, policies and roles. Site-specific policies come
+# from the overlay's openbao-policies ConfigMap (optional mount). (The audit
+# device is declared in the server configuration instead — see
+# helmrelease.yaml.)
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: openbao-bootstrap
+  namespace: openbao
+  labels:
+    app.kubernetes.io/name: openbao
 spec:
   backoffLimit: 6
   activeDeadlineSeconds: 900
   template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: openbao
     spec:
       restartPolicy: Never
       serviceAccountName: openbao-bootstrap
@@ -55,6 +33,8 @@ spec:
           volumeMounts:
             - name: bootstrap
               mountPath: /bootstrap
+            - name: policies
+              mountPath: /policies
             - name: shared
               mountPath: /shared
             # write access only to drop a stale credentials copy when the
@@ -124,6 +104,12 @@ spec:
         - name: bootstrap
           configMap:
             name: openbao-bootstrap
+        # site-specific policies from the overlay; optional so the component
+        # is complete without them
+        - name: policies
+          configMap:
+            name: openbao-policies
+            optional: true
         - name: shared
           emptyDir: {}
         # seal volume is RWO: the Job pod must schedule on the same node as

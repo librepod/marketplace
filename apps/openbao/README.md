@@ -42,7 +42,9 @@ idempotently:
 2. enables the **KV v2 engine at `apps/`**
 3. enables the **Kubernetes auth method** (no static reviewer JWT — the
    server ServiceAccount holds `system:auth-delegator` via the chart)
-4. writes the policies and roles:
+4. writes the policies and roles. Policies are site-specific: every `*.hcl`
+   in the overlay's `policies/` dir is mounted into the Job and written as
+   an OpenBao policy named after its file:
    - `eso-read-apps` ← role `external-secrets` (SA `openbao-eso`, ns `openbao`):
      **read** `apps/*`
    - `marketplace-ui-write-apps` ← role `marketplace-ui`
@@ -58,8 +60,10 @@ rotated files older than 30 days.
 
 ## External Secrets integration
 
-A `ClusterSecretStore` named `openbao` is created for the External Secrets
-Operator (system app), authenticating via the Kubernetes auth method:
+A `ClusterSecretStore` named `openbao` is provisioned cluster-wide from
+`infrastructure/system-configs` (it applies on every cluster and stays
+NotReady until openbao is installed), authenticating via the Kubernetes
+auth method:
 
 ```yaml
 apiVersion: external-secrets.io/v1
