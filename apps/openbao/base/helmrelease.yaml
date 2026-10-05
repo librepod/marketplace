@@ -24,6 +24,10 @@ spec:
     # injected sidecars without calling the API themselves.
     injector:
       enabled: true
+      agentImage:
+        # OpenBao binary used by injected agent sidecars; defaults to the
+        # chart's appVersion if left empty — pin it with the server version.
+        tag: ""   # pinned in the overlay
 
     server:
       image:

@@ -20,6 +20,9 @@ configMapGenerator:
       # shell parameter expansion in the script must not be interpreted by
       # Flux postBuild.substitute
       kustomize.toolkit.fluxcd.io/substitute: disabled
+    # the bootstrap Job mounts this ConfigMap; a name hash would rewrite the
+    # immutable Job spec on every content change and brick the apply
+    disableNameSuffixHash: true
 
 resources:
 - namespace.yaml

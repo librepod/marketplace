@@ -21,3 +21,6 @@ spec:
         storageClass: nfs-client
       auditStorage:
         storageClass: nfs-client
+    injector:
+      agentImage:
+        tag: "2.7.1"
