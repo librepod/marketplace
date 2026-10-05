@@ -20,19 +20,18 @@ spec:
         name: openbao-helm-charts
       interval: 12h
   values:
+    # No image/agentImage tags anywhere: the pinned chart's baked appVersion
+    # (v2.7.1 at chart ~0.30.x) is the app-version source of truth for both
+    # the server image and injected agent sidecars. spec.version in
+    # metadata.yaml mirrors it — update both together when bumping the chart.
     # Vault Agent Injector webhook — lets workloads consume secrets as
     # injected sidecars without calling the API themselves.
     injector:
       enabled: true
-      agentImage:
-        # OpenBao binary used by injected agent sidecars; defaults to the
-        # chart's appVersion if left empty — pin it with the server version.
-        tag: ""   # pinned in the overlay
 
     server:
       image:
         repository: openbao/openbao
-        tag: ""   # pinned in the overlay
 
       # annotate the pod with a config checksum so declarative config
       # changes (e.g. the audit stanza) roll the statefulset

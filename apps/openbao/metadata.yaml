@@ -9,7 +9,12 @@ spec:
   category: "Security"
   website: "https://openbao.org"
 
-  # renovate: datasource=helm depName=openbao/openbao registryUrl=https://openbao.github.io/openbao-helm
+  # App version baked into the pinned chart (its appVersion / default image
+  # tag), NOT the Helm chart version (openbao is non-lockstep: chart 0.30.x
+  # ships app 2.7.x). No renovate annotation — a datasource=helm one would
+  # write chart numbers (0.31, 0.32…) into this app-version field, and no
+  # datasource tracks appVersion. Move version only with the chart pin in
+  # overlays/librepod/patch-helmrelease.yaml, reading the new chart's appVersion.
   # serge: notesRepo=openbao/openbao
   version: "2.7.1"
 

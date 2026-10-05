@@ -14,13 +14,10 @@ spec:
         name: openbao-helm-charts
       interval: 12h
   values:
+    # No image tag overrides — the chart's baked appVersion (v2.7.1) is the
+    # app-version source of truth (see skill "Image versions").
     server:
-      image:
-        tag: "2.7.1"
       dataStorage:
         storageClass: nfs-client
       auditStorage:
         storageClass: nfs-client
-    injector:
-      agentImage:
-        tag: "2.7.1"

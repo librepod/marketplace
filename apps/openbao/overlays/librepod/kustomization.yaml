@@ -24,6 +24,11 @@ configMapGenerator:
       # the immutable Job spec on every content change and brick the apply
       disableNameSuffixHash: true
 
+# Structural exception (skill "Image versions", cross-renderer category): the
+# bootstrap Job is a Kustomize-rendered resource that must run the SAME openbao
+# binary the Helm chart deploys. The HelmRelease sets no image tag (chart
+# appVersion owns it); this newTag must match that appVersion — move both
+# together on chart-pin bumps.
 images:
 - name: openbao/openbao
   newTag: 2.7.1

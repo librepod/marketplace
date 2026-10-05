@@ -13,7 +13,11 @@ spec:
         kind: HelmRepository
         name: external-secrets-helm-charts
       interval: 12h
-  values:
-    image:
-      # Pin the operator image to the marketplace app version.
-      tag: "v2.11.0"
+  # No values overrides — and deliberately no image.tag: external-secrets
+  # versions chart and app in lockstep (chart 2.11.x bakes image v2.11.x), so
+  # the chart pin above IS the app-version pin; an override would be a second
+  # anchor to drift. The datasource=helm renovate annotation on metadata
+  # spec.version is correct here for the same reason (chart line == app line).
+  # values: {} — explicit empty map so the strategic merge leaves base values
+  # (installCRDs, replicaCount) intact; a bare `values:` (null) would delete them.
+  values: {}
