@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { useParams, Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { apiFetch } from "@/lib/api"
@@ -10,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
 import { ErrorBlock } from "@/components/ErrorBlock"
 import { StatusBadge } from "@/components/StatusBadge"
+import { InstallDialog } from "@/components/InstallDialog"
 import { NotFoundPage } from "./NotFoundPage"
 import { Loader2, ExternalLink, Lock } from "lucide-react"
 import { useInstallApp } from "@/hooks/useInstallApp"
@@ -107,6 +109,7 @@ export function AppDetailPage() {
 
   const installMutation = useInstallApp(name ?? '', data?.displayName ?? '')
   const uninstallMutation = useUninstallApp(name ?? '', data?.displayName ?? '')
+  const [installDialogOpen, setInstallDialogOpen] = useState(false)
 
   // baseDomain is the same value substituted into app templates at install
   // time, so this URL matches the Traefik IngressRoute host the app runs under.
@@ -178,15 +181,33 @@ export function AppDetailPage() {
           ) : (
             <>
               {(!data.installedStatus || data.installedStatus === 'not_installed') && (
-                <Button
-                  onClick={() => installMutation.mutate(undefined)}
-                  disabled={installMutation.isPending}
-                >
-                  {installMutation.isPending && (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                <>
+                  <Button
+                    onClick={() => {
+                      // Apps with install questions ask first; the rest stay one-click.
+                      if (data.settings) {
+                        installMutation.reset()
+                        setInstallDialogOpen(true)
+                      } else {
+                        installMutation.mutate(undefined)
+                      }
+                    }}
+                    disabled={installMutation.isPending}
+                  >
+                    {installMutation.isPending && (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    )}
+                    {installMutation.isPending ? 'Installing...' : 'Install App'}
+                  </Button>
+                  {data.settings && (
+                    <InstallDialog
+                      app={data}
+                      open={installDialogOpen}
+                      onOpenChange={setInstallDialogOpen}
+                      installMutation={installMutation}
+                    />
                   )}
-                  {installMutation.isPending ? 'Installing...' : 'Install App'}
-                </Button>
+                </>
               )}
 
               {data.installedStatus === 'installing' && (

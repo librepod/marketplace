@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from '@/components/ui/sonner'
@@ -134,6 +135,75 @@ describe('AppDetailPage', () => {
   })
 
   describe('install/uninstall actions', () => {
+    const withQuestions = {
+      ...mockApp,
+      installedStatus: 'not_installed' as const,
+      settings: { items: [{ name: 'ADMIN_EMAIL', label: 'Admin email', required: true }] },
+    }
+
+    it('opens the install dialog instead of installing when the app asks questions', async () => {
+      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => withQuestions,
+      } as Response)
+      render(<AppDetailPage />, { wrapper: createWrapper() })
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Install App' }))
+
+      expect(await screen.findByRole('dialog')).toHaveTextContent('Install Vaultwarden')
+      expect(fetchSpy).toHaveBeenCalledTimes(1) // the detail GET only — nothing posted yet
+    })
+
+    it('installs from the dialog with the answers and closes it', async () => {
+      const detail = { ok: true, status: 200, json: async () => withQuestions } as Response
+      const fetchSpy = vi
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(detail)
+        .mockResolvedValueOnce(detail)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true, message: 'Vaultwarden is being deployed' }),
+        } as Response)
+      render(<AppDetailPage />, { wrapper: createWrapper() })
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Install App' }))
+      await userEvent.type(await screen.findByLabelText('Admin email'), 'admin@example.com')
+      await userEvent.click(screen.getByRole('button', { name: 'Install' }))
+
+      await waitFor(() => expect(screen.getByText(/is being deployed/)).toBeInTheDocument())
+      const [url, init] = fetchSpy.mock.calls[1] as [string, RequestInit]
+      expect(url).toBe('/api/apps/vaultwarden/install')
+      expect(JSON.parse(init.body as string)).toEqual({ settings: { ADMIN_EMAIL: 'admin@example.com' } })
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    })
+
+    it('keeps one-click install (no body) for apps without questions', async () => {
+      const fetchSpy = vi
+        .spyOn(global, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ ...mockApp, installedStatus: 'not_installed' }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true, message: 'ok' }),
+        } as Response)
+      render(<AppDetailPage />, { wrapper: createWrapper() })
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Install App' }))
+
+      // A successful install invalidates the detail query, so more GETs may follow the POST.
+      await waitFor(() => expect(fetchSpy.mock.calls.length).toBeGreaterThanOrEqual(2))
+      const [url, init] = fetchSpy.mock.calls[1] as [string, RequestInit]
+      expect(url).toBe('/api/apps/vaultwarden/install')
+      expect(init.body).toBeUndefined()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
     it('shows enabled Install App button when app is not_installed (INST-01, D-07)', async () => {
       vi.spyOn(global, 'fetch').mockResolvedValueOnce({
         ok: true,
