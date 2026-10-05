@@ -2,12 +2,32 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { readFile } from 'node:fs/promises';
 
-/** Any reason the settings store can't take a write right now: unset, down, sealed, auth. */
+/** The settings store can't take a write right now (down, sealed, overloaded): worth a retry. */
 export class OpenBaoUnavailableError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'OpenBaoUnavailableError';
   }
+}
+
+/**
+ * The settings store refused the request and will keep refusing it until someone fixes
+ * the setup: OPENBAO_ADDR unset, no ServiceAccount token, a missing or wrong KV mount, or
+ * an auth role or policy that denies access. A retry won't help.
+ */
+export class OpenBaoMisconfiguredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'OpenBaoMisconfiguredError';
+  }
+}
+
+/** 5xx (500 internal, 503 sealed/standby) and 429 can clear by themselves; other 4xx won't. */
+function failure(operation: string, status: number): Error {
+  const message = `${operation} failed: HTTP ${status}`;
+  return status >= 500 || status === 429
+    ? new OpenBaoUnavailableError(message)
+    : new OpenBaoMisconfiguredError(message);
 }
 
 /**
@@ -41,7 +61,7 @@ export class OpenBaoClient {
 
   /** Replaces the whole KV v2 entry apps/<app>: a new version; earlier ones stay as history. */
   async writeAppSettings(app: string, data: Record<string, string>): Promise<void> {
-    if (!this.addr) throw new OpenBaoUnavailableError('OPENBAO_ADDR is not set');
+    if (!this.addr) throw new OpenBaoMisconfiguredError('OPENBAO_ADDR is not set');
     const mount = this.config.get<string>('OPENBAO_KV_MOUNT', 'secret');
     const url = `${this.addr}/v1/${mount}/data/apps/${encodeURIComponent(app)}`;
 
@@ -51,7 +71,7 @@ export class OpenBaoClient {
       this.token = undefined;
       res = await this.post(url, { data }, { 'X-Vault-Token': await this.clientToken() });
     }
-    if (!res.ok) throw new OpenBaoUnavailableError(`write apps/${app} failed: HTTP ${res.status}`);
+    if (!res.ok) throw failure(`write apps/${app}`, res.status);
   }
 
   private async post(url: string, body: unknown, headers: Record<string, string> = {}): Promise<Response> {
@@ -80,13 +100,13 @@ export class OpenBaoClient {
     try {
       jwt = (await readFile(tokenPath, 'utf8')).trim();
     } catch {
-      throw new OpenBaoUnavailableError(`cannot read the ServiceAccount token at ${tokenPath}`);
+      throw new OpenBaoMisconfiguredError(`cannot read the ServiceAccount token at ${tokenPath}`);
     }
 
     const authMount = this.config.get<string>('OPENBAO_AUTH_MOUNT', 'kubernetes');
     const role = this.config.get<string>('OPENBAO_AUTH_ROLE', 'marketplace-ui');
     const res = await this.post(`${this.addr}/v1/auth/${authMount}/login`, { role, jwt });
-    if (!res.ok) throw new OpenBaoUnavailableError(`login failed: HTTP ${res.status}`);
+    if (!res.ok) throw failure('login', res.status);
 
     let auth: { client_token?: string; lease_duration?: number } | undefined;
     try {

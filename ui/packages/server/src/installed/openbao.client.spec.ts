@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ConfigService } from '@nestjs/config';
-import { OpenBaoClient, OpenBaoUnavailableError } from './openbao.client';
+import { OpenBaoClient, OpenBaoMisconfiguredError, OpenBaoUnavailableError } from './openbao.client';
 
 const ADDR = 'http://openbao.test:8200';
 
@@ -45,7 +45,7 @@ describe('OpenBaoClient', () => {
 
   it('refuses to write when OPENBAO_ADDR is not set', async () => {
     await expect(new OpenBaoClient(configOf({})).writeAppSettings('demo', { A: '1' })).rejects.toBeInstanceOf(
-      OpenBaoUnavailableError,
+      OpenBaoMisconfiguredError,
     );
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -138,8 +138,22 @@ describe('OpenBaoClient', () => {
       .mockResolvedValueOnce(loginOk('new'))
       .mockResolvedValueOnce(json({ errors: ['permission denied'] }, 403));
 
-    await expect(k8sClient().writeAppSettings('demo', { A: '1' })).rejects.toThrow(/HTTP 403/);
+    const err = await k8sClient()
+      .writeAppSettings('demo', { A: '1' })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(OpenBaoMisconfiguredError);
+    expect((err as Error).message).toMatch(/HTTP 403/);
     expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it.each([400, 404])('reports a write refused with HTTP %i (wrong mount, KV v1, cas_required) as misconfigured', async (status) => {
+    fetchMock.mockResolvedValueOnce(json({ errors: ['no handler for route'] }, status));
+    await expect(staticClient().writeAppSettings('demo', { A: '1' })).rejects.toBeInstanceOf(OpenBaoMisconfiguredError);
+  });
+
+  it.each([429, 500])('reports HTTP %i as unavailable, so the user can retry', async (status) => {
+    fetchMock.mockResolvedValueOnce(json({ errors: ['busy'] }, status));
+    await expect(staticClient().writeAppSettings('demo', { A: '1' })).rejects.toBeInstanceOf(OpenBaoUnavailableError);
   });
 
   it('reports a sealed OpenBao (503) as unavailable', async () => {
@@ -152,13 +166,23 @@ describe('OpenBaoClient', () => {
     await expect(staticClient().writeAppSettings('demo', { A: '1' })).rejects.toThrow(/unreachable/);
   });
 
-  it('reports a failed login as unavailable', async () => {
+  it('reports a login refused by the auth role as misconfigured', async () => {
     fetchMock.mockResolvedValueOnce(json({ errors: ['invalid role'] }, 400));
-    await expect(k8sClient().writeAppSettings('demo', { A: '1' })).rejects.toThrow(/login failed: HTTP 400/);
+    const err = await k8sClient()
+      .writeAppSettings('demo', { A: '1' })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(OpenBaoMisconfiguredError);
+    expect((err as Error).message).toMatch(/login failed: HTTP 400/);
   });
 
-  it('reports a missing ServiceAccount token as unavailable', async () => {
+  it('reports a login hitting a sealed OpenBao as unavailable', async () => {
+    fetchMock.mockResolvedValueOnce(json({ errors: ['Vault is sealed'] }, 503));
+    await expect(k8sClient().writeAppSettings('demo', { A: '1' })).rejects.toBeInstanceOf(OpenBaoUnavailableError);
+  });
+
+  it('reports a missing ServiceAccount token as misconfigured', async () => {
     const client = k8sClient({ OPENBAO_SA_TOKEN_PATH: join(dir, 'missing') });
+    await expect(client.writeAppSettings('demo', { A: '1' })).rejects.toBeInstanceOf(OpenBaoMisconfiguredError);
     await expect(client.writeAppSettings('demo', { A: '1' })).rejects.toThrow(/ServiceAccount token/);
     expect(fetchMock).not.toHaveBeenCalled();
   });

@@ -16,7 +16,7 @@ import { FluxStatusService } from './flux-status.service';
 import { SystemAppsService } from './system-apps.service';
 import { LaunchUrlService } from './launch-url.service';
 import { resolveSettings } from './install-settings';
-import { OpenBaoClient, OpenBaoUnavailableError } from './openbao.client';
+import { OpenBaoClient, OpenBaoMisconfiguredError, OpenBaoUnavailableError } from './openbao.client';
 import type { CatalogApp, InstallResult } from '@librepod/shared';
 
 @Injectable()
@@ -122,9 +122,17 @@ export class InstalledService {
         try {
           await this.openBao.writeAppSettings(appName, resolved.values);
         } catch (err) {
-          if (!(err instanceof OpenBaoUnavailableError)) throw err;
-          this.logger.warn(`settings store unavailable while installing ${appName}: ${err.message}`);
-          throw new ServiceUnavailableException("Couldn't save the settings right now. Try again in a minute.");
+          if (err instanceof OpenBaoUnavailableError) {
+            this.logger.warn(`settings store unavailable while installing ${appName}: ${err.message}`);
+            throw new ServiceUnavailableException("Couldn't save the settings right now. Try again in a minute.");
+          }
+          if (err instanceof OpenBaoMisconfiguredError) {
+            this.logger.error(`settings store misconfigured, cannot install ${appName}: ${err.message}`);
+            throw new InternalServerErrorException(
+              "Couldn't save the settings: the settings store isn't set up correctly. Trying again won't help.",
+            );
+          }
+          throw err;
         }
       }
 

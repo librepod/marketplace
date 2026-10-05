@@ -5,8 +5,13 @@ import { FluxStatusService } from './flux-status.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { ConfigService } from '@nestjs/config';
 import { SystemAppsService } from './system-apps.service';
-import { BadRequestException, ConflictException, ServiceUnavailableException } from '@nestjs/common';
-import { OpenBaoClient, OpenBaoUnavailableError } from './openbao.client';
+import {
+  BadRequestException,
+  ConflictException,
+  InternalServerErrorException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { OpenBaoClient, OpenBaoMisconfiguredError, OpenBaoUnavailableError } from './openbao.client';
 
 const mockCatalogApps = [
   {
@@ -404,6 +409,19 @@ describe('InstalledService', () => {
       await expect(
         service.install('renovate', { settings: { RENOVATE_TOKEN: 's3cr3t' } }),
       ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(mockRepo.writeApp).not.toHaveBeenCalled();
+    });
+
+    it('returns 500 without "try again" and commits nothing when OpenBao is misconfigured', async () => {
+      mockOpenBao.writeAppSettings.mockRejectedValue(
+        new OpenBaoMisconfiguredError('write apps/renovate failed: HTTP 403'),
+      );
+
+      const err = await service
+        .install('renovate', { settings: { RENOVATE_TOKEN: 's3cr3t' } })
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(InternalServerErrorException);
+      expect((err as Error).message).not.toMatch(/try again in a minute/i);
       expect(mockRepo.writeApp).not.toHaveBeenCalled();
     });
 
