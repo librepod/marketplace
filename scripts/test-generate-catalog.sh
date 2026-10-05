@@ -102,3 +102,43 @@ node -e '
   if ("settings" in cat.apps[0]) process.exit(1);
 ' "$JS_YAML" "$TMP/catalog.yaml" || fail "settings key appeared for an app without settings"
 echo "PASS test 2"
+
+echo "== test 3: flow-style settings on the key line pass through =="
+# test 2 left the fixture without settings; add them back inline.
+sed -i 's/^  dependencies: \[\]/  settings: { allowCustom: true, items: [{ name: DEMO_X, default: "a" }] }  # inline\n\n  dependencies: []/' \
+  "$TMP/apps/demo/metadata.yaml"
+bash "$TMP/scripts/generate-catalog.sh" >/dev/null || fail "generator exited non-zero"
+node -e '
+  const yaml = require(process.argv[1]);
+  const cat = yaml.load(require("fs").readFileSync(process.argv[2], "utf8"));
+  const want = { allowCustom: true, items: [{ name: "DEMO_X", default: "a" }] };
+  if (JSON.stringify(cat.apps[0].settings) !== JSON.stringify(want)) {
+    console.error("got:  " + JSON.stringify(cat.apps[0].settings));
+    process.exit(1);
+  }
+' "$JS_YAML" "$TMP/catalog.yaml" || fail "flow-style settings were dropped"
+echo "PASS test 3"
+
+echo "== test 4: blank lines inside a block-scalar description survive =="
+sed -i '/^  settings:/d' "$TMP/apps/demo/metadata.yaml"
+awk '/^  dependencies:/ {
+  print "  settings:"
+  print "    items:"
+  print "      - name: DEMO_NOTE"
+  print "        description: |"
+  print "          First paragraph."
+  print ""
+  print "          Second paragraph."
+  print ""
+} { print }' "$TMP/apps/demo/metadata.yaml" > "$TMP/metadata.new" && mv "$TMP/metadata.new" "$TMP/apps/demo/metadata.yaml"
+bash "$TMP/scripts/generate-catalog.sh" >/dev/null || fail "generator exited non-zero"
+node -e '
+  const yaml = require(process.argv[1]);
+  const cat = yaml.load(require("fs").readFileSync(process.argv[2], "utf8"));
+  const got = cat.apps[0].settings.items[0].description;
+  if (got !== "First paragraph.\n\nSecond paragraph.\n") {
+    console.error("got: " + JSON.stringify(got));
+    process.exit(1);
+  }
+' "$JS_YAML" "$TMP/catalog.yaml" || fail "paragraph break in a settings description was lost"
+echo "PASS test 4"
