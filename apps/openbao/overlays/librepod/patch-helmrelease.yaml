@@ -6,21 +6,22 @@ spec:
   chart:
     spec:
       chart: openbao
-      # HTTP Helm repo: pin the chart minor here (the OCIRepository semver
-      # range cannot be used for HelmRepository sources).
-      version: "~0.30.0"
+      # HTTP Helm repo: pin the chart EXACT version here (the OCIRepository
+      # semver range cannot be used for HelmRepository sources, and a ~ range
+      # would let chart patches bump appVersion — 0.30.0 bakes 2.7.0, 0.30.2
+      # bakes 2.7.1 — silently past what metadata.yaml advertises). No renovate
+      # manager covers this file: bump manually, moving spec.version and the
+      # bootstrap Job newTag in the same change.
+      version: "0.30.2"
       sourceRef:
         kind: HelmRepository
         name: openbao-helm-charts
       interval: 12h
   values:
+    # No image tag overrides — the chart's baked appVersion (v2.7.1) is the
+    # app-version source of truth (see skill "Image versions").
     server:
-      image:
-        tag: "2.7.1"
       dataStorage:
         storageClass: nfs-client
       auditStorage:
         storageClass: nfs-client
-    injector:
-      agentImage:
-        tag: "2.7.1"

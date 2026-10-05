@@ -9,7 +9,11 @@ spec:
   category: "Monitoring"
   website: "https://github.com/TwiN/gatus"
 
-  version: "v5.36.0"
+  # App version baked into the pinned chart (its appVersion / default image
+  # tag), NOT the Helm chart version. Moves only with the chart pin in
+  # overlays/librepod/patch-helmrelease.yaml — no renovate annotation, so it
+  # can't drift past what the chart actually deploys.
+  version: "v5.34.0"
 
   source:
     type: oci-kustomize

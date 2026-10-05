@@ -34,6 +34,11 @@
     // (e.g. postgres:16) is a compatibility contract, not something to chase —
     // bumping it can break the product. Only the app's OWN image should move.
     // (couchdb is intentionally NOT pinned: it IS the obsidian-livesync app.)
+    //
+    // openbao/openbao is pinned for a different reason — not a vendored dep:
+    // the overlay's bootstrap-Job newTag is a cross-renderer contract that must
+    // move ONLY with the openbao chart pin (skill "Image versions"), never via
+    // a docker-tag PR that would bump it past the chart's baked appVersion.
     {
       matchDatasources: ["docker"],
       matchPackageNames: [
@@ -45,6 +50,7 @@
         "valkey",
         "minio/minio",
         "ghcr.io/immich-app/postgres",
+        "openbao/openbao",
       ],
       enabled: false,
     },

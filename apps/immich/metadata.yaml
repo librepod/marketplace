@@ -9,11 +9,13 @@ spec:
   category: "Media"
   website: "https://immich.app/"
 
-  # Application version (the immich-server container image tag), NOT the Helm
-  # chart version. Chart version is pinned internally in the OCIRepository.
-  # renovate: datasource=docker depName=ghcr.io/immich-app/immich-server
+  # Application version (the immich-server container image tag the chart ships
+  # as its default), NOT the Helm chart version. There is deliberately NO
+  # renovate annotation here: version must move only with the chart pin in
+  # base/ocirepository.yaml, matching the new chart's baked image tag — an
+  # image-datasource annotation would bump version past what the chart deploys.
   # serge: notesRepo=immich-app/immich
-  version: "v3.0.3"
+  version: "v3.2.0"
 
   source:
     type: oci-kustomize
@@ -42,7 +44,7 @@ spec:
       - kind: StorageClass
         description: "nfs-client (provided by nfs-provisioner / storage). NOTE: a local/block storage class is strongly recommended for the postgres data volume."
       - kind: SSOProvider
-        description: "Casdoor + casdoor-sso-controller (auto-provisions the immich OIDC client and credentials into Secret/immich-sso). Note: immich v3 can't be configured for OAuth at deploy time — after install, enable OAuth once in Immich → Administration → Settings → OAuth (issuer https://sso.BASE_DOMAIN, client id 'immich', secret from Secret/immich-sso)."
+        description: "Casdoor + casdoor-sso-controller (auto-provisions the immich OIDC client and credentials into Secret/immich-sso). Note: immich v3 can't be configured for OAuth at deploy time — after install, enable OAuth once in Immich → Administration → Settings → OAuth (issuer https://id.BASE_DOMAIN, client id 'immich', secret from Secret/immich-sso)."
 
   templates:
     source: |

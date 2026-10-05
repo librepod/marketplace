@@ -247,10 +247,11 @@ spec:
   interval: 24h
   url: oci://<chart-registry-url>
   ref:
-    # Pin minor version, allow patch updates automatically (e.g. 1.2.x → 1.2.99).
-    # This lets security/bugfix patches in while keeping you in control of minor/major upgrades.
-    # Format: "~<major>.<minor>.0" or equivalently ">=X.Y.0 <X.Z.0"
-    semver: "~<major>.<minor>.0"
+    # Pin the EXACT chart version. Not a ~semver range: chart patch releases can
+    # change the chart's baked appVersion, which would silently roll clusters to
+    # app versions metadata.yaml doesn't advertise. Every bump must be a repo
+    # change that moves spec.version (and any cross-renderer newTag) with it.
+    tag: "<chart-version>"
 ```
 
 **Option B — HTTP Helm repo** (when the chart is not published as OCI):
@@ -293,7 +294,8 @@ spec:
         name: <app-name>-helm-charts
       interval: 12h
   values:
-    # Base/default Helm values go here
+    # Base/default Helm values go here — NEVER image.tag (see "Image versions"
+    # under the patch-helmrelease.yaml section below)
 ```
 
 ### `base/<app-name>.env`
@@ -447,7 +449,7 @@ spec:
   chart:
     spec:
       chart: <chart-name>
-      version: "~<major>.<minor>.0"                     # Pin chart version (recommended for HTTP Helm repos)
+      version: "<X.Y.Z>"                                 # Pin the EXACT chart version (required for HTTP Helm repos)
       sourceRef:
         kind: HelmRepository                            # or OCIRepository — must match base source type
         name: <app-name>-helm-charts
@@ -463,7 +465,25 @@ spec:
         claimName: <app-name>-data
 ```
 
-**Chart version pinning:** For OCI-based charts, the base `OCIRepository` already pins the semver range. For HTTP Helm repos, add `chart.spec.version` in this patch to pin the chart minor version (e.g. `~1.5.0`). This lets patch updates flow in automatically while keeping control of minor/major upgrades.
+**Chart version pinning:** For OCI-based charts, the base `OCIRepository` pins the exact `ref.tag`. For HTTP Helm repos, add `chart.spec.version` in this patch — also an exact version (e.g. `1.5.0`), never a `~` range: chart patch releases can change the baked `appVersion` (openbao 0.30.0 bakes 2.7.0, 0.30.2 bakes 2.7.1), and a range silently rolls clusters past the version `metadata.yaml` advertises. No renovate manager covers these pins, so every bump is a deliberate repo change that moves `spec.version` in the same commit.
+
+### Image versions — never override `image.tag` in Helm values
+
+The vendor chart's baked image tag (its `values.yaml` default / `appVersion`) is the **single source of truth** for which app version ships. Never set `image.tag` — in any shape the chart exposes it (`image.tag`, `controllers.*.containers.*.image.tag`, `<component>.image.tag`, …) — in base `helmrelease.yaml` or `patch-helmrelease.yaml` values.
+
+**If upstream releases a newer app version than the pinned chart ships: wait for the chart.** Chart-lag is NOT a reason to override. Bumping the chart pin (Renovate PR or manual) carries the app forward; `spec.version` in `metadata.yaml` then moves in the SAME change to the new chart's baked tag. Keeping them coupled is the whole point — a values override creates a second version anchor that drifts (this repo did it for immich/gatus and removed it again).
+
+**Do NOT add a `# renovate: datasource=docker depName=<app image>` annotation on `spec.version` for Helm-type apps** — it bumps the advertised version past what the chart actually deploys, recreating the drift. (The annotation is correct for Kustomize-type apps, where `images[].newTag` is the deployment pin.) A chart-tracking annotation (`datasource=helm`, or docker pointed at the chart's OCI repo) is correct ONLY when the vendor versions chart and app in lockstep — chart N.N.N ships app N.N.N (external-secrets, cert-manager). On non-lockstep charts it writes chart numbers into an app-version field (openbao: chart 0.30.x / app 2.7.x), and since no datasource tracks `appVersion`, non-lockstep Helm apps get no annotation at all — hand-couple `spec.version` to chart-pin bumps.
+
+**Allowed structural exceptions** — overriding is fine only when the concern is *which image*, not *which version*, and each requires an inline comment in that app explaining why:
+
+| Exception | Shape | Real example |
+|---|---|---|
+| Fork / alternative image **repository** | swap `repository`, tag tracks the fork's releases | `frp-operator` → `ghcr.io/librepod/frp-operator` |
+| Dead upstream registry reference | replace `repository` (and tag) with a working mirror | `step-issuer` kube-rbac-proxy (smallstep/step-issuer#335) |
+| One binary version across Helm-rendered AND Kustomize-rendered resources | the chart value is one spoke of a multi-file contract | `step-certificates` step-ca `0.29.0` ×5 files |
+
+**End-user escape hatch:** an install-time image-tag override (poweruser parameter) is a planned marketplace feature. It is the user's lever, never a repo-side values edit — do not pre-wire `${...}` placeholders for it (chart defaults are literal tags, so substitution cannot fall back to the chart default).
 
 ---
 
@@ -483,7 +503,11 @@ spec:
   category: "<Category>"         # e.g. Security, Productivity, Development
   website: "<upstream URL>"
 
-  version: "<upstream app version>"   # e.g. "2.353.0" — ALWAYS the application version (the container image tag), never the Helm chart version. The chart version is an internal detail that lives only in the overlay's patch-helmrelease.yaml.
+  version: "<upstream app version>"   # e.g. "2.353.0" — ALWAYS the application version actually deployed, never the Helm chart version.
+                                      # Kustomize type: the overlay's images[].newTag. Helm type: the pinned chart's baked
+                                      # image tag / appVersion — derived, not independent (see "Image versions" above);
+                                      # move spec.version and the chart pin in the same change, and keep any renovate
+                                      # annotation OFF it (a docker-datasource annotation would drift it past the chart).
 
   source:
     type: oci-kustomize
@@ -923,9 +947,9 @@ Secrets use a **plain `Secret` with `stringData` `${VAR}`** (substituted by Flux
 
 Base PVC has no `storageClassName`. The `patch-storage-class.yaml` in the overlay adds `nfs-client`. This keeps the base portable.
 
-### Image tag — overlay only
+### Image tag — overlay only (Kustomize type)
 
-Base deployment has `image: nginx` (no tag). Overlay sets `images[].newTag: 1.25-alpine`.
+Base deployment has `image: nginx` (no tag). Overlay sets `images[].newTag: 1.25-alpine`. Helm-type apps have no equivalent — the chart's baked tag is the version (see "Image versions" under the patch-helmrelease.yaml section).
 
 ### Domain — always use variable substitution
 
