@@ -1,7 +1,7 @@
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
 metadata:
-  name: external-secrets-helm-charts
+  name: openbao-helm-charts
 spec:
   interval: 24h
-  url: https://charts.external-secrets.io
+  url: https://openbao.github.io/openbao-helm

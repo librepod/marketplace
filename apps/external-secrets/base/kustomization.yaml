@@ -3,8 +3,11 @@ kind: Kustomization
 
 namespace: external-secrets
 
-buildMetadata:
-- managedByLabel
+labels:
+- includeSelectors: true
+  includeTemplates: true
+  pairs:
+    app.kubernetes.io/name: external-secrets
 
 resources:
 - namespace.yaml

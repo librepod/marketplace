@@ -1,0 +1,77 @@
+# Daily audit log rotation + 30 day retention. OpenBao's file audit device
+# has no built-in rotation: it keeps appending to the same file until the
+# process receives SIGHUP, at which point it re-opens file_path.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openbao-audit-rotation
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: openbao-audit-rotation
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: openbao-audit-rotation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: openbao-audit-rotation
+subjects:
+  - kind: ServiceAccount
+    name: openbao-audit-rotation
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: openbao-audit-rotation
+spec:
+  schedule: "17 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 300
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: openbao-audit-rotation
+          containers:
+            - name: rotate
+              image: alpine/k8s:1.34.9
+              # run as the server user so the rotated files stay accessible
+              # to both this job and the openbao server
+              securityContext:
+                runAsUser: 100
+                runAsGroup: 1000
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -e
+                  cd /openbao/audit
+                  if [ -s audit.log ]; then
+                    mv audit.log "audit-$(date -u +%Y%m%dT%H%M%SZ).log"
+                    # SIGHUP makes openbao re-open the audit file. NOTE: bao is
+                    # not PID 1 in the chart's pod (shell wrapper is), so the
+                    # signal must target the bao process itself.
+                    kubectl exec -n openbao openbao-0 -- sh -c 'kill -HUP "$(pgrep -x bao)"' || true
+                  fi
+                  find . -maxdepth 1 -type f -name 'audit-*.log' -mtime +30 -delete
+              volumeMounts:
+                - name: audit
+                  mountPath: /openbao/audit
+          volumes:
+            - name: audit
+              persistentVolumeClaim:
+                claimName: audit-openbao-0

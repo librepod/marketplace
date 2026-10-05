@@ -1,0 +1,25 @@
+# OpenBao is API-first: the injector webhook, the bao CLI and in-cluster
+# clients talk to :8200 directly with their own credentials, so no oauth2
+# forward-auth middlewares here — OpenBao performs its own authentication
+# (tokens, or the Kubernetes / OIDC auth methods configured post-install).
+#
+# TLS-only on websecure with the dedicated per-app certificate (the route
+# would otherwise be served the cluster's shared wildcard cert). A tls:
+# block makes the router TLS-only, so there is deliberately no plain-HTTP
+# web entrypoint route.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: openbao
+spec:
+  entryPoints:
+  - websecure
+  routes:
+  - kind: Rule
+    match: Host(`openbao.${BASE_DOMAIN:=libre.pod}`)
+    priority: 1
+    services:
+    - name: openbao
+      port: 8200
+  tls:
+    secretName: openbao-tls

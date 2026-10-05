@@ -1,0 +1,31 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: openbao
+
+labels:
+- includeSelectors: true
+  includeTemplates: true
+  pairs:
+    app.kubernetes.io/name: openbao
+
+configMapGenerator:
+- name: openbao-bootstrap
+  files:
+  - bootstrap.sh=bootstrap.sh
+  - eso-read-apps.hcl=policies/eso-read-apps.hcl
+  - marketplace-ui-write-apps.hcl=policies/marketplace-ui-write-apps.hcl
+  options:
+    annotations:
+      # shell parameter expansion in the script must not be interpreted by
+      # Flux postBuild.substitute
+      kustomize.toolkit.fluxcd.io/substitute: disabled
+
+resources:
+- namespace.yaml
+- pvc.yaml
+- helmrepository.yaml
+- helmrelease.yaml
+- clustersecretstore.yaml
+- bootstrap.yaml
+- audit-rotation.yaml
