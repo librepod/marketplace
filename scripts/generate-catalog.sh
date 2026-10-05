@@ -140,6 +140,14 @@ ENTRY
       echo "$SECRETS_CONTENT" | sed 's/^/        /' >> "$CATALOG_FILE"
     fi
   fi
+
+  # Extract settings section (install questions + allowCustom) verbatim — the
+  # installer and the install dialog read it from catalog.yaml.
+  SETTINGS_CONTENT=$(awk '/^  settings:/ { found=1; next } found && /^  [a-z]/ { exit } found && NF > 0 { print }' "$metadata_file")
+  if [ -n "$SETTINGS_CONTENT" ]; then
+    echo "      settings:" >> "$CATALOG_FILE"
+    echo "$SETTINGS_CONTENT" | sed 's/^/        /' >> "$CATALOG_FILE"
+  fi
 done
 
 if grep -q '__VERSION__' "$CATALOG_FILE"; then

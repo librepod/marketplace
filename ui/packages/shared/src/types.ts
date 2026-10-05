@@ -33,6 +33,56 @@ export interface InstallResult {
   message: string;
 }
 
+/** Type of an install question's answer. Answers always travel and are stored as text. */
+export type AppSettingType = 'string' | 'boolean' | 'number';
+
+/**
+ * One install-time question (metadata.yaml spec.settings.items[]). Only questions an app
+ * deliberately asks — LibrePod's tuned defaults stay in the app's .env and are never listed.
+ */
+export interface AppSettingItem {
+  name: string;
+  label?: string;
+  description?: string;
+  type?: AppSettingType;
+  /** Fixed choices → dropdown. YAML may give numbers/booleans; compare with String(). */
+  options?: Array<string | number | boolean>;
+  /** Pre-fills the answer. YAML may give a boolean/number; normalise with String(). */
+  default?: string | number | boolean;
+  required?: boolean;
+  /** UI masking only — every value is stored the same way. */
+  sensitive?: boolean;
+}
+
+export interface AppSettings {
+  /** Offer the free-form "Custom environment variables" section (default false). */
+  allowCustom?: boolean;
+  items?: AppSettingItem[];
+}
+
+export interface CustomVariable {
+  name: string;
+  value: string;
+}
+
+/** Body of POST /api/apps/:name/install. Omitted or empty = all defaults. */
+export interface InstallRequest {
+  settings?: Record<string, string>;
+  custom?: CustomVariable[];
+}
+
+/** One field-level problem: `name` is a question name, `custom.<i>`, `settings` or `custom`. */
+export interface FieldError {
+  name: string;
+  message: string;
+}
+
+/** 400 body of POST /api/apps/:name/install when settings fail validation. */
+export interface InstallValidationErrorBody {
+  message: string;
+  errors: FieldError[];
+}
+
 export interface CatalogApp {
   name: string;
   version: string;
@@ -53,6 +103,8 @@ export interface CatalogApp {
   templates?: AppTemplate;
   params?: { required?: AppParam[] };
   secrets?: AppSecretDef[];
+  // Install questions + custom-variable opt-in; apps with this open the install dialog.
+  settings?: AppSettings;
 }
 
 export interface CatalogFile {
