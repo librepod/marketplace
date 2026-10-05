@@ -15,6 +15,7 @@ configMapGenerator:
   - name: openbao-bootstrap
     files:
       - bootstrap.sh=bootstrap.sh
+      - store.sh=store.sh
     options:
       annotations:
         # shell parameter expansion in the script must not be interpreted by
