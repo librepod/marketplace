@@ -1,0 +1,57 @@
+# Daily audit log rotation + 30 day retention. OpenBao's file audit device
+# has no built-in rotation: it keeps appending to the same file until the
+# process receives SIGHUP, at which point it re-opens file_path.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: openbao-audit-rotation
+  namespace: openbao
+  labels:
+    app.kubernetes.io/name: openbao
+spec:
+  schedule: "17 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    metadata:
+      labels:
+        app.kubernetes.io/name: openbao
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 300
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: openbao
+        spec:
+          restartPolicy: Never
+          serviceAccountName: openbao-audit-rotation
+          containers:
+            - name: rotate
+              image: alpine/k8s:1.34.9
+              # run as the server user so the rotated files stay accessible
+              # to both this job and the openbao server
+              securityContext:
+                runAsUser: 100
+                runAsGroup: 1000
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -e
+                  cd /openbao/audit
+                  if [ -s audit.log ]; then
+                    mv audit.log "audit-$(date -u +%Y%m%dT%H%M%SZ).log"
+                    # SIGHUP makes openbao re-open the audit file. NOTE: bao is
+                    # not PID 1 in the chart's pod (shell wrapper is), so the
+                    # signal must target the bao process itself.
+                    kubectl exec -n openbao openbao-0 -- sh -c 'kill -HUP "$(pgrep -x bao)"' || true
+                  fi
+                  find . -maxdepth 1 -type f -name 'audit-*.log' -mtime +30 -delete
+              volumeMounts:
+                - name: audit
+                  mountPath: /openbao/audit
+          volumes:
+            - name: audit
+              persistentVolumeClaim:
+                claimName: audit-openbao-0

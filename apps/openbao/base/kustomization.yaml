@@ -31,4 +31,3 @@ resources:
 - helmrelease.yaml
 - clustersecretstore.yaml
 - bootstrap.yaml
-- audit-rotation.yaml
