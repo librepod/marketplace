@@ -3,6 +3,9 @@ kind: Catalog
 metadata:
   generatedAt: "2026-01-01T00:00:00Z"
 apps:
+  # The plain-install target: no settings, so Install fires directly (my-apps
+  # asserts the toast without a dialog). Settings-dialog coverage lives on
+  # renovate below.
   - name: vaultwarden
     version: "1.35.2"
     displayName: Vaultwarden
@@ -11,10 +14,6 @@ apps:
     icon: https://example.com/vaultwarden.png
     sourceType: oci-kustomize
     sourceUrl: https://github.com/dani-garcia/vaultwarden
-    secrets:
-      - name: ADMIN_TOKEN
-        generate:
-          length: 32
     templates:
       source: |
         apiVersion: source.toolkit.fluxcd.io/v1beta2
@@ -38,21 +37,12 @@ apps:
                 name: vaultwarden
           values:
             domain: ${BASE_DOMAIN}
-      secret: |
-        apiVersion: v1
-        kind: Secret
-        metadata:
-          name: vaultwarden-admin
-          namespace: vaultwarden
-        stringData:
-          ADMIN_TOKEN: ${ADMIN_TOKEN}
       kustomization: |
         apiVersion: kustomize.config.k8s.io/v1beta1
         kind: Kustomization
         resources:
           - source.yaml
           - release.yaml
-          - secret.yaml
 
   - name: gogs
     version: "1.1.0"
