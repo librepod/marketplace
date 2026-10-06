@@ -66,17 +66,33 @@ The UI (and `bao login -method=oidc`) authenticate via the platform IdP:
   (`https://openbao.<BASE_DOMAIN>/ui/vault/auth/oidc/oidc/callback`) and the
   CLI loopback (`http://localhost:8250/oidc/callback`); they must match the
   SSOClient CR exactly.
-- Server and Job trust the LibrePod root CA (`SSL_CERT_FILE`) for calls to
-  `https://id.<BASE_DOMAIN>`.
+- The CA for the server-side calls to `https://id.<BASE_DOMAIN>` is scoped to
+  the auth method (`oidc_discovery_ca_pem` written by the bootstrap Job) —
+  the server pod itself carries no CA wiring.
 - To log in: open the UI → sign in with method **OIDC** → the default role
   `admin-sso` applies (no role needs to be entered).
+
+SSO is **additive**, not a replacement: token login keeps working — the UI
+method dropdown always offers **Token**, and the root token is in
+`Secret/openbao-credentials` (or re-mint it from the recovery keys via
+`bao operator generate-root`).
+
+The OIDC section runs **last** in the bootstrap: if the SSO Secret is
+missing (controller/casdoor trouble), the Job waits 5 min per attempt and
+fails with a named error, retrying within its deadline — init, KV, k8s auth,
+policies and roles are already applied at that point, so External Secrets
+and marketplace-ui keep working while only SSO login is delayed. Fix the
+cause, then `kubectl delete job openbao-bootstrap -n openbao` to re-wire.
 
 **Secret rotation**: rotating the client secret
 (`kubectl annotate ssoclient openbao-sso -n openbao
 marketplace.librepod.org/rotate-secret=true --overwrite`) updates the
 Secret, but OpenBao keeps the old value until the bootstrap Job re-runs —
 delete it (`kubectl delete job openbao-bootstrap -n openbao`) and let Flux
-recreate, then re-login.
+recreate, then re-login. The same delete-and-recreate is the manual path
+after a failed SSO bootstrap; for spec changes (new volumes/env on the Job)
+the system-apps Kustomization has `force: true`, so Flux recreates the
+completed Job automatically and the idempotent re-run picks up the change.
 
 ## Audit logs (10Gi, 30 day retention)
 

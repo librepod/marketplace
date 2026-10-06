@@ -78,7 +78,11 @@ spec:
         force: true
         interval: 1h
         retryInterval: 2m
-        timeout: 5m
+        # ≥ the bootstrap Job's activeDeadlineSeconds (900s): with wait:true
+        # the health check waits on that Job, and a 5m timeout reports
+        # spurious Ready=False when the Job spends minutes waiting for the
+        # SSO Secret (controller reconcile lag).
+        timeout: 20m
         sourceRef:
           kind: OCIRepository
           name: marketplace-openbao

@@ -96,15 +96,30 @@ bao write auth/kubernetes/role/marketplace-ui \
 
 # OIDC auth method (SSO login to the UI / bao CLI) backed by Casdoor.
 # Credentials come from Secret/openbao-sso, provisioned by the
-# casdoor-sso-controller from the SSOClient CR in the overlay; the
-# non-optional volume mount keeps this pod Pending until it exists.
-# Writing auth/oidc/config triggers an immediate discovery fetch against the
-# IdP — the wait loop first lets Reflector fill the mirrored CA ConfigMap
-# stub (it starts empty), or the fetch fails TLS verification.
+# casdoor-sso-controller from the SSOClient CR in the overlay. Everything
+# above this point (init, KV, k8s auth, policies, roles) is already done, so
+# a missing/broken SSO chain only ever delays SSO login — ESO and
+# marketplace-ui keep working. `bao write auth/oidc/config` triggers an
+# immediate SERVER-side discovery fetch; the CA is passed to the server via
+# oidc_discovery_ca_pem (the CLI itself never talks TLS to the IdP).
+# Reflector fills the mirrored CA ConfigMap stub asynchronously (it starts
+# empty), and the controller may lag the Job start — wait for both.
 for i in $(seq 1 30); do
   [ -s /ca/root_ca.crt ] && break
   sleep 2
 done
+if [ ! -s /ca/root_ca.crt ]; then
+  echo "ERROR: ConfigMap step-certificates-certs (Reflector mirror of the step-ca root CA) has no root_ca.crt after 60s — check the reflector annotation in the overlay kustomization and the step-ca app; OIDC discovery cannot verify the IdP certificate without it." >&2
+  exit 1
+fi
+for i in $(seq 1 150); do
+  [ -s /sso/client_id ] && [ -s /sso/client_secret ] && break
+  sleep 2
+done
+if [ ! -s /sso/client_id ] || [ ! -s /sso/client_secret ]; then
+  echo "ERROR: Secret/openbao-sso (casdoor-sso-controller output for SSOClient/openbao-sso) is absent or empty after 300s — check 'kubectl get ssoclient openbao-sso -n openbao', the controller logs and Secret/casdoor-api-credentials. Delete this Job to re-run once fixed; SSO stays unconfigured until then, everything else is already bootstrapped." >&2
+  exit 1
+fi
 if ! bao auth list -format=json | grep -q '"oidc/"'; then
   bao auth enable oidc
 fi
@@ -112,7 +127,8 @@ bao write auth/oidc/config \
   oidc_client_id="$(cat /sso/client_id)" \
   oidc_client_secret="$(cat /sso/client_secret)" \
   default_role="admin-sso" \
-  oidc_discovery_url="$SSO_DISCOVERY_URL"
+  oidc_discovery_url="$SSO_DISCOVERY_URL" \
+  oidc_discovery_ca_pem=@/ca/root_ca.crt
 # Platform model: every Casdoor login is a trusted cluster admin (same as
 # the other SSO apps). allowed_redirect_uris must match the SSOClient CR's
 # redirectUris exactly.

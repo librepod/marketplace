@@ -27,6 +27,11 @@ spec:
     - name: casdoor-sso-controller
   interval: 1h
   retryInterval: 2m
+  # The bootstrap Job's spec evolves (volumes/env change with features like
+  # SSO); a Completed Job is immutable, so without force every such change
+  # wedges the apply ("updates to job template are not allowed"). force lets
+  # Flux delete+recreate the Job — the re-run is idempotent by design.
+  force: true
   # ≥ the bootstrap Job's activeDeadlineSeconds (900s): with wait:true the
   # health check waits on that Job, and a shorter timeout reports spurious
   # Ready=False on slow networks.

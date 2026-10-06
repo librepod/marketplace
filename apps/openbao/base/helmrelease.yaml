@@ -35,9 +35,9 @@ spec:
       configAnnotation: true
 
       # Chart default is OnDelete: upgrades would never restart the server,
-      # so value changes (e.g. the SSO CA volume) only apply after a manual
-      # pod delete. RollingUpdate is safe here: the static seal auto-unseals
-      # and single-replica delete-then-create releases the RWO seal PVC.
+      # so any values change here only applies after a manual pod delete.
+      # RollingUpdate is safe: the static seal auto-unseals and
+      # single-replica delete-then-create releases the RWO seal PVC.
       updateStrategyType: RollingUpdate
 
       # Full server config: the static seal stanza is what makes OpenBao come

@@ -36,10 +36,6 @@ spec:
               value: https://openbao.${BASE_DOMAIN:=libre.pod}
             - name: SSO_DISCOVERY_URL
               value: https://id.${BASE_DOMAIN:=libre.pod}
-            # OIDC discovery on `bao write auth/oidc/config` verifies the
-            # private IdP certificate (issued by the LibrePod root CA)
-            - name: SSL_CERT_FILE
-              value: /ca/root_ca.crt
           command: ["/bin/sh", "/bootstrap/bootstrap.sh"]
           volumeMounts:
             - name: bootstrap
@@ -53,12 +49,16 @@ spec:
             - name: seal
               mountPath: /seal
             # OIDC client credentials (provisioned by the
-            # casdoor-sso-controller from the SSOClient CR); non-optional so
-            # the pod stays Pending until the controller has reconciled
+            # casdoor-sso-controller from the SSOClient CR). optional:true —
+            # the SECRET is late (controller reconcile lag): the script waits
+            # for the files in-pod (bootstrap.sh), so a missing Secret delays
+            # only the SSO section, never the init/KV/k8s-auth bootstrap
+            # itself. Kubelet populates the volume once the Secret appears.
             - name: sso
               mountPath: /sso
               readOnly: true
-            # LibrePod root CA for the OIDC discovery fetch (SSL_CERT_FILE)
+            # LibrePod root CA, read by the script and passed to the server
+            # via oidc_discovery_ca_pem (the discovery fetch runs server-side)
             - name: ca
               mountPath: /ca
               readOnly: true
@@ -100,10 +100,11 @@ spec:
           persistentVolumeClaim:
             claimName: openbao-seal
         # OIDC client credentials written by the casdoor-sso-controller
-        # (SSOClient CR in the overlay)
+        # (SSOClient CR in the overlay); optional — see the mount comment
         - name: sso
           secret:
             secretName: openbao-sso
+            optional: true
         # LibrePod root CA (Reflector-mirrored stub from step-ca)
         - name: ca
           configMap:

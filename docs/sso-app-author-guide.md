@@ -15,11 +15,22 @@ implementation — see `apps/open-webui/overlays/librepod/`.
 > configured through their own API after boot. Pattern: mount the controller's
 > `Secret` (and the CA ConfigMap) as **files into a post-deploy Job** and have
 > it run the app's config commands. Reference: `apps/openbao/components/bootstrap/`
-> (`job.yaml` mounts, `bootstrap.sh` runs `bao write auth/oidc/config`). The
-> non-optional Secret volume makes the Job wait for the controller; writing the
-> config typically triggers an immediate discovery fetch, so the **server**
-> needs the CA too — not just the Job (openbao: `SSL_CERT_FILE` +
-> `server.extraEnvironmentVars` in the HelmRelease).
+> (`job.yaml` mounts, `bootstrap.sh` runs `bao write auth/oidc/config`). Two
+> rules from that reference implementation:
+>
+> - Mount the Secret `optional: true` and **wait for it in the script**
+>   (bounded, then exit non-zero with a message naming the SSOClient/Secret).
+>   A non-optional volume leaves the pod Pending, which blocks *everything*
+>   the Job does — with optional + script-side wait only the SSO wiring is
+>   delayed, and the Job's retries pick the Secret up once the controller
+>   provisions it.
+> - Writing the config typically triggers an immediate **server-side**
+>   discovery fetch. Prefer the app's **scoped CA parameter** when it has one
+>   (openbao: `oidc_discovery_ca_pem` on `auth/oidc/config`) — the server
+>   then needs no CA wiring at all. Only fall back to a server-wide
+>   `SSL_CERT_FILE` if no scoped option exists, and then use the §4 merge
+>   pattern (root-only `SSL_CERT_FILE` shadows the system trust store and
+>   breaks any future outbound public-TLS).
 
 ## Prerequisite
 

@@ -24,9 +24,10 @@ configMapGenerator:
       # the bootstrap Job mounts this ConfigMap; a name hash would rewrite
       # the immutable Job spec on every content change and brick the apply
       disableNameSuffixHash: true
-  # LibrePod root CA stub, mirrored by Reflector from step-ca: the server and
-  # the bootstrap Job need it to verify https://id.<BASE_DOMAIN> during OIDC
-  # discovery / token exchange (docs/sso-app-author-guide.md §4).
+  # LibrePod root CA stub, mirrored by Reflector from step-ca: the bootstrap
+  # Job mounts it and passes it to the server via oidc_discovery_ca_pem, so
+  # the server's OIDC calls to https://id.<BASE_DOMAIN> verify the private
+  # CA (docs/sso-app-author-guide.md §4).
   # disableNameSuffixHash is REQUIRED: Reflector keys replication off this
   # exact object name, and the pods mount the ConfigMap by name.
   - name: step-certificates-certs
