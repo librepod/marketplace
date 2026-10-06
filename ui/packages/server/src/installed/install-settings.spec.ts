@@ -258,4 +258,46 @@ describe('resolveSettings', () => {
       ]);
     });
   });
+
+  describe('generated items', () => {
+    const gen = (length: number) => `x`.repeat(length);
+    const settings: AppSettings = {
+      items: [
+        { name: 'DB_PASSWORD', generate: { length: 40 } },
+        { name: 'TOKEN', required: true, sensitive: true },
+      ],
+    };
+
+    it('generates when no answer, no default, no stored value', () => {
+      const r = resolveSettings(settings, { settings: { TOKEN: 't' } }, null, gen);
+      expect(r.ok && r.values.DB_PASSWORD).toBe('x'.repeat(40));
+    });
+
+    it('reuses the stored value for a generated item', () => {
+      const r = resolveSettings(settings, { settings: { TOKEN: 't' } }, { DB_PASSWORD: 'old' }, gen);
+      expect(r.ok && r.values.DB_PASSWORD).toBe('old');
+    });
+
+    it('an explicit answer wins over the stored value', () => {
+      const r = resolveSettings(settings, { settings: { TOKEN: 't', DB_PASSWORD: 'chosen' } }, { DB_PASSWORD: 'old' }, gen);
+      expect(r.ok && r.values.DB_PASSWORD).toBe('chosen');
+    });
+
+    it('a default wins over the stored value; stored wins over generation', () => {
+      const s: AppSettings = { items: [{ name: 'A', default: 'def', generate: { length: 8 } }] };
+      expect(resolveSettings(s, {}, { A: 'old' }, gen)).toMatchObject({ ok: true, values: { A: 'old' } });
+      expect(resolveSettings(s, {}, null, gen)).toMatchObject({ ok: true, values: { A: 'def' } });
+    });
+
+    it('does NOT resurrect stored values for question items', () => {
+      const r = resolveSettings(settings, { settings: { TOKEN: '' } }, { TOKEN: 'old-token', DB_PASSWORD: 'old' }, gen);
+      // TOKEN answered empty → omitted (required error); stored TOKEN is ignored
+      expect(r.ok).toBe(false);
+    });
+
+    it('drops stored keys claimed by no item (replace semantics)', () => {
+      const r = resolveSettings(settings, { settings: { TOKEN: 't' } }, { STALE: 'z', DB_PASSWORD: 'old' }, gen);
+      expect(r.ok && r.values.STALE).toBeUndefined();
+    });
+  });
 });
