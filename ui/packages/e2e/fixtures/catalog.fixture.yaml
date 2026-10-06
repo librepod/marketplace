@@ -117,6 +117,54 @@ apps:
           - source.yaml
           - release.yaml
 
+  # Has install questions (catalog `settings`): Install opens a dialog, and the
+  # answers go to the dev-mode OpenBao — never into the Gogs repo.
+  - name: renovate
+    version: "41.0.0"
+    displayName: Renovate
+    description: Keeps your project dependencies up to date
+    category: Automation
+    icon: https://example.com/renovate.png
+    sourceType: oci-kustomize
+    sourceUrl: oci://ghcr.io/librepod/marketplace/apps/renovate
+    settings:
+      allowCustom: true
+      items:
+        - name: RENOVATE_TOKEN
+          label: Access token
+          description: Personal access token for your Git platform
+          sensitive: true
+          required: true
+        - name: RENOVATE_GITHUB_COM_TOKEN
+          label: GitHub.com token
+          sensitive: true
+    templates:
+      source: |
+        apiVersion: source.toolkit.fluxcd.io/v1
+        kind: OCIRepository
+        metadata:
+          name: marketplace-renovate
+          namespace: flux-system
+        spec:
+          url: oci://ghcr.io/librepod/marketplace/apps/renovate
+      release: |
+        apiVersion: kustomize.toolkit.fluxcd.io/v1
+        kind: Kustomization
+        metadata:
+          name: marketplace-renovate
+          namespace: flux-system
+        spec:
+          sourceRef:
+            kind: OCIRepository
+            name: marketplace-renovate
+          path: ./overlays/librepod
+      kustomization: |
+        apiVersion: kustomize.config.k8s.io/v1beta1
+        kind: Kustomization
+        resources:
+          - source.yaml
+          - release.yaml
+
   - name: traefik
     version: "1.0.0"
     displayName: Traefik

@@ -10,6 +10,7 @@ import { UserAppsRepoService } from './user-apps-repo.service';
 import { FluxStatusService } from './flux-status.service';
 import { SystemAppsService } from './system-apps.service';
 import { LaunchUrlService } from './launch-url.service';
+import { OpenBaoClient } from './openbao.client';
 
 // Same kubeconfig selection FluxStatusService.onModuleInit already performs; as a
 // factory it can be injected, which is what lets GitRemoteService be unit-tested
@@ -38,6 +39,7 @@ const customObjectsApiProvider = {
     FluxStatusService,
     SystemAppsService,
     LaunchUrlService,
+    OpenBaoClient,
   ],
   exports: [InstalledService],
 })

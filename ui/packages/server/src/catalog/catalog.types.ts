@@ -3,7 +3,7 @@
  * Kept here for server-internal use. Shared interface (CatalogApp) also
  * exported from @librepod/shared for client consumption.
  */
-import type { AppStatus, AppTemplate, AppParam, AppSecretDef, InstallResult } from '@librepod/shared';
+import type { AppStatus, AppTemplate, AppParam, AppSecretDef, AppSettings, InstallResult } from '@librepod/shared';
 
 export type { AppStatus };
 export type { AppTemplate, AppParam, AppSecretDef, InstallResult };
@@ -24,6 +24,7 @@ export interface CatalogApp {
   templates?: AppTemplate;
   params?: { required?: AppParam[] };
   secrets?: AppSecretDef[];
+  settings?: AppSettings;
 }
 
 export interface CatalogFile {

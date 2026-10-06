@@ -140,6 +140,20 @@ ENTRY
       echo "$SECRETS_CONTENT" | sed 's/^/        /' >> "$CATALOG_FILE"
     fi
   fi
+
+  # Extract settings section (install questions + allowCustom) verbatim — the
+  # installer and the install dialog read it from catalog.yaml. Keeps whatever
+  # follows `settings:` on its own line (flow style: `settings: { allowCustom: true }`,
+  # minus a trailing comment) and blank lines inside the block (paragraph breaks in
+  # `description: |`); blank lines are emptied, not indented, so they never add
+  # spaces to a block scalar.
+  SETTINGS_INLINE=$(grep -m1 '^  settings:' "$metadata_file" | sed -e 's/^  settings:[[:space:]]*//' -e 's/^#.*//' || true)
+  SETTINGS_CONTENT=$(awk '/^  settings:/ { found=1; next } found && /^  [a-z]/ { exit } found { print }' "$metadata_file" \
+    | sed -e 's/^[[:space:]]*$//' -e '/./s/^/        /')
+  if [ -n "$SETTINGS_INLINE" ] || [ -n "$SETTINGS_CONTENT" ]; then
+    echo "      settings:${SETTINGS_INLINE:+ $SETTINGS_INLINE}" >> "$CATALOG_FILE"
+    if [ -n "$SETTINGS_CONTENT" ]; then echo "$SETTINGS_CONTENT" >> "$CATALOG_FILE"; fi
+  fi
 done
 
 if grep -q '__VERSION__' "$CATALOG_FILE"; then

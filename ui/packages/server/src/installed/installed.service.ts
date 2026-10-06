@@ -1,4 +1,12 @@
-import { Injectable, NotFoundException, ConflictException, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  InternalServerErrorException,
+  BadRequestException,
+  ServiceUnavailableException,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Mutex } from 'async-mutex';
 import * as crypto from 'node:crypto';
@@ -7,6 +15,8 @@ import { UserAppsRepoService } from './user-apps-repo.service';
 import { FluxStatusService } from './flux-status.service';
 import { SystemAppsService } from './system-apps.service';
 import { LaunchUrlService } from './launch-url.service';
+import { resolveSettings } from './install-settings';
+import { OpenBaoClient, OpenBaoMisconfiguredError, OpenBaoUnavailableError } from './openbao.client';
 import type { CatalogApp, InstallResult } from '@librepod/shared';
 
 @Injectable()
@@ -21,6 +31,7 @@ export class InstalledService {
     private readonly configService: ConfigService,
     private readonly systemApps: SystemAppsService,
     private readonly launchUrl: LaunchUrlService,
+    private readonly openBao: OpenBaoClient,
   ) {}
 
   async enrich(apps: CatalogApp[]): Promise<CatalogApp[]> {
@@ -80,7 +91,7 @@ export class InstalledService {
     return crypto.randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);
   }
 
-  async install(appName: string): Promise<InstallResult> {
+  async install(appName: string, body?: unknown): Promise<InstallResult> {
     return this.mutex.runExclusive(async () => {
       // 1. Validate app exists in catalog
       const app = this.catalog.findOne(appName);
@@ -99,7 +110,33 @@ export class InstalledService {
       const installed = await this.repo.listInstalledApps();
       if (installed.includes(appName)) throw new ConflictException(`${app.displayName} is already installed`);
 
-      // 3. Build variable substitution map
+      // 3. Install questions + custom variables → OpenBao, BEFORE the Gogs commit, so
+      // the app's ExternalSecret finds its entry as soon as Flux applies the app.
+      // Values never enter the Gogs repo or ${VAR} substitution. Apps without
+      // `settings` skip this entirely (and ignore any body).
+      if (app.settings) {
+        const resolved = resolveSettings(app.settings, body);
+        if (!resolved.ok) {
+          throw new BadRequestException({ message: 'Some settings need attention', errors: resolved.errors });
+        }
+        try {
+          await this.openBao.writeAppSettings(appName, resolved.values);
+        } catch (err) {
+          if (err instanceof OpenBaoUnavailableError) {
+            this.logger.warn(`settings store unavailable while installing ${appName}: ${err.message}`);
+            throw new ServiceUnavailableException("Couldn't save the settings right now. Try again in a minute.");
+          }
+          if (err instanceof OpenBaoMisconfiguredError) {
+            this.logger.error(`settings store misconfigured, cannot install ${appName}: ${err.message}`);
+            throw new InternalServerErrorException(
+              "Couldn't save the settings: the settings store isn't set up correctly. Trying again won't help.",
+            );
+          }
+          throw err;
+        }
+      }
+
+      // 4. Build variable substitution map
       const vars: Record<string, string> = {};
       vars.BASE_DOMAIN = this.configService.get<string>('BASE_DOMAIN', 'libre.pod');
 
@@ -112,7 +149,7 @@ export class InstalledService {
         }
       }
 
-      // 4. Render every file and write them as ONE commit. Ordering no longer
+      // 5. Render every file and write them as ONE commit. Ordering no longer
       // matters ("Pitfall 3" was about the root kustomization.yaml naming an
       // app dir before its files existed) — atomicity now comes from the commit,
       // and Flux auto-generates its kustomization from the tree.
