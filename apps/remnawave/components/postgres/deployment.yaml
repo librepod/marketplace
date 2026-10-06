@@ -21,6 +21,14 @@ spec:
           envFrom:
             - configMapRef:
                 name: remnawave-postgres-env
+          env:
+            # Env name differs from the settings key (DB_PASSWORD), so it needs an
+            # explicit secretKeyRef instead of envFrom. Same secret as the panel.
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: remnawave-settings
+                  key: DB_PASSWORD
           ports:
             - name: postgres
               containerPort: 5432
@@ -49,6 +57,14 @@ spec:
           envFrom:
             - configMapRef:
                 name: remnawave-postgres-env
+          env:
+            # Same POSTGRES_PASSWORD as the postgres container — it ALTERs the
+            # stored password to this value on every boot.
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: remnawave-settings
+                  key: DB_PASSWORD
           command: ["/bin/sh", "-c"]
           args:
             - |

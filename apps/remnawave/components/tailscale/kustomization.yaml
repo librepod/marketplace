@@ -18,8 +18,9 @@
 # double add.
 #
 # Mirrors apps/tailscale (the standalone app) wherever the sidecar context
-# allows: same image pin, same env interface (TS_HOSTNAME / TS_EXTRA_ARGS /
-# TS_AUTHKEY via Flux substitution), same kube-secret state with an RBAC trio.
+# allows: same image pin, same env interface (TS_HOSTNAME / TS_EXTRA_ARGS,
+# hardcoded defaults — the per-install param channel died with the OpenBao
+# settings migration), same kube-secret state with an RBAC trio.
 # State on the PVC AND the remnawave-tailscale-state Secret: containerboot
 # syncs local state to the secret, so the node identity and tailnet IP
 # survive both pod restarts and PVC loss/rebind.
