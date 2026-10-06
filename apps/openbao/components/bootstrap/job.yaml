@@ -18,6 +18,11 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: openbao
+      annotations:
+        # Bump whenever an overlay policy .hcl changes: the Job spec is
+        # immutable, so this is what makes the apply recreate (force:true) and
+        # re-run the bootstrap, which re-applies policies idempotently.
+        openbao.librepod/policies-version: "2"
     spec:
       restartPolicy: Never
       serviceAccountName: openbao-bootstrap
