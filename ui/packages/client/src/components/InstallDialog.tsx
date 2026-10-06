@@ -181,8 +181,11 @@ function InstallForm({
   onClose: () => void
 }) {
   const settings = app.settings ?? {}
-  // Required questions first; the rest keep their metadata order (sort is stable).
-  const items = [...(settings.items ?? [])].sort((a, b) => Number(!!b.required) - Number(!!a.required))
+  // Generated items are machine-made secrets the server resolves — the dialog never asks.
+  // filter() already returns a fresh array, so sort cannot mutate the catalog's own list.
+  const items = (settings.items ?? [])
+    .filter((item) => !item.generate)
+    .sort((a, b) => Number(!!b.required) - Number(!!a.required))
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(items.map((item) => [item.name, initialValue(item)])),
   )
