@@ -8,13 +8,6 @@ resources:
 - middleware.yaml
 - ingressroute.yaml
 
-secretGenerator:
-- name: obsidian-livesync-secret
-  type: Opaque
-  literals:
-  - COUCHDB_PASSWORD=changeme_couchdb_password
-  - COUCHDB_SECRET=changeme_cookie_secret
-
 images:
 - name: couchdb
   newTag: "3.5.2"

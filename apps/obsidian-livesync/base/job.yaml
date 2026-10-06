@@ -17,10 +17,13 @@ spec:
                 configMapKeyRef:
                   name: obsidian-livesync
                   key: COUCHDB_USER
+            # Shell contract var of /scripts/init-script.sh — the script expands
+            # it at runtime, so the lowercase name stays; only the Secret
+            # source changes (settings Secret synced by ESO from OpenBao).
             - name: password
               valueFrom:
                 secretKeyRef:
-                  name: obsidian-livesync-secret
+                  name: obsidian-livesync-settings
                   key: COUCHDB_PASSWORD
             - name: node
               value: "_local"
@@ -32,7 +35,7 @@ spec:
               apk add --no-cache curl bash >/dev/null 2>&1
 
               echo "Waiting for CouchDB to be ready..."
-              until curl -s -f -u "${username}:${password}" http://obsidian-livesync:5984/_up > /dev/null 2>&1; do
+              until curl -s -f -u "$username:$password" http://obsidian-livesync:5984/_up > /dev/null 2>&1; do
                 echo "CouchDB not ready yet, sleeping..."
                 sleep 2
               done
