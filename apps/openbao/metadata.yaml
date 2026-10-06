@@ -40,6 +40,8 @@ spec:
         description: "step-issuer (provided by step-issuer app; issues the dedicated openbao certificate)"
       - kind: SecretStoreOperator
         description: "external-secrets (provided by the external-secrets system app; provides the ClusterSecretStore CRD)"
+      - kind: SSOProvider
+        description: "Casdoor SSO (provided by casdoor-sso-controller)"
 
   templates:
     source: |
@@ -71,6 +73,8 @@ spec:
           - name: storage
           - name: step-issuer
           - name: external-secrets
+          # SSOClient CR + Secret need the CRD/controller to exist first
+          - name: casdoor-sso-controller
         force: true
         interval: 1h
         retryInterval: 2m

@@ -34,6 +34,12 @@ spec:
       # changes (e.g. the audit stanza) roll the statefulset
       configAnnotation: true
 
+      # Chart default is OnDelete: upgrades would never restart the server,
+      # so value changes (e.g. the SSO CA volume) only apply after a manual
+      # pod delete. RollingUpdate is safe here: the static seal auto-unseals
+      # and single-replica delete-then-create releases the RWO seal PVC.
+      updateStrategyType: RollingUpdate
+
       # Full server config: the static seal stanza is what makes OpenBao come
       # back unsealed after pod restarts / node reboots without manual unseal.
       # The key itself never appears here — only its file path on the seal PVC.

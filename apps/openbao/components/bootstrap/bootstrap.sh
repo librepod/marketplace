@@ -1,11 +1,11 @@
 #!/bin/sh
 # One-time (idempotent) OpenBao bootstrap: init, KV v2 engine, Kubernetes
-# auth, policies, roles. Runs in the bootstrap Job alongside the
-# store-credentials container; they exchange state through /shared. Policies
-# are site-specific: every *.hcl mounted at /policies (openbao-policies
-# ConfigMap from the overlay) becomes an OpenBao policy named after the
-# file. (The audit device is declared in the server config — see
-# helmrelease.yaml.)
+# auth, OIDC auth (Casdoor SSO), policies, roles. Runs in the bootstrap Job
+# alongside the store-credentials container; they exchange state through
+# /shared. Policies are site-specific: every *.hcl mounted at /policies
+# (openbao-policies ConfigMap from the overlay) becomes an OpenBao policy
+# named after the file. (The audit device is declared in the server config —
+# see helmrelease.yaml.)
 set -e
 
 SA_DIR=/var/run/secrets/kubernetes.io/serviceaccount
@@ -93,6 +93,35 @@ bao write auth/kubernetes/role/marketplace-ui \
   bound_service_account_names=marketplace-ui \
   bound_service_account_namespaces=marketplace-ui \
   policies=marketplace-ui-write-apps ttl=20m
+
+# OIDC auth method (SSO login to the UI / bao CLI) backed by Casdoor.
+# Credentials come from Secret/openbao-sso, provisioned by the
+# casdoor-sso-controller from the SSOClient CR in the overlay; the
+# non-optional volume mount keeps this pod Pending until it exists.
+# Writing auth/oidc/config triggers an immediate discovery fetch against the
+# IdP — the wait loop first lets Reflector fill the mirrored CA ConfigMap
+# stub (it starts empty), or the fetch fails TLS verification.
+for i in $(seq 1 30); do
+  [ -s /ca/root_ca.crt ] && break
+  sleep 2
+done
+if ! bao auth list -format=json | grep -q '"oidc/"'; then
+  bao auth enable oidc
+fi
+bao write auth/oidc/config \
+  oidc_client_id="$(cat /sso/client_id)" \
+  oidc_client_secret="$(cat /sso/client_secret)" \
+  default_role="admin-sso" \
+  oidc_discovery_url="$SSO_DISCOVERY_URL"
+# Platform model: every Casdoor login is a trusted cluster admin (same as
+# the other SSO apps). allowed_redirect_uris must match the SSOClient CR's
+# redirectUris exactly.
+bao write auth/oidc/role/admin-sso \
+  role_type="oidc" \
+  user_claim="sub" \
+  policies="admin,default" \
+  oidc_scopes="openid,profile,email" \
+  allowed_redirect_uris="$BAO_PUBLIC_ADDR/ui/vault/auth/oidc/oidc/callback,http://localhost:8250/oidc/callback"
 
 # The audit device is declared in the server configuration (see
 # helmrelease.yaml), not enabled via the API.

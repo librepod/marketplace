@@ -7,6 +7,7 @@ resources:
 - ../../base
 - ingressroute.yaml
 - certificate.yaml
+- ssoclient.yaml
 
 components:
 - ../../components/audit-rotation
@@ -23,6 +24,16 @@ configMapGenerator:
       # the bootstrap Job mounts this ConfigMap; a name hash would rewrite
       # the immutable Job spec on every content change and brick the apply
       disableNameSuffixHash: true
+  # LibrePod root CA stub, mirrored by Reflector from step-ca: the server and
+  # the bootstrap Job need it to verify https://id.<BASE_DOMAIN> during OIDC
+  # discovery / token exchange (docs/sso-app-author-guide.md §4).
+  # disableNameSuffixHash is REQUIRED: Reflector keys replication off this
+  # exact object name, and the pods mount the ConfigMap by name.
+  - name: step-certificates-certs
+    options:
+      disableNameSuffixHash: true
+      annotations:
+        reflector.v1.k8s.emberstack.com/reflects: "step-ca/step-certificates-certs"
 
 # Structural exception (skill "Image versions", cross-renderer category): the
 # bootstrap Job is a Kustomize-rendered resource that must run the SAME openbao

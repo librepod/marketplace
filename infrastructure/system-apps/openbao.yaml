@@ -23,6 +23,8 @@ spec:
     - name: storage
     - name: traefik
     - name: step-issuer
+    # SSOClient CR + Secret need the CRD/controller to exist first
+    - name: casdoor-sso-controller
   interval: 1h
   retryInterval: 2m
   # ≥ the bootstrap Job's activeDeadlineSeconds (900s): with wait:true the

@@ -49,7 +49,34 @@ idempotently:
      **read** `apps/*`
    - `marketplace-ui-write-apps` ← role `marketplace-ui`
      (SA `marketplace-ui`, ns `marketplace-ui`): **create/update** `apps/*`
-5. enables the **file audit device** at `/openbao/audit/audit.log`
+5. enables and configures the **OIDC auth method** (SSO — see below)
+6. enables the **file audit device** at `/openbao/audit/audit.log`
+
+## SSO login (Casdoor OIDC)
+
+The UI (and `bao login -method=oidc`) authenticate via the platform IdP:
+
+- `overlays/librepod/ssoclient.yaml` declares the `openbao` Casdoor client;
+  the casdoor-sso-controller writes its credentials into
+  `Secret/openbao-sso` (nothing committed).
+- The bootstrap Job consumes that Secret and configures `auth/oidc`: the
+  `admin-sso` role maps every Casdoor login to the **`admin`** policy —
+  platform model: each SSO user is a trusted cluster admin (same as wg-easy,
+  immich, …). Redirect URIs: the UI callback
+  (`https://openbao.<BASE_DOMAIN>/ui/vault/auth/oidc/oidc/callback`) and the
+  CLI loopback (`http://localhost:8250/oidc/callback`); they must match the
+  SSOClient CR exactly.
+- Server and Job trust the LibrePod root CA (`SSL_CERT_FILE`) for calls to
+  `https://id.<BASE_DOMAIN>`.
+- To log in: open the UI → sign in with method **OIDC** → the default role
+  `admin-sso` applies (no role needs to be entered).
+
+**Secret rotation**: rotating the client secret
+(`kubectl annotate ssoclient openbao-sso -n openbao
+marketplace.librepod.org/rotate-secret=true --overwrite`) updates the
+Secret, but OpenBao keeps the old value until the bootstrap Job re-runs —
+delete it (`kubectl delete job openbao-bootstrap -n openbao`) and let Flux
+recreate, then re-login.
 
 ## Audit logs (10Gi, 30 day retention)
 

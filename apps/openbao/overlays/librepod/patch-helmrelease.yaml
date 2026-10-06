@@ -25,3 +25,30 @@ spec:
         storageClass: nfs-client
       auditStorage:
         storageClass: nfs-client
+      # SSO (OIDC login via Casdoor): trust the private root CA for the
+      # server-side calls to https://id.<BASE_DOMAIN> (discovery, token
+      # exchange). Mounted directly with SSL_CERT_FILE pointing at it — no
+      # bundle-merge init container, because the server's ONLY outbound TLS
+      # is to the private IdP. If it ever verifies public endpoints, switch
+      # to the merge pattern (docs/sso-app-author-guide.md §4).
+      extraEnvironmentVars:
+        SSL_CERT_FILE: /openbao/ca/root_ca.crt
+      # HelmRelease values patches REPLACE lists (values is opaque to
+      # strategic merge): the seal volume entries below are copies of
+      # base/helmrelease.yaml — keep both sides in sync when editing either.
+      volumes:
+        - name: seal
+          persistentVolumeClaim:
+            claimName: openbao-seal
+        - name: root-ca-cert
+          configMap:
+            name: step-certificates-certs
+            items:
+              - key: root_ca.crt
+                path: root_ca.crt
+      volumeMounts:
+        - name: seal
+          mountPath: /openbao/seal
+        - name: root-ca-cert
+          mountPath: /openbao/ca
+          readOnly: true

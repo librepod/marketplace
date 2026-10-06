@@ -10,6 +10,17 @@ credentials the controller produced at runtime.
 This guide shows how to add SSO to a new app. `open-webui` is the reference
 implementation — see `apps/open-webui/overlays/librepod/`.
 
+> **Apps that configure OIDC via API instead of env vars** (openbao): some
+> apps can't read OIDC config from the environment — their auth method is
+> configured through their own API after boot. Pattern: mount the controller's
+> `Secret` (and the CA ConfigMap) as **files into a post-deploy Job** and have
+> it run the app's config commands. Reference: `apps/openbao/components/bootstrap/`
+> (`job.yaml` mounts, `bootstrap.sh` runs `bao write auth/oidc/config`). The
+> non-optional Secret volume makes the Job wait for the controller; writing the
+> config typically triggers an immediate discovery fetch, so the **server**
+> needs the CA too — not just the Job (openbao: `SSL_CERT_FILE` +
+> `server.extraEnvironmentVars` in the HelmRelease).
+
 ## Prerequisite
 
 The `casdoor-sso` system app must be deployed and healthy:
