@@ -97,7 +97,10 @@ describe('InstalledService', () => {
     isSystem: ReturnType<typeof vi.fn>;
   };
   let mockLaunchUrlService: { resolve: ReturnType<typeof vi.fn> };
-  let mockOpenBao: { writeAppSettings: ReturnType<typeof vi.fn> };
+  let mockOpenBao: {
+    readAppSettings: ReturnType<typeof vi.fn>;
+    writeAppSettings: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     mockRepo = {
@@ -127,7 +130,10 @@ describe('InstalledService', () => {
 
     mockLaunchUrlService = { resolve: vi.fn().mockResolvedValue({}) };
 
-    mockOpenBao = { writeAppSettings: vi.fn(async () => undefined) };
+    mockOpenBao = {
+      readAppSettings: vi.fn(async () => null),
+      writeAppSettings: vi.fn(async () => undefined),
+    };
 
     service = new InstalledService(
       mockCatalogService as unknown as CatalogService,
@@ -437,6 +443,51 @@ describe('InstalledService', () => {
       mockRepo.listInstalledApps.mockResolvedValue(['renovate']);
 
       await expect(service.install('renovate', {})).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('reads the stored entry first and feeds it to the resolver (a reinstall keeps generated values)', async () => {
+      mockCatalogService.findOne.mockReturnValue({
+        ...settingsApp,
+        settings: { items: [{ name: 'DB_PASSWORD', generate: { type: 'random', length: 40 } }] },
+      });
+      mockOpenBao.readAppSettings.mockResolvedValue({ DB_PASSWORD: 'kept-from-last-install' });
+
+      await service.install('renovate');
+
+      expect(mockOpenBao.readAppSettings).toHaveBeenCalledWith('renovate');
+      expect(mockOpenBao.writeAppSettings).toHaveBeenCalledWith('renovate', {
+        DB_PASSWORD: 'kept-from-last-install',
+      });
+    });
+
+    it('reads before writing and before the Gogs commit', async () => {
+      const calls: string[] = [];
+      mockOpenBao.readAppSettings.mockImplementation(async () => {
+        calls.push('read');
+        return null;
+      });
+      mockOpenBao.writeAppSettings.mockImplementation(async () => {
+        calls.push('openbao');
+      });
+      mockRepo.writeApp.mockImplementation(async () => {
+        calls.push('gogs');
+      });
+
+      await service.install('renovate', { settings: { RENOVATE_TOKEN: 's3cr3t' } });
+
+      expect(calls).toEqual(['read', 'openbao', 'gogs']);
+    });
+
+    it('returns 503 and commits nothing when reading the stored entry fails', async () => {
+      mockOpenBao.readAppSettings.mockRejectedValue(
+        new OpenBaoUnavailableError('read apps/renovate failed: HTTP 503'),
+      );
+
+      await expect(
+        service.install('renovate', { settings: { RENOVATE_TOKEN: 's3cr3t' } }),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(mockOpenBao.writeAppSettings).not.toHaveBeenCalled();
+      expect(mockRepo.writeApp).not.toHaveBeenCalled();
     });
   });
 
