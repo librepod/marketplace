@@ -132,11 +132,12 @@ apps:
       items:
         - name: RENOVATE_TOKEN
           label: Access token
-          description: Personal access token for your Git platform
+          description: Personal Access Token for your Git platform (repo, pull-request and issues scopes).
           sensitive: true
           required: true
         - name: RENOVATE_GITHUB_COM_TOKEN
           label: GitHub.com token
+          description: PAT for github.com to fetch changelogs when your platform is NOT github.com. Leave empty when targeting github.com.
           sensitive: true
     templates:
       source: |

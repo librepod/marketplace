@@ -24,6 +24,6 @@ configMapGenerator:
 resources:
   - namespace.yaml
   - configmap.yaml
-  - secret.yaml
+  - externalsecret.yaml
   - pvc.yaml
   - cronjob.yaml
