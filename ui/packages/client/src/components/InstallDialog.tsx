@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from "react"
 import { Eye, EyeOff, Loader2, Plus, Trash2 } from "lucide-react"
-import type { AppSettingItem, CatalogApp, InstallRequest } from "@librepod/shared"
+import type { AppSettingItem, AppSettings, CatalogApp, InstallRequest } from "@librepod/shared"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
@@ -26,6 +26,17 @@ interface CustomRow {
 export function humanize(name: string): string {
   const words = name.toLowerCase().replace(/_+/g, " ").trim()
   return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+/**
+ * Whether the install dialog has anything to ask: at least one question item (generated
+ * ones are never asked) or the custom-variables offer. Generated-only apps stay one-click —
+ * an empty dialog would only add a pointless step.
+ */
+export function hasInstallQuestions(settings?: AppSettings): boolean {
+  if (!settings) return false
+  if (settings.allowCustom) return true
+  return (settings.items ?? []).some((item) => !item.generate)
 }
 
 /** A bare YAML `default:` is null: no default, never the text "null". */

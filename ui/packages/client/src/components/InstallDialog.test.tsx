@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { CatalogApp } from '@librepod/shared'
 import { toast } from 'sonner'
 import { useInstallApp } from '@/hooks/useInstallApp'
-import { InstallDialog, humanize } from './InstallDialog'
+import { InstallDialog, hasInstallQuestions, humanize } from './InstallDialog'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
@@ -70,6 +70,19 @@ beforeEach(() => {
 describe('humanize', () => {
   it('turns an env var name into a label', () => {
     expect(humanize('RENOVATE_GITHUB_COM_TOKEN')).toBe('Renovate github com token')
+  })
+})
+
+describe('hasInstallQuestions', () => {
+  const generatedOnly = { items: [{ name: 'DB_PASSWORD', generate: { length: 40 } }] }
+  it('is false when there is nothing to ask: no settings, generated-only items, or an empty list', () => {
+    expect(hasInstallQuestions(undefined)).toBe(false)
+    expect(hasInstallQuestions(generatedOnly)).toBe(false)
+    expect(hasInstallQuestions({})).toBe(false)
+  })
+  it('is true when a question exists (even next to generated ones) or custom vars are offered', () => {
+    expect(hasInstallQuestions({ items: [generatedOnly.items[0], { name: 'TOKEN', required: true }] })).toBe(true)
+    expect(hasInstallQuestions({ allowCustom: true, ...generatedOnly })).toBe(true)
   })
 })
 
