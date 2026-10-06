@@ -26,7 +26,7 @@ kustomize build --enable-helm apps/seafile/overlays/librepod | kubectl apply -f 
 | Credential | Default Value | Purpose | Location |
 |------------|---------------|---------|----------|
 | Admin Email | admin@libre.pod | Seafile admin account | `INIT_SEAFILE_ADMIN_EMAIL` |
-| Admin Password | changeme_admin_password | Seafile admin login | `INIT_SEAFILE_ADMIN_PASSWORD` |
+| Admin Password | generated at install (stored in the OpenBao entry `apps/seafile`) | Seafile admin login | `INIT_SEAFILE_ADMIN_PASSWORD` |
 
 ### Database Credentials
 

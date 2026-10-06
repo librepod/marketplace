@@ -209,17 +209,33 @@ Degradation is layered, and the distinction matters:
 ### Install flow (`InstalledService.install`, behind an `async-mutex`)
 1. Validate app exists in catalog and has `templates`.
 2. Refuse if already in the installed set.
-3. **Apps with `settings` only:** `resolveSettings` (`install-settings.ts`) turns the body into
-   a flat key/value map (answer → question `default` → omitted) and validates it → `400
-   { message, errors: [{ name, message }] }`. The map is written to OpenBao `apps/<name>`
-   (`OpenBaoClient`, whole entry, a new KV v2 version) **before** the Gogs commit → `503` if
-   OpenBao is unset/unreachable/sealed/refuses auth. Settings never enter the Gogs repo or
-   `${VAR}` substitution; apps without `settings` never call OpenBao. Uninstall never touches
-   OpenBao (the entry is kept, like NFS data).
-4. Build a `vars` map: `BASE_DOMAIN` from config + one generated secret per
-   `secrets[].generate` (crypto hex).
-5. Render `apps/<name>/{source,release,secret,kustomization}.yaml` (via `${VAR}` regex
-   substitution) and write them all as **one commit** (`UserAppsRepoService.writeApp`).
+3. **Apps with `settings` only — read → resolve → write:** the stored entry is read from
+   OpenBao first, then `resolveSettings` (`install-settings.ts`) resolves it against the body
+   and validates → `400 { message, errors: [{ name, message }] }`. Per question: the answer →
+   the question's `default` → left unset. A **generated item** (`generate:`) is never asked —
+   the install dialog hides it and it resolves **server-side**: the stored value → the
+   default → a fresh random, so a reinstall regenerates nothing (NFS volumes survive, so a
+   DB password must too) and a catalog default never clobbers a value running data depends on.
+   The resolved map is written to OpenBao `apps/<name>` (`OpenBaoClient`, whole entry, a new
+   KV v2 version) **before** the Gogs commit → `503` if OpenBao is unset/unreachable/sealed/
+   refuses auth. Settings never enter the Gogs repo or `${VAR}` substitution; apps without
+   `settings` never call OpenBao. Uninstall never touches OpenBao (the entry is kept, like
+   NFS data).
+4. Build a `vars` map: `BASE_DOMAIN` from config + one generated value per legacy
+   `secrets[].generate` (crypto hex). **Legacy path** — no shipped app declares `secrets[]`
+   any more (settings replaced it); the renderer keeps it only so an old catalog template
+   still installs.
+5. Render `apps/<name>/{source,release,kustomization}.yaml` (via `${VAR}` regex substitution;
+   `secret.yaml` too when a legacy template declares one) and write them all as **one commit**
+   (`UserAppsRepoService.writeApp`).
+
+**Legacy secret mirror** (`LegacySecretMirror`, decision #12 in `../docs/DECISIONS_LOG.md`):
+apps installed before settings moved to OpenBao keep their real secret values only in the
+git-committed `apps/<name>/secret.yaml`, which a migrated app's ExternalSecret never reads.
+The mirror fills **absent** keys of the OpenBao entry from those files — existing OpenBao
+values always win — at three triggers: boot (fire-and-forget), hourly, and synchronously
+during uninstall BEFORE the Gogs directory is deleted (after that the values exist nowhere,
+and a reinstall on surviving NFS data must reuse them).
 
 **"Pitfall 3" is retired.** It was a write-ORDERING rule — app files before the root
 `kustomization.yaml`, so Flux never saw an entry naming a directory that did not exist yet.
