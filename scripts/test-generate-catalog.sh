@@ -142,3 +142,17 @@ node -e '
   }
 ' "$JS_YAML" "$TMP/catalog.yaml" || fail "paragraph break in a settings description was lost"
 echo "PASS test 4"
+
+echo "== test 5: a params block in metadata.yaml is ignored (params are gone from the catalog) =="
+sed -i 's/^  dependencies: \[\]/  params:\n    required:\n      - name: BASE_DOMAIN\n        description: Base domain\n        type: string\n        example: example.com\n\n  dependencies: []/' \
+  "$TMP/apps/demo/metadata.yaml"
+bash "$TMP/scripts/generate-catalog.sh" >/dev/null || fail "generator exited non-zero"
+node -e '
+  const fs = require("fs");
+  const yaml = require(process.argv[1]);
+  const file = process.argv[2];
+  const cat = yaml.load(fs.readFileSync(file, "utf8"));
+  if ("params" in cat.apps[0]) process.exit(1);
+  if (fs.readFileSync(file, "utf8").includes("params")) process.exit(2);
+' "$JS_YAML" "$TMP/catalog.yaml" || fail "params leaked into catalog.yaml"
+echo "PASS test 5"
