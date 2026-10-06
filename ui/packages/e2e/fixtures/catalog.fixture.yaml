@@ -129,6 +129,14 @@ apps:
           label: GitHub.com token
           description: PAT for github.com to fetch changelogs when your platform is NOT github.com. Leave empty when targeting github.com.
           sensitive: true
+        # Fixture-local generated item (no real app ships this name): the dialog
+        # must hide it and the installer must resolve it server-side into the
+        # OpenBao entry (install-settings.spec.ts asserts both).
+        - name: E2E_FIXTURE_CACHE_KEY
+          label: Fixture cache key
+          description: Machine-generated at install time; the dialog never asks for it.
+          generate:
+            length: 32
     templates:
       source: |
         apiVersion: source.toolkit.fluxcd.io/v1

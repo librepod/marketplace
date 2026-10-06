@@ -1,7 +1,9 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
+import { spawnSync } from "node:child_process";
 import { AppDetailPage } from "../../support/pages/AppDetailPage";
 
 type App = { name: string; displayName: string; installedStatus?: string };
+type SettingItem = { name: string; label?: string; required?: boolean; generate?: { length: number } };
 
 // Picks the app to install: LIBREPOD_E2E_APP override, else the first user-facing app.
 // /api/apps returns a BARE CatalogApp[] (not { apps: [...] }) — see ui/CLAUDE.md.
@@ -15,6 +17,30 @@ async function pickApp(request: APIRequestContext): Promise<string> {
 // .installedStatus directly, not body.apps[0].installedStatus.
 async function getStatus(request: APIRequestContext, name: string): Promise<string | undefined> {
   return (await (await request.get(`/api/apps/${name}`)).json()).installedStatus;
+}
+
+// Mirrors the client's humanize(): the label the dialog shows when the item has none.
+const questionLabel = (q: SettingItem): string =>
+  q.label ?? q.name.toLowerCase().replace(/_+/g, " ").replace(/^./, (c) => c.toUpperCase());
+
+// Advisory cluster checks (kubectl against the e2e cluster only — run-tier2.sh
+// exports an isolated KUBECONFIG; guarded below so a bare config invocation
+// without the orchestrator never touches an ambient cluster).
+function externalSecretExists(name: string): boolean {
+  return (
+    spawnSync("kubectl", ["get", "externalsecret", `${name}-settings`, "-n", name, "--no-headers"], {
+      encoding: "utf8",
+    }).status === 0
+  );
+}
+
+function externalSecretReady(name: string): boolean {
+  const r = spawnSync("kubectl", ["get", "externalsecret", `${name}-settings`, "-n", name, "-o", "json"], {
+    encoding: "utf8",
+  });
+  if (r.status !== 0) return false;
+  const es = JSON.parse(r.stdout) as { status?: { conditions?: { type?: string; status?: string }[] } };
+  return (es.status?.conditions ?? []).some((c) => c.type === "Ready" && c.status === "True");
 }
 
 // These three tests share one cluster and run in file order (workers:1): the first
@@ -33,6 +59,16 @@ test.describe("cluster reconcile lifecycle (real Flux)", () => {
 
     test("install reconciles to Running", async ({ page, request }) => {
       const name = await pickApp(request);
+      // Post-migration every catalog app carries `settings`; apps with questions
+      // (or the custom-variables offer) open the dialog and the install POST only
+      // fires after it is submitted. Same predicate as the client's
+      // hasInstallQuestions(): allowCustom or at least one non-generated item.
+      const app = (await (await request.get(`/api/apps/${name}`)).json()) as {
+        settings?: { allowCustom?: boolean; items?: SettingItem[] };
+      };
+      const items = app.settings?.items ?? [];
+      const asksQuestions = !!app.settings?.allowCustom || items.some((i) => !i.generate);
+
       const detail = new AppDetailPage(page);
       await detail.open(name);
       await expect(detail.installButton()).toBeVisible();
@@ -46,6 +82,18 @@ test.describe("cluster reconcile lifecycle (real Flux)", () => {
         (r) => r.url().endsWith(`/api/apps/${name}/install`) && r.request().method() === "POST",
       );
       await detail.installButton().click();
+      if (asksQuestions) {
+        const dialog = detail.installDialog();
+        await expect(dialog).toBeVisible();
+        // Answer the required questions the way a user would (generated items are
+        // never rendered; optional ones stay unset), then submit.
+        for (const q of items) {
+          if (q.required && !q.generate) {
+            await dialog.getByLabel(questionLabel(q)).fill(`tier2-e2e-${q.name.toLowerCase()}`);
+          }
+        }
+        await dialog.getByRole("button", { name: "Install", exact: true }).click();
+      }
       const res = await installResponse;
       expect(
         res.status(),
@@ -59,6 +107,20 @@ test.describe("cluster reconcile lifecycle (real Flux)", () => {
         timeout: 300_000,
         intervals: [5_000],
       }).toBe("running");
+
+      // Migrated settings apps get their values from OpenBao via an ExternalSecret
+      // shipped in the app artifact (<name>-settings, key apps/<name>): at Running
+      // the sync must be Ready, or the pod runs without its settings. Advisory —
+      // skipped when the pinned artifact predates the migration (no ExternalSecret
+      // object yet, e.g. catalog updated before publish-apps republished) or when
+      // running without the orchestrator's isolated KUBECONFIG.
+      if (app.settings && process.env.KUBECONFIG && externalSecretExists(name)) {
+        await expect.poll(() => externalSecretReady(name), {
+          message: `${name}-settings ExternalSecret is Ready`,
+          timeout: 60_000,
+          intervals: [5_000],
+        }).toBe(true);
+      }
 
       await detail.open(name);
       await expect(detail.statusBadge()).toHaveText(/Running/);
