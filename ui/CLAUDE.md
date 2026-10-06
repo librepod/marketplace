@@ -342,7 +342,7 @@ Restart / Users) marked with `SoonTag`. All status dots read from the single
 | `OPENBAO_ADDR` | (empty) | settings store for install questions. Unset ⇒ installing an app that has `settings` returns 503; other apps are unaffected |
 | `OPENBAO_AUTH_MOUNT` | `kubernetes` | OpenBao Kubernetes auth mount |
 | `OPENBAO_AUTH_ROLE` | `marketplace-ui` | role the pod's ServiceAccount logs in as |
-| `OPENBAO_KV_MOUNT` | `secret` | KV v2 mount holding the `apps/<name>` entries |
+| `OPENBAO_KV_MOUNT` | `secret` | KV v2 mount holding one settings entry per app at `<name>` (cluster mount is `apps`, so `apps/<name>`) |
 | `OPENBAO_SA_TOKEN_PATH` | `/var/run/secrets/kubernetes.io/serviceaccount/token` | ServiceAccount JWT used for the login |
 | `OPENBAO_TOKEN` | (empty) | **test seam only** (Tier 1's dev-mode OpenBao): a static token that skips the Kubernetes login. Never set it in cluster manifests |
 | `KUBERNETES_SERVICE_HOST` | — | presence switches FluxStatusService to in-cluster config |

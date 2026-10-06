@@ -16,7 +16,7 @@ const PROXY = "http://proxy.lan:3128";
 
 /** The renovate entry as stored in OpenBao, or undefined when there is none. */
 async function storedSettings(request: APIRequestContext): Promise<Record<string, string> | undefined> {
-  const res = await request.get(`${OPENBAO}/v1/secret/data/apps/renovate`, {
+  const res = await request.get(`${OPENBAO}/v1/secret/data/renovate`, {
     headers: { "X-Vault-Token": OPENBAO_TOKEN },
   });
   if (res.status() === 404) return undefined;

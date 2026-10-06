@@ -65,7 +65,7 @@ describe('OpenBaoClient', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe(`${ADDR}/v1/secret/data/apps/demo`);
+    expect(url).toBe(`${ADDR}/v1/secret/data/demo`);
     expect(init.method).toBe('POST');
     expect(tokenHeader(init)).toBe('root');
     expect(JSON.parse(init.body as string)).toEqual({ data });
@@ -74,7 +74,7 @@ describe('OpenBaoClient', () => {
   it('uses the configured KV mount', async () => {
     fetchMock.mockResolvedValueOnce(writeOk());
     await staticClient({ OPENBAO_KV_MOUNT: 'kv' }).writeAppSettings('demo', { A: '1' });
-    expect(fetchMock.mock.calls[0][0]).toBe(`${ADDR}/v1/kv/data/apps/demo`);
+    expect(fetchMock.mock.calls[0][0]).toBe(`${ADDR}/v1/kv/data/demo`);
   });
 
   it('logs in with Kubernetes auth and writes with the client token', async () => {
@@ -231,7 +231,7 @@ describe('OpenBaoClient', () => {
     expect(stored).toEqual({ A: '1' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe(`${ADDR}/v1/secret/data/apps/demo`);
+    expect(url).toBe(`${ADDR}/v1/secret/data/demo`);
     expect(init.method).toBe('GET');
     expect(tokenHeader(init)).toBe('root');
   });
