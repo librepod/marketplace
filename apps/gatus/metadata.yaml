@@ -20,13 +20,6 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/gatus"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain (app will be at gatus.BASE_DOMAIN)"
-        type: string
-        example: "example.com"
-
   dependencies:
     required:
       - kind: IngressController

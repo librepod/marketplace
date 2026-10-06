@@ -18,13 +18,6 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/oauth2-proxy"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain for cluster (OAuth2 Proxy uses this for callbacks)"
-        type: string
-        example: "example.com"
-
   dependencies:
     required:
       - kind: IngressController

@@ -23,13 +23,6 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/openbao"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain (app will be at openbao.BASE_DOMAIN)"
-        type: string
-        example: "example.com"
-
   dependencies:
     required:
       - kind: IngressController
