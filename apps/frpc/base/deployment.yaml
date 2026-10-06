@@ -20,13 +20,15 @@ spec:
           ports:
             - name: admin
               containerPort: 7400
+          envFrom:
+            # Settings Secret: non-optional — pods wait (CreateContainerConfigError)
+            # until ESO syncs it from OpenBao.
+            - secretRef:
+                name: frpc-settings
           volumeMounts:
             - name: config
               mountPath: /etc/frp/frp.toml
               subPath: frp.toml
-            - name: auth
-              mountPath: /etc/frp/auth
-              readOnly: true
           livenessProbe:
             exec:
               command:
@@ -42,6 +44,3 @@ spec:
         - name: config
           configMap:
             name: frpc-config
-        - name: auth
-          secret:
-            secretName: frpc-auth
