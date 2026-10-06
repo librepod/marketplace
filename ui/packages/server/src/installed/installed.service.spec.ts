@@ -101,6 +101,7 @@ describe('InstalledService', () => {
     readAppSettings: ReturnType<typeof vi.fn>;
     writeAppSettings: ReturnType<typeof vi.fn>;
   };
+  let mockLegacyMirror: { snapshotApp: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     mockRepo = {
@@ -135,6 +136,8 @@ describe('InstalledService', () => {
       writeAppSettings: vi.fn(async () => undefined),
     };
 
+    mockLegacyMirror = { snapshotApp: vi.fn(async () => 0) };
+
     service = new InstalledService(
       mockCatalogService as unknown as CatalogService,
       mockRepo as unknown as UserAppsRepoService,
@@ -143,6 +146,7 @@ describe('InstalledService', () => {
       mockSystemAppsService as unknown as SystemAppsService,
       mockLaunchUrlService as unknown as import('./launch-url.service').LaunchUrlService,
       mockOpenBao as unknown as OpenBaoClient,
+      mockLegacyMirror as unknown as import('./legacy-secret-mirror').LegacySecretMirror,
     );
   });
 
@@ -519,6 +523,44 @@ describe('InstalledService', () => {
       mockRepo.listInstalledApps.mockResolvedValue([]);
 
       await expect(service.uninstall('vaultwarden')).rejects.toThrow();
+    });
+
+    it('snapshots legacy secrets BEFORE removeApp — after it the values exist nowhere', async () => {
+      mockRepo.listInstalledApps.mockResolvedValue(['vaultwarden']);
+      const calls: string[] = [];
+      mockLegacyMirror.snapshotApp.mockImplementation(async () => {
+        calls.push('mirror');
+        return 0;
+      });
+      mockRepo.removeApp.mockImplementation(async () => {
+        calls.push('remove');
+      });
+
+      await service.uninstall('vaultwarden');
+
+      // The ORDER is the whole point: removeApp deletes the Gogs files, and the
+      // legacy values are unrecoverable from that moment on.
+      expect(calls).toEqual(['mirror', 'remove']);
+      expect(mockLegacyMirror.snapshotApp).toHaveBeenCalledWith('vaultwarden');
+    });
+
+    it('a failing legacy snapshot is logged, not fatal — uninstall proceeds', async () => {
+      mockRepo.listInstalledApps.mockResolvedValue(['vaultwarden']);
+      mockLegacyMirror.snapshotApp.mockRejectedValue(new Error('bao down'));
+
+      await expect(service.uninstall('vaultwarden')).resolves.toEqual({
+        success: true,
+        message: 'Vaultwarden has been removed',
+      });
+      expect(mockRepo.removeApp).toHaveBeenCalledWith('vaultwarden');
+    });
+
+    it('install never calls the legacy mirror', async () => {
+      mockRepo.listInstalledApps.mockResolvedValue([]);
+
+      await service.install('vaultwarden');
+
+      expect(mockLegacyMirror.snapshotApp).not.toHaveBeenCalled();
     });
   });
 

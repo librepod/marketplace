@@ -133,6 +133,26 @@ export class UserAppsRepoService implements OnModuleInit {
     }
   }
 
+  /**
+   * Read one file out of an app's directory in the working copy, null when
+   * absent (or when no usable working copy exists). Same best-effort freshness
+   * as the other reads: callers that need the file (the legacy-secret mirror)
+   * are not user-facing, so a stale-but-true copy beats failing on an
+   * unreachable remote — and the uninstall path has just refreshed the copy
+   * anyway, via the listInstalledApps check that precedes it.
+   */
+  async readAppFile(app: string, file: string): Promise<string | null> {
+    return this.mutex.runExclusive(async () => {
+      const synced = await this.syncWorkingCopy(false);
+      if (!synced && !(await this.hasWorkingCopy())) return null;
+      try {
+        return await readFile(join(this.repoDir, 'apps', app, file), 'utf8');
+      } catch {
+        return null;
+      }
+    });
+  }
+
   async listInstalledApps(): Promise<string[]> {
     return this.mutex.runExclusive(() => this.listInstalledAppsLocked());
   }

@@ -17,6 +17,7 @@ import { SystemAppsService } from './system-apps.service';
 import { LaunchUrlService } from './launch-url.service';
 import { resolveSettings } from './install-settings';
 import { OpenBaoClient, OpenBaoMisconfiguredError, OpenBaoUnavailableError } from './openbao.client';
+import { LegacySecretMirror } from './legacy-secret-mirror';
 import type { CatalogApp, InstallResult } from '@librepod/shared';
 
 @Injectable()
@@ -32,6 +33,7 @@ export class InstalledService {
     private readonly systemApps: SystemAppsService,
     private readonly launchUrl: LaunchUrlService,
     private readonly openBao: OpenBaoClient,
+    private readonly legacyMirror: LegacySecretMirror,
   ) {}
 
   async enrich(apps: CatalogApp[]): Promise<CatalogApp[]> {
@@ -198,6 +200,14 @@ export class InstalledService {
       // 2. Check is installed
       const installed = await this.repo.listInstalledApps();
       if (!installed.includes(appName)) throw new ConflictException(`${app.displayName} is not installed`);
+
+      // Snapshot legacy secret values into OpenBao BEFORE deleting the Gogs
+      // files: after removeApp the values exist nowhere (the flux-system
+      // Secret is pruned with the repo path), and a reinstall on surviving
+      // NFS data must reuse them. Best-effort: a failure logs and proceeds.
+      await this.legacyMirror.snapshotApp(appName).catch((err: unknown) =>
+        this.logger.warn(`legacy secret snapshot failed for ${appName}: ${(err as Error).message}`),
+      );
 
       // 3. Delete the app's whole directory — one commit. Unlike the old
       // root-kustomization edit this really removes the files, so a later
