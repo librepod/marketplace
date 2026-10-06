@@ -219,8 +219,7 @@ Degradation is layered, and the distinction matters:
    The resolved map is written to OpenBao `apps/<name>` (`OpenBaoClient`, whole entry, a new
    KV v2 version) **before** the Gogs commit → `503` if OpenBao is unset/unreachable/sealed/
    refuses auth. Settings never enter the Gogs repo or `${VAR}` substitution; apps without
-   `settings` never call OpenBao. Uninstall never touches OpenBao (the entry is kept, like
-   NFS data).
+   `settings` never call OpenBao.
 4. Build a `vars` map: `BASE_DOMAIN` from config + one generated value per legacy
    `secrets[].generate` (crypto hex). **Legacy path** — no shipped app declares `secrets[]`
    any more (settings replaced it); the renderer keeps it only so an old catalog template
