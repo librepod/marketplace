@@ -7,4 +7,4 @@ spec:
   interval: 24h
   url: oci://registry-1.docker.io/casbin/casdoor-helm-charts
   ref:
-    tag: "3.106.0"
+    tag: "3.164.0"
