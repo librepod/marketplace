@@ -26,7 +26,7 @@ spec:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: seafile-secret
+                  name: seafile-settings
                   key: REDIS_PASSWORD
           ports:
             - name: redis

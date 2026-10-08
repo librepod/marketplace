@@ -30,12 +30,12 @@ spec:
             - name: SEAFILE_AI_SECRET_KEY
               valueFrom:
                 secretKeyRef:
-                  name: seafile-secret
+                  name: seafile-settings
                   key: JWT_PRIVATE_KEY
             - name: INIT_SEAFILE_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: seafile-secret
+                  name: seafile-settings
                   key: INIT_SEAFILE_ADMIN_PASSWORD
             - name: OAUTH_CLIENT_ID
               valueFrom:
@@ -51,7 +51,7 @@ spec:
             - configMapRef:
                 name: seafile
             - secretRef:
-                name: seafile-secret
+                name: seafile-settings
           lifecycle:
             postStart:
               exec:
