@@ -48,7 +48,16 @@ export class LaunchUrlService implements OnModuleInit {
       return cached.value;
     }
     const value = await this.computeResolution(appName);
-    this.cache.set(appName, { value, expiresAt: Date.now() + LAUNCH_URL_TTL_MS });
+    // Never cache a negative verdict: it is only "confident" for the instant it
+    // was read. While an install is in flight the app namespace doesn't exist
+    // yet, and the k8s list answers 200 with ZERO items (not an error) — so
+    // the rule below stamps launchable:false mid-install. Caching that for a
+    // full TTL would suppress the Open link for up to 30s AFTER the app
+    // reaches Running (seen in CI: install green, Open-link red on every
+    // retry). Stable verdicts ({} / {url}) stay cached.
+    if (value.launchable !== false) {
+      this.cache.set(appName, { value, expiresAt: Date.now() + LAUNCH_URL_TTL_MS });
+    }
     return value;
   }
 
