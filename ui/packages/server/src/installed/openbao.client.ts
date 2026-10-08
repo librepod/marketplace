@@ -42,7 +42,8 @@ interface CachedToken {
 }
 
 /**
- * The installer's view of OpenBao: a Kubernetes-auth login and one KV v2 write.
+ * The installer's view of OpenBao: a Kubernetes-auth login and one KV v2 entry
+ * read back before an install and rewritten by it.
  * Plain fetch, no SDK. Errors carry only the operation and the HTTP status — never
  * the values being written — so a secret cannot leak into a log line.
  *
@@ -72,6 +73,37 @@ export class OpenBaoClient {
       res = await this.post(url, { data }, { 'X-Vault-Token': await this.clientToken() });
     }
     if (!res.ok) throw failure(`write apps/${app}`, res.status);
+  }
+
+  /** The app's current settings entry, or null when it was never written. */
+  async readAppSettings(app: string): Promise<Record<string, string> | null> {
+    if (!this.addr) throw new OpenBaoMisconfiguredError('OPENBAO_ADDR is not set');
+    const mount = this.config.get<string>('OPENBAO_KV_MOUNT', 'secret');
+    const url = `${this.addr}/v1/${mount}/data/apps/${encodeURIComponent(app)}`;
+
+    let res = await this.get(url, { 'X-Vault-Token': await this.clientToken() });
+    if (res.status === 404) return null;
+    if (res.status === 403 && this.token) {
+      // The cached login token expired or was revoked early: log in again, once.
+      this.token = undefined;
+      res = await this.get(url, { 'X-Vault-Token': await this.clientToken() });
+      if (res.status === 404) return null;
+    }
+    if (!res.ok) throw failure(`read apps/${app}`, res.status);
+    const body = (await res.json()) as { data?: { data?: Record<string, string> } };
+    return body.data?.data ?? {};
+  }
+
+  private async get(url: string, headers: Record<string, string> = {}): Promise<Response> {
+    try {
+      return await fetch(url, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch (err) {
+      throw new OpenBaoUnavailableError(`OpenBao unreachable: ${(err as Error).message}`);
+    }
   }
 
   private async post(url: string, body: unknown, headers: Record<string, string> = {}): Promise<Response> {

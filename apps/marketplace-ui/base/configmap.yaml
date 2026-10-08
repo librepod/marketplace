@@ -22,3 +22,11 @@ data:
   CASDOOR_ENDPOINT: "https://id.${BASE_DOMAIN:=libre.pod}"
   CASDOOR_ORG_NAME: "librepod"
   CASDOOR_APP_NAME: "marketplace-ui"
+  # Settings store (install questions + generated secrets) — the OpenBao system
+  # app. Unset OPENBAO_ADDR would make every settings install 503. The KV mount
+  # is "apps" (NOT the client default "secret") — see the ClusterSecretStore.
+  # OPENBAO_AUTH_MOUNT/ROLE defaults (kubernetes / marketplace-ui) match the
+  # role the openbao bootstrap Job creates. Never set OPENBAO_TOKEN here — it
+  # is a Tier-1 test seam only.
+  OPENBAO_ADDR: "http://openbao.openbao.svc.cluster.local:8200"
+  OPENBAO_KV_MOUNT: "apps"

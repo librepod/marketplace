@@ -215,4 +215,59 @@ describe('OpenBaoClient', () => {
     expect((err as Error).message).toContain('HTTP 500');
     expect((err as Error).message).not.toContain('s3cr3t-value');
   });
+
+  it('refuses to read when OPENBAO_ADDR is not set', async () => {
+    await expect(new OpenBaoClient(configOf({})).readAppSettings('demo')).rejects.toBeInstanceOf(
+      OpenBaoMisconfiguredError,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('reads the entry back and unwraps the KV v2 envelope', async () => {
+    fetchMock.mockResolvedValueOnce(json({ data: { data: { A: '1' }, metadata: { version: 1 } } }));
+
+    const stored = await staticClient({ OPENBAO_ADDR: `${ADDR}/` }).readAppSettings('demo');
+
+    expect(stored).toEqual({ A: '1' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${ADDR}/v1/secret/data/apps/demo`);
+    expect(init.method).toBe('GET');
+    expect(tokenHeader(init)).toBe('root');
+  });
+
+  it('returns null when the entry was never written (404)', async () => {
+    fetchMock.mockResolvedValueOnce(json({ errors: [] }, 404));
+    await expect(staticClient().readAppSettings('demo')).resolves.toBeNull();
+  });
+
+  it('reports a read hitting a sealed OpenBao (503) as unavailable', async () => {
+    fetchMock.mockResolvedValueOnce(json({ errors: ['Vault is sealed'] }, 503));
+    await expect(staticClient().readAppSettings('demo')).rejects.toBeInstanceOf(OpenBaoUnavailableError);
+  });
+
+  it('logs in again once when a read is rejected with 403, then reads', async () => {
+    fetchMock
+      .mockResolvedValueOnce(loginOk('old'))
+      .mockResolvedValueOnce(json({ errors: ['permission denied'] }, 403))
+      .mockResolvedValueOnce(loginOk('new'))
+      .mockResolvedValueOnce(json({ data: { data: { A: '1' } } }));
+
+    const stored = await k8sClient().readAppSettings('demo');
+
+    expect(stored).toEqual({ A: '1' });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(tokenHeader(fetchMock.mock.calls[3][1] as RequestInit)).toBe('new');
+  });
+
+  it('returns null when the entry is missing even after a re-login (404 on the retry path)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(loginOk('old'))
+      .mockResolvedValueOnce(json({ errors: ['permission denied'] }, 403))
+      .mockResolvedValueOnce(loginOk('new'))
+      .mockResolvedValueOnce(json({ errors: [] }, 404));
+
+    await expect(k8sClient().readAppSettings('demo')).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
 });

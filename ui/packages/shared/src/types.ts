@@ -55,6 +55,13 @@ export interface AppSettingItem {
   required?: boolean;
   /** UI masking only — every value is stored the same way. */
   sensitive?: boolean;
+  /**
+   * Machine-generated secret (DB password, session key): never shown in the dialog.
+   * Resolution: the answer → the value already stored in the OpenBao entry (a reinstall
+   * keeps the running secret) → `default` → fresh random of this length. Keep legacy
+   * lengths verbatim.
+   */
+  generate?: { length: number };
 }
 
 export interface AppSettings {

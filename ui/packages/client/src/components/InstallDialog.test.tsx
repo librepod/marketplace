@@ -160,6 +160,22 @@ describe('InstallDialog', () => {
     expect(sentBody(fetchSpy).settings.DRY_RUN).toBe('false')
   })
 
+  it('hides machine-generated items: the server makes those secrets, the dialog never asks', () => {
+    renderDialog({
+      ...app,
+      settings: {
+        items: [
+          { name: 'DB_PASSWORD', generate: { length: 40 } },
+          { name: 'TOKEN', required: true, sensitive: true },
+        ],
+      },
+    })
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByLabelText('Token')).toBeInTheDocument()
+    // Regex, not the exact string: an unrequired question's label carries an " (optional)" suffix.
+    expect(within(dialog).queryByLabelText(/Db password/)).toBeNull()
+  })
+
   it('hides custom variables when the app does not allow them', () => {
     renderDialog({ ...app, settings: { ...app.settings, allowCustom: false } })
     expect(screen.queryByText('Custom environment variables')).not.toBeInTheDocument()

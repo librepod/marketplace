@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import type { AppSettingItem, AppSettings, FieldError } from '@librepod/shared';
 
 /** Validation limits (spec §5.3). */
@@ -23,6 +24,9 @@ const CUSTOM_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /** A plain decimal, as apps parse it (strconv, int(), parseInt): no spaces, hex, exponent or "+". */
 const DECIMAL_NUMBER = /^-?\d+(\.\d+)?$/;
+
+/** A fresh machine secret: `length` hex characters, the same shape the legacy generator made. */
+const defaultRng = (length: number): string => crypto.randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);
 
 export type ResolveResult =
   | { ok: true; values: Record<string, string> }
@@ -51,10 +55,19 @@ function checkAnswer(item: AppSettingItem, value: string): string | undefined {
  * Turns an install request body into the exact key/value map written to OpenBao.
  * Per question: the user's answer → the question's `default` → omitted. A question left out
  * of the request gets its default; an empty answer means "leave it unset" (so a user can clear
- * a pre-filled optional question). Custom variables are added as given. Values are never
- * transformed: they are stored verbatim and never pass through `${VAR}` substitution.
+ * a pre-filled optional question). A generated item is never asked: with no answer it reuses
+ * the value already in the OpenBao entry (`stored` — a reinstall keeps the running secret),
+ * then the default, then a fresh random value (`rng`). Custom variables are added as given.
+ * The returned map replaces the stored entry whole, so stored keys claimed by no item are
+ * dropped. Values are never transformed: they are stored verbatim and never pass through
+ * `${VAR}` substitution.
  */
-export function resolveSettings(settings: AppSettings, body: unknown): ResolveResult {
+export function resolveSettings(
+  settings: AppSettings,
+  body: unknown,
+  stored?: Record<string, string> | null,
+  rng: (length: number) => string = defaultRng,
+): ResolveResult {
   const request = body ?? {};
   if (!isPlainObject(request)) {
     return { ok: false, errors: [{ name: 'settings', message: 'The request must be a JSON object' }] };
@@ -81,9 +94,25 @@ export function resolveSettings(settings: AppSettings, body: unknown): ResolveRe
       continue;
     }
     // `default:` with no value parses as null in YAML: treat it as no default, not "null".
-    const value = raw ?? (item.default === undefined || item.default === null ? '' : String(item.default));
+    const defaultValue = item.default === undefined || item.default === null ? undefined : String(item.default);
+    // A generated item is never asked (the dialog hides it): with no answer it reuses the
+    // value already stored in the OpenBao entry — a reinstall keeps the running secret —
+    // then the default, then a fresh random value. An empty answer generates too: "clearing"
+    // a machine secret means making a new one. `gen` is a local so the `!== undefined` check
+    // keeps narrowing it down to the `rng` call.
+    const gen = item.generate;
+    const generated = (raw === undefined || raw === '') && gen !== undefined;
+    const value = generated
+      ? (stored?.[item.name] ?? defaultValue ?? rng(gen.length))
+      : (raw ?? defaultValue ?? '');
     if (value === '') {
       if (item.required) errors.push({ name: item.name, message: 'Required' });
+      continue;
+    }
+    // A generated value is machine-made, not a human answer: it is only checked when the item
+    // also declares type/options constraints, which random text cannot satisfy.
+    if (generated && !item.type && !item.options) {
+      values[item.name] = value;
       continue;
     }
     const problem = checkAnswer(item, value);

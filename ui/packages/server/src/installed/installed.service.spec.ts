@@ -97,7 +97,11 @@ describe('InstalledService', () => {
     isSystem: ReturnType<typeof vi.fn>;
   };
   let mockLaunchUrlService: { resolve: ReturnType<typeof vi.fn> };
-  let mockOpenBao: { writeAppSettings: ReturnType<typeof vi.fn> };
+  let mockOpenBao: {
+    readAppSettings: ReturnType<typeof vi.fn>;
+    writeAppSettings: ReturnType<typeof vi.fn>;
+  };
+  let mockLegacyMirror: { snapshotApp: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     mockRepo = {
@@ -127,7 +131,12 @@ describe('InstalledService', () => {
 
     mockLaunchUrlService = { resolve: vi.fn().mockResolvedValue({}) };
 
-    mockOpenBao = { writeAppSettings: vi.fn(async () => undefined) };
+    mockOpenBao = {
+      readAppSettings: vi.fn(async () => null),
+      writeAppSettings: vi.fn(async () => undefined),
+    };
+
+    mockLegacyMirror = { snapshotApp: vi.fn(async () => 0) };
 
     service = new InstalledService(
       mockCatalogService as unknown as CatalogService,
@@ -137,6 +146,7 @@ describe('InstalledService', () => {
       mockSystemAppsService as unknown as SystemAppsService,
       mockLaunchUrlService as unknown as import('./launch-url.service').LaunchUrlService,
       mockOpenBao as unknown as OpenBaoClient,
+      mockLegacyMirror as unknown as import('./legacy-secret-mirror').LegacySecretMirror,
     );
   });
 
@@ -438,6 +448,51 @@ describe('InstalledService', () => {
 
       await expect(service.install('renovate', {})).rejects.toBeInstanceOf(ConflictException);
     });
+
+    it('reads the stored entry first and feeds it to the resolver (a reinstall keeps generated values)', async () => {
+      mockCatalogService.findOne.mockReturnValue({
+        ...settingsApp,
+        settings: { items: [{ name: 'DB_PASSWORD', generate: { type: 'random', length: 40 } }] },
+      });
+      mockOpenBao.readAppSettings.mockResolvedValue({ DB_PASSWORD: 'kept-from-last-install' });
+
+      await service.install('renovate');
+
+      expect(mockOpenBao.readAppSettings).toHaveBeenCalledWith('renovate');
+      expect(mockOpenBao.writeAppSettings).toHaveBeenCalledWith('renovate', {
+        DB_PASSWORD: 'kept-from-last-install',
+      });
+    });
+
+    it('reads before writing and before the Gogs commit', async () => {
+      const calls: string[] = [];
+      mockOpenBao.readAppSettings.mockImplementation(async () => {
+        calls.push('read');
+        return null;
+      });
+      mockOpenBao.writeAppSettings.mockImplementation(async () => {
+        calls.push('openbao');
+      });
+      mockRepo.writeApp.mockImplementation(async () => {
+        calls.push('gogs');
+      });
+
+      await service.install('renovate', { settings: { RENOVATE_TOKEN: 's3cr3t' } });
+
+      expect(calls).toEqual(['read', 'openbao', 'gogs']);
+    });
+
+    it('returns 503 and commits nothing when reading the stored entry fails', async () => {
+      mockOpenBao.readAppSettings.mockRejectedValue(
+        new OpenBaoUnavailableError('read apps/renovate failed: HTTP 503'),
+      );
+
+      await expect(
+        service.install('renovate', { settings: { RENOVATE_TOKEN: 's3cr3t' } }),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(mockOpenBao.writeAppSettings).not.toHaveBeenCalled();
+      expect(mockRepo.writeApp).not.toHaveBeenCalled();
+    });
   });
 
   it('apps without settings never touch OpenBao, even when a body is sent', async () => {
@@ -468,6 +523,44 @@ describe('InstalledService', () => {
       mockRepo.listInstalledApps.mockResolvedValue([]);
 
       await expect(service.uninstall('vaultwarden')).rejects.toThrow();
+    });
+
+    it('snapshots legacy secrets BEFORE removeApp — after it the values exist nowhere', async () => {
+      mockRepo.listInstalledApps.mockResolvedValue(['vaultwarden']);
+      const calls: string[] = [];
+      mockLegacyMirror.snapshotApp.mockImplementation(async () => {
+        calls.push('mirror');
+        return 0;
+      });
+      mockRepo.removeApp.mockImplementation(async () => {
+        calls.push('remove');
+      });
+
+      await service.uninstall('vaultwarden');
+
+      // The ORDER is the whole point: removeApp deletes the Gogs files, and the
+      // legacy values are unrecoverable from that moment on.
+      expect(calls).toEqual(['mirror', 'remove']);
+      expect(mockLegacyMirror.snapshotApp).toHaveBeenCalledWith('vaultwarden');
+    });
+
+    it('a failing legacy snapshot is logged, not fatal — uninstall proceeds', async () => {
+      mockRepo.listInstalledApps.mockResolvedValue(['vaultwarden']);
+      mockLegacyMirror.snapshotApp.mockRejectedValue(new Error('bao down'));
+
+      await expect(service.uninstall('vaultwarden')).resolves.toEqual({
+        success: true,
+        message: 'Vaultwarden has been removed',
+      });
+      expect(mockRepo.removeApp).toHaveBeenCalledWith('vaultwarden');
+    });
+
+    it('install never calls the legacy mirror', async () => {
+      mockRepo.listInstalledApps.mockResolvedValue([]);
+
+      await service.install('vaultwarden');
+
+      expect(mockLegacyMirror.snapshotApp).not.toHaveBeenCalled();
     });
   });
 
