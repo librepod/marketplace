@@ -49,8 +49,8 @@ spec:
               value: /etc/ssl/certs/ca-certificates.crt
       volumes:
         - name: root-ca-cert
-          configMap:
-            name: step-certificates-certs
+          secret:
+            secretName: step-certificates-certs
             items:
               - key: root_ca.crt
                 path: root_ca.crt

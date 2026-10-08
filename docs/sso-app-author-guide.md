@@ -196,31 +196,45 @@ the app's TLS stack rejects it:
 - Python `requests`: `SSLCertVerificationError`
 
 Every SSO app therefore merges the LibrePod root CA into its trust bundle. The
-wiring lives in the overlay and has two parts: **(1)** replicate the CA into the
+wiring lives in the overlay and has two parts: **(1)** sync the CA into the
 app namespace, and **(2)** fuse it into the pod's trust bundle and point the app
 at it.
 
-### (1) Replicate the CA into the namespace (Reflector stub)
+### (1) Sync the CA into the namespace (ExternalSecret)
 
-The CA lives in `ConfigMap/step-certificates-certs` in namespace `step-ca` and
-is **not** auto-distributed. Each app pulls a copy via a Reflector `reflects`
-stub in its overlay `kustomization.yaml` — identical for every app:
+The CA lives in `ConfigMap/step-certificates-certs` in namespace `step-ca`
+(the local source for step-issuer). The step-certificates bootstrap Job
+publishes it into the openbao KV store at `apps/step-ca`, and each app syncs
+a copy into its own namespace with an ExternalSecret — add
+`externalsecret-ca.yaml` to the overlay `resources` (identical for every
+app):
 
 ```yaml
-configMapGenerator:
-  - name: step-certificates-certs
-    options:
-      disableNameSuffixHash: true              # REQUIRED — see below
-      annotations:
-        reflector.v1.k8s.emberstack.com/reflects: "step-ca/step-certificates-certs"
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: step-certificates-certs
+spec:
+  refreshInterval: 10m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: openbao
+  target:
+    name: step-certificates-certs
+    creationPolicy: Owner
+  data:
+    - secretKey: root_ca.crt
+      remoteRef: { key: step-ca, property: root_ca.crt }
+    - secretKey: intermediate_ca.crt
+      remoteRef: { key: step-ca, property: intermediate_ca.crt }
 ```
 
-> `disableNameSuffixHash: true` is **required**, not cosmetic. The volume mounts
-> `configMap/step-certificates-certs` by this exact name, and Reflector keys its
-> replication off the `reflects` annotation on this exact object. A kustomize
-> hash suffix survives mechanically (kustomize rewrites the volume ref), but any
-> future edit to the generator re-hashes the object → prune + recreate an empty
-> stub → a window where the pod can't mount the CA → OIDC startup failure.
+The synced object is a **Secret** (ESO cannot create ConfigMaps) named
+`step-certificates-certs` — the CA-trust patches mount it by this exact name.
+If openbao is not Ready when the app deploys, the pod sits Pending until the
+Secret appears; ESO keeps reconciling and heals on its own. If it stalls, check
+`kubectl get externalsecret -n <ns>` (Ready condition) and the
+`ClusterSecretStore/openbao` in `system-configs`.
 
 ### (2) Fuse + mount the CA, and point the app at it
 
@@ -267,8 +281,8 @@ spec:
               readOnly: true
       volumes:
         - name: root-ca-cert
-          configMap:
-            name: step-certificates-certs
+          secret:
+            secretName: step-certificates-certs
             items:
               - { key: root_ca.crt, path: root_ca.crt }
               # - { key: intermediate_ca.crt, path: intermediate_ca.crt }   # if appended above
@@ -291,6 +305,7 @@ the values block from the closest existing app:
 | immich | bjw-s common v5 (`controllers.main`, `persistence.advancedMounts`) | `apps/immich/overlays/librepod/patch-helmrelease.yaml` |
 | open-webui | open-webui chart (`volumes`, `volumeMounts.initContainer`/`.container`, `extraInitContainers`) | `apps/open-webui/overlays/librepod/helmrelease.yaml` |
 | oauth2-proxy | oauth2-proxy chart (`extraVolumes`, `extraVolumeMounts`, `extraInitContainers`) | `apps/oauth2-proxy/overlays/librepod/helmrelease.yaml` |
+| gatus | gatus chart (`extraInitContainers`, `extraVolumeMounts[].existingSecret`) | `apps/gatus/overlays/librepod/patch-helmrelease.yaml` |
 
 The init-container *script* and the two volume names (`root-ca-cert`,
 `merged-ca-bundle`) are identical across all of them — only the surrounding
