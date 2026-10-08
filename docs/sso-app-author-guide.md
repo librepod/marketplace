@@ -224,10 +224,14 @@ spec:
     creationPolicy: Owner
   data:
     - secretKey: root_ca.crt
-      remoteRef: { key: step-ca, property: root_ca.crt }
+      remoteRef: { key: apps/step-ca, property: root_ca.crt }
     - secretKey: intermediate_ca.crt
-      remoteRef: { key: step-ca, property: intermediate_ca.crt }
+      remoteRef: { key: apps/step-ca, property: intermediate_ca.crt }
 ```
+
+> The `remoteRef.key` includes the KV engine prefix (`apps/…`) — the
+> ClusterSecretStore has no engine `path` configured, so keys are
+> engine-absolute.
 
 The synced object is a **Secret** (ESO cannot create ConfigMaps) named
 `step-certificates-certs` — the CA-trust patches mount it by this exact name.
