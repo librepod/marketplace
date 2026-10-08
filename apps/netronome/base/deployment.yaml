@@ -40,10 +40,13 @@ spec:
                 name: netronome-env
                 optional: true
           env:
+            # From the settings Secret (OpenBao via ESO); explicit keyRef — the
+            # env var name (NETRONOME__*) differs from the Secret key, so
+            # envFrom can't carry it. Beats envFrom, as before.
             - name: NETRONOME__SESSION_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: netronome-secret
+                  name: netronome-settings
                   key: SESSION_SECRET
             - name: NETRONOME__OIDC_CLIENT_ID
               valueFrom:
