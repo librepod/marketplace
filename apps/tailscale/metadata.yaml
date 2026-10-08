@@ -18,28 +18,6 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/tailscale"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: TS_HOSTNAME
-        description: "Hostname for this node on the tailnet (e.g. librepod, my-server)"
-        type: string
-        example: "librepod"
-
-      - name: TS_EXTRA_ARGS
-        description: >
-          Raw CLI flags passed to `tailscale up`. You provide everything:
-          --login-server, --accept-routes, --advertise-tags, etc.
-          Example: "--login-server=https://headscale.example.com --accept-routes"
-        type: string
-
-      - name: TS_AUTHKEY
-        description: "Tailscale auth key for automatic node authentication. Generate from your control server."
-        type: string
-
-      - name: TS_ROUTES
-        description: "Routes to advertise (comma-separated CIDRs, e.g. 10.42.0.0/16,10.43.0.0/16)"
-        type: string
-
   dependencies:
     required:
       - kind: StorageClass

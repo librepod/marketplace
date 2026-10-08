@@ -19,27 +19,6 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/happy-server"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain (app will be at happy-server.BASE_DOMAIN)"
-        type: string
-        example: "example.com"
-
-  secrets:
-    - name: HAPPY_SERVER_SECRET
-      description: "Happy server secret key"
-      required: false
-      generate:
-        type: random
-        length: 64
-    - name: HAPPY_SERVER_PASSWORD
-      description: "Admin password for happy server"
-      required: false
-      generate:
-        type: random
-        length: 32
-
   dependencies:
     required:
       - kind: IngressController
@@ -83,26 +62,9 @@ spec:
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
-          substituteFrom:
-            - kind: Secret
-              name: happy-server-config
-    secret: |
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: happy-server-config
-        namespace: flux-system
-        labels:
-          marketplace.io/managed: "true"
-          marketplace.io/app: "happy-server"
-      type: Opaque
-      stringData:
-        HAPPY_SERVER_SECRET: "${HAPPY_SERVER_SECRET}"
-        HAPPY_SERVER_PASSWORD: "${HAPPY_SERVER_PASSWORD}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization
       resources:
         - source.yaml
         - release.yaml
-        - secret.yaml

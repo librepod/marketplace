@@ -18,9 +18,6 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/flux-operator-mcp"
     path: ./overlays/librepod
 
-  params:
-    required: []
-
   dependencies: []
 
   templates:

@@ -18,13 +18,6 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/traefik"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain for the cluster (Traefik ingress uses this)"
-        type: string
-        example: "example.com"
-
   dependencies:
     required:
       - kind: CertificateIssuer

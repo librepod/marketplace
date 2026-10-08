@@ -18,13 +18,6 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/step-issuer"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain for cluster (used by certificate issuance)"
-        type: string
-        example: "example.com"
-
   dependencies:
     required:
       - kind: CertificateAuthority

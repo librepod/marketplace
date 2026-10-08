@@ -283,7 +283,7 @@ describe('resolveSettings', () => {
       expect(r.ok && r.values.DB_PASSWORD).toBe('chosen');
     });
 
-    it('a default wins over the stored value; stored wins over generation', () => {
+    it('the stored value wins over a default; the default wins when nothing is stored', () => {
       const s: AppSettings = { items: [{ name: 'A', default: 'def', generate: { length: 8 } }] };
       expect(resolveSettings(s, {}, { A: 'old' }, gen)).toMatchObject({ ok: true, values: { A: 'old' } });
       expect(resolveSettings(s, {}, null, gen)).toMatchObject({ ok: true, values: { A: 'def' } });

@@ -25,21 +25,6 @@ extract_template_block() {
   ' "$file"
 }
 
-# Extract a spec-level YAML section (params, secrets) from metadata.yaml
-# Outputs the section with 4-space indent
-extract_spec_section() {
-  local file="$1"
-  local section="$2"
-  awk -v section="  ${section}:" '
-    $0 == section { found=1; next }
-    found && /^  [a-z]/ && !/^  [a-z]*:/ { next }
-    found && /^  [a-z][a-zA-Z]*:/ { exit }
-    found && /^  -/ { print "    " $0; next }
-    found && /^    / { print "    " $0; next }
-    found && NF == 0 { print "" }
-  ' "$file"
-}
-
 # Start catalog
 cat > "$CATALOG_FILE" <<'HEADER'
 apiVersion: marketplace/v1
@@ -120,13 +105,6 @@ ENTRY
       echo "        kustomization: |" >> "$CATALOG_FILE"
       echo "$TMPL_KUSTOMIZATION" >> "$CATALOG_FILE"
     fi
-  fi
-
-  # Extract params section
-  PARAMS_CONTENT=$(awk '/^  params:/ { found=1; next } found && /^  [a-z]/ { exit } found && NF > 0 { print }' "$metadata_file")
-  if [ -n "$PARAMS_CONTENT" ]; then
-    echo "      params:" >> "$CATALOG_FILE"
-    echo "$PARAMS_CONTENT" | sed 's/^/        /' >> "$CATALOG_FILE"
   fi
 
   # Extract secrets section

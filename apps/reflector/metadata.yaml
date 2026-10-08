@@ -18,9 +18,6 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/reflector"
     path: ./overlays/librepod
 
-  params:
-    required: []
-
   dependencies: []
 
   templates:

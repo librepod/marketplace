@@ -103,6 +103,7 @@ apps/<app-name>/
 │   ├── ocirepository.yaml                 # Helm type only (or helmrepository.yaml for HTTP Helm repos)
 │   ├── helmrelease.yaml                   # Helm type only
 │   ├── pvc.yaml                           # If persistent storage needed
+│   ├── externalsecret.yaml                # Both types — pulls install settings from OpenBao (see [Settings](#settings-install-questions--generated-secrets))
 │   └── <app-name>.env                     # Environment variables
 └── overlays/
     └── librepod/
@@ -514,21 +515,24 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/<app-name>"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain (app will be at <app-name>.BASE_DOMAIN)"
-        type: string
-        example: "example.com"
-
-  # Only if the app needs user-supplied secrets:
-  secrets:
-    - name: SECRET_NAME
-      description: "What this secret is"
-      required: false
-      generate:
-        type: random
-        length: 64
+  # Install questions + machine-generated secrets (full contract in the
+  # [Settings](#settings-install-questions--generated-secrets) section below). Only questions the app actually asks
+  # live here — LibrePod's tuned defaults stay in the app's `.env`
+  # (one owner per variable, never both). `BASE_DOMAIN` is reserved.
+  settings:
+    # allowCustom: true             # Only when users may add free-form env vars (default: closed)
+    items:
+      - name: SETTING_NAME           # The env var / secret key the app consumes
+        label: "Human-readable label"
+        description: "What this setting controls"
+        type: string                 # string | boolean | number (optional; string if omitted)
+        default: "value"             # Optional pre-filled answer
+        required: false
+        sensitive: false             # UI masking only — storage is identical either way
+      - name: MACHINE_SECRET         # Generated at install, never shown in the dialog
+        sensitive: true
+        generate:
+          length: 64                  # Random hex of this length
 
   dependencies:
     required:
@@ -578,27 +582,12 @@ spec:
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
-          # Add substituteFrom if app has secrets:
-          # substituteFrom:
-          #   - kind: Secret
-          #     name: <app-name>-config
-    # Only if app has secrets:
-    # secret: |
-    #   apiVersion: v1
-    #   kind: Secret
-    #   metadata:
-    #     name: <app-name>-config
-    #     namespace: flux-system
-    #   type: Opaque
-    #   stringData:
-    #     SECRET_NAME: "${SECRET_NAME}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization
       resources:
         - source.yaml
         - release.yaml
-        # - secret.yaml   # Add if app has secrets
 ```
 
 > **Self-built apps (marketplace-ui, casdoor-sso-controller) have TWO versions.**
@@ -622,9 +611,9 @@ spec:
 
 **Key points about `metadata.yaml`:**
 - `templates.source` — the OCIRepository FluxCD creates to pull the app artifact
-- `templates.release` — the Kustomization FluxCD applies to install the app; `postBuild.substitute` injects `BASE_DOMAIN` and any secrets into the manifests at deploy time so that placeholders like `${BASE_DOMAIN:=libre.pod}` in `ingressroute.yaml` and `helmrelease.yaml` are resolved
-- `templates.secret` — only present when `spec.secrets` is defined; holds user-provided secret values that get injected via `postBuild.substituteFrom`
-- `templates.kustomization` — wires source + release (+ secret) together
+- `templates.release` — the Kustomization FluxCD applies to install the app; `postBuild.substitute` injects `BASE_DOMAIN` (the only substituted variable) so placeholders like `${BASE_DOMAIN:=libre.pod}` in `ingressroute.yaml` and `.env` are resolved. Settings and secrets do NOT ride substitution — they reach the app via OpenBao + ESO (see [Settings](#settings-install-questions--generated-secrets))
+- `templates.secret` + `spec.secrets` — **legacy** (see [Secrets](#secrets-legacy--no-new-apps)); never add them to a new app
+- `templates.kustomization` — wires source + release together
 - `dependsOn` in the release must list all apps from `dependencies.required`
 
 **Important — two different "kustomization" concepts:**
@@ -659,7 +648,7 @@ OIDC_CLIENT_SECRET=<secret>
 ```
 
 - **Do not** add oauth2-proxy middlewares to `ingressroute.yaml`
-- Add `OIDC_CLIENT_ID` to `params` and `OIDC_CLIENT_SECRET` to `secrets` in `metadata.yaml`
+- Declare the OIDC env vars the app needs in `metadata.yaml` — `OIDC_CLIENT_SECRET` as a `settings` item with `generate:` (it is a credential; see [Settings](#settings-install-questions--generated-secrets)), any non-secret OIDC var in the `.env`
 - Add `casdoor` to `dependsOn` and `dependencies` in `metadata.yaml`
 
 ### Case 2 — No native SSO (oauth2-proxy forward-auth)
@@ -680,7 +669,121 @@ Use the default `ingressroute.yaml` template with the oauth2-proxy middlewares (
 
 ---
 
-## Secrets
+## Settings (install questions + generated secrets)
+
+How an app receives credentials and user-chosen configuration. Declare them in `metadata.yaml` under `spec.settings`; at install time the marketplace resolves them and stores the result in **OpenBao**, and the app reads it back via an `ExternalSecret`. Nothing settings-related is committed to git and nothing passes through Flux `${VAR}` substitution.
+
+### The `settings` contract
+
+```yaml
+settings:
+  allowCustom: true         # Offer the free-form "custom environment variables" section.
+                            # Omitted = closed (the default, and right for most apps).
+  items:
+    - name: VAR_NAME        # The env var / secret key the app consumes
+      label: "..."          # Dialog title
+      description: "..."    # Dialog help text
+      type: string          # string | boolean | number (default string); options: → dropdown
+      default: "..."        # Pre-filled answer
+      required: false
+      sensitive: false      # UI masking only — storage is identical
+      generate:
+        length: 64          # Machine secret: random hex of this length, never shown in the dialog
+```
+
+**Resolution at install (server-side, `resolveSettings`):**
+
+- A **question** (`generate` unset): the user's answer → its `default` → left unset. The dialog hides nothing; `required: true` blocks an install that leaves it empty.
+- A **generated item** (`generate` set): never asked. The value already stored in the OpenBao entry → its `default` → a fresh random value. Stored beats default, so a catalog default can never clobber a value NFS data already depends on (the reinstall/NFS-password trap).
+- `allowCustom` values are stored alongside; they reach the app the same way (see delivery below), where they **override the app's `.env` defaults** — that is why the default is `false`: custom vars silently override LibrePod's tuned configuration.
+- The resolved map **replaces the whole OpenBao entry** and survives uninstall (the entry is kept, like the app's NFS data).
+
+**Rules:**
+
+- **`BASE_DOMAIN` is reserved** — never a question, never a custom variable. It flows to the manifests via `postBuild.substitute`.
+- **One owner per variable.** A variable is either a `.env` default or a `settings` item, never both: the `.env` is the tuned default the app ships with, a settings item is a deliberate install question or machine secret. Listing both means the settings value silently shadows the `.env` (the settings Secret is last in `envFrom`).
+- Apps whose items are **all `generate:`** and that do not set `allowCustom` remain **one-click** — the install dialog never opens, since generated items are hidden and there is nothing to ask.
+
+### Storage and delivery
+
+**Storage:** one OpenBao KV v2 entry per app — mount `apps`, key `<app>` (API path `/v1/apps/data/<app>`). marketplace-ui writes it during install, before the Gogs commit.
+
+**Delivery (every app, both types):** `base/externalsecret.yaml` — an `ExternalSecret` named `<app>-settings` targeting the Secret `<app>-settings` in the app's own namespace, via `ClusterSecretStore openbao` (which points at the `apps` mount). Standard form:
+
+```yaml
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: <app-name>-settings
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: openbao
+  target:
+    name: <app-name>-settings
+  dataFrom:
+    - extract:
+        # The full entry is <mount>/<name>; ESO accepts the mount-prefixed key
+        # and strips the leading store path.
+        key: apps/<app-name>
+```
+
+**Exception — one value, two keys:** when a single stored value must appear under two secret keys (seafile: `INIT_SEAFILE_MYSQL_ROOT_PASSWORD` must equal `MYSQL_ROOT_PASSWORD` or the app locks itself out of its own DB after an NFS rebound), `extract` cannot duplicate a key — use an explicit `data:` list whose entries share one `remoteRef.property` so the equality holds by construction.
+
+### Wiring the `<app>-settings` Secret into the app
+
+**Kustomize type — `envFrom`, settings Secret LAST:**
+
+```yaml
+envFrom:
+  - configMapRef:
+      name: <app-name>            # .env defaults
+  - secretRef:
+      name: <app-name>-settings   # LAST: its values override the .env defaults,
+                                  # and custom variables reach the app this way
+```
+
+The Secret is non-optional: the pod waits in `CreateContainerConfigError` until ESO has synced it. When an env var name must differ from the settings key, use an explicit `env:` `secretKeyRef` instead (e.g. the bundled postgres takes `POSTGRES_PASSWORD` from key `DB_PASSWORD`, shared with the app).
+
+**Helm type — `valuesFrom` with `targetPath`, and REMOVE the path from inline `values`:**
+
+```yaml
+valuesFrom:
+  - kind: Secret
+    name: <app-name>-settings
+    valuesKey: OLLAMA_ENABLED
+    targetPath: ollama.enabled
+```
+
+Inline `values` merge **after** `valuesFrom`, so a key present in both makes the inline value win and the question inert — delete the path from `values` when you add it here. Booleans are safe through `valuesFrom` (helm-controller YAML-parses each value). To also put every settings key in the container environment (so `allowCustom` variables reach a Helm app the way they reach a Kustomize app), add the Secret via the chart's `extraEnvFrom` (or equivalent) in the same patch.
+
+**Config-file-driven apps (frp-style):** reference the env var with the consumer's runtime templating — `{{ .Envs.VAR }}` in the config file — and load the Secret via `envFrom`. The committed config stays value-free; the process expands it at startup.
+
+**Shell scripts and probes:** reference credentials braceless — `$VAR`, never `${VAR}`. Flux `postBuild.substitute` rewrites `${VAR}` in all manifest content including ConfigMap data and blanks unknown variables; `$VAR` is invisible to it and the shell resolves it from `envFrom` at runtime. A ConfigMap'ed script that legitimately needs braced/parameter shell expansion must carry the `kustomize.toolkit.fluxcd.io/substitute: disabled` annotation.
+
+### Verifying a settings-consuming app
+
+Manual `kubectl` verification must **seed OpenBao first** — put at least the keys the app consumes into its entry, or the pod sits in `CreateContainerConfigError` until ESO syncs. Use the root token from `Secret openbao-credentials` (key `root-token`, namespace `openbao`) to exec `bao kv put` in the `openbao-0` pod:
+
+```bash
+TOKEN=$(kubectl --kubeconfig ~/.kube/librepod-dev.config -n openbao \
+  get secret openbao-credentials -o jsonpath='{.data.root-token}' | base64 -d)
+kubectl --kubeconfig ~/.kube/librepod-dev.config -n openbao exec openbao-0 -- \
+  env BAO_TOKEN="$TOKEN" bao kv put apps/<app-name> KEY1=value1 KEY2=value2
+```
+
+(Marketplace installs do this for you — this only matters for hand-applied test deployments.)
+
+### `converge-db-password` is unchanged
+
+The [Bundled PostgreSQL](#bundled-postgresql) rule stands: same container, same script, same failure it prevents. The only change is where `POSTGRES_PASSWORD` comes from — the app's settings Secret (key `DB_PASSWORD`), via `secretKeyRef`, instead of a substituted `${DB_PASSWORD}` secret.
+
+---
+
+## Secrets (legacy — no new apps)
+
+> **Legacy path.** The `spec.secrets[]` + `templates.secret` + `postBuild.substituteFrom` mechanism below is how apps received generated secrets **before settings moved to OpenBao**. It is documented because installed apps still carry it and marketplace-ui still renders a committed `secret.yaml` when a catalog template declares one — **never add it to a new app.** Declared-but-undelivered secrets rot silently: happy-server's committed secret template stopped being delivered, and nothing flagged the gap until the app misbehaved. New apps declare [Settings](#settings-install-questions--generated-secrets).
 
 Apps that need user-supplied secrets (API keys, admin passwords, etc.) declare a **plain `Secret` with `stringData` `${VAR}` placeholders** in `base/secret.yaml`. The real values are generated by the marketplace and injected by FluxCD's `postBuild.substituteFrom` at deploy time (see the `metadata.yaml` wiring below). The committed file holds only `${VAR}` placeholders — never real values.
 
@@ -741,7 +844,7 @@ postBuild:
       name: <app-name>-config
 ```
 
-Plus add `templates.secret`, whose `stringData` carries the same `${VAR}` placeholders — the marketplace fills it with the generated values, and Flux's `substituteFrom` reads them back to populate `base/secret.yaml` (see the `metadata.yaml` template above for the full shape).
+Plus add `templates.secret`, whose `stringData` carries the same `${VAR}` placeholders — the marketplace fills it with the generated values, and Flux's `substituteFrom` reads them back to populate `base/secret.yaml` (pre-migration `metadata.yaml` files carry the full shape).
 
 ---
 
@@ -854,11 +957,11 @@ For Helm-based apps, check the chart's values for `initContainers` or `extraInit
 
 When an app bundles its own database as a sibling Deployment (conventionally `components/postgres/` with its own `deployment.yaml`, `service.yaml`, `pvc.yaml`), two rules apply.
 
-### Rule 1 — `converge-db-password` container is REQUIRED with a generated password secret
+### Rule 1 — `converge-db-password` container is REQUIRED when the password comes from settings
 
-**The failure it prevents:** LibrePod's default storageClass is NFS, and deleting a PVC does not delete the underlying NFS folder — a same-named PVC rebinds to the old data on reinstall. The official postgres image consumes `POSTGRES_PASSWORD` **only at `initdb`** (first boot of an empty data dir). The marketplace generates a fresh `${DB_PASSWORD}` on every install. Result: a reinstalled app presents the new password to a data dir that still enforces the old one → auth failure (`P1000`-style) → permanent CrashLoopBackOff that no env change can fix.
+**The failure it prevents:** LibrePod's default storageClass is NFS, and deleting a PVC does not delete the underlying NFS folder — a same-named PVC rebinds to the old data on reinstall. The official postgres image consumes `POSTGRES_PASSWORD` **only at `initdb`** (first boot of an empty data dir). The password the app declares (`DB_PASSWORD` in its settings entry) can therefore differ from what the surviving data dir enforces — an explicit reinstall answer, or an install from before generated values were stored in OpenBao. Result: the app presents a password the old data dir rejects → auth failure (`P1000`-style) → permanent CrashLoopBackOff that no env change can fix.
 
-**The rule:** any Deployment running the official `postgres` image (or a derivative that inherits its entrypoint — e.g. Immich's `ghcr.io/immich-app/postgres`) whose `POSTGRES_PASSWORD` comes from a generated `${DB_PASSWORD}` secret MUST include this container in the same pod:
+**The rule:** any Deployment running the official `postgres` image (or a derivative that inherits its entrypoint — e.g. Immich's `ghcr.io/immich-app/postgres`) whose `POSTGRES_PASSWORD` comes from the app's settings Secret (key `DB_PASSWORD`, via `secretKeyRef`) MUST include this container in the same pod:
 
 ```yaml
 - name: converge-db-password
@@ -867,6 +970,12 @@ When an app bundles its own database as a sibling Deployment (conventionally `co
   envFrom:
     - configMapRef:
         name: <same ConfigMap the postgres container loads POSTGRES_* from>
+  env:
+    - name: POSTGRES_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: <app-name>-settings
+          key: DB_PASSWORD
   command: ["/bin/sh", "-c"]
   args:
     - |
@@ -939,7 +1048,7 @@ envFrom:
       name: <app-name>   # kustomize rewrites this to the generated <app-name>-<hash>
 ```
 
-Secrets use a **plain `Secret` with `stringData` `${VAR}`** (substituted by Flux `substituteFrom`), referenced via `secretRef`/`secretKeyRef` — never `secretGenerator` (Flux can't substitute its base64 output) and never a plain ConfigMap. A container MAY carry both: `envFrom` for the config ConfigMap plus individual `env:` entries for `secretKeyRef`s.
+Secrets and user settings arrive via the **settings Secret** (`<app>-settings`, synced from OpenBao by ESO — see [Settings](#settings-install-questions--generated-secrets)), referenced via `envFrom` (Secret last) or `secretKeyRef` — never `secretGenerator` (Flux can't substitute its base64 output) and never a plain ConfigMap. A container MAY carry both: `envFrom` for the config ConfigMap plus individual `env:` entries for `secretKeyRef`s.
 
 **Audit rule:** when reviewing an app, check each Deployment container for `env:` entries with a literal `value:`. Any non-secret literal that is not a `secretKeyRef` / `valueFrom` must move to the `.env` → `configMapGenerator` → `envFrom` chain. (Init containers count too.)
 
@@ -987,7 +1096,7 @@ kustomize build --enable-helm ./apps/<app-name>/overlays/librepod \
   | kubectl --kubeconfig ~/.kube/librepod-dev.config apply -f -
 ```
 
-The dev cluster's real domain is `librepod.dev` — substituting the `libre.pod` manifest default here causes TLS SAN mismatches. If the app declares secrets, add one `-e "s/\${SECRET_NAME}/<value>/g"` expression per secret from `metadata.yaml`'s `postBuild.substitute` block.
+The dev cluster's real domain is `librepod.dev` — substituting the `libre.pod` manifest default here causes TLS SAN mismatches. If the app declares `settings`, seed its OpenBao entry first (see [Verifying a settings-consuming app](#verifying-a-settings-consuming-app)) — without it the pod waits in `CreateContainerConfigError` until ESO syncs.
 
 **2. Wait for rollout**
 
@@ -1052,9 +1161,9 @@ If no, leave it running. Note that the namespace now exists on the cluster and F
 1. **Gather info**: source app details from the upstream URL/docs (or by asking the user) — app name, image/chart, port, storage needs, env vars, secrets needed. **Never gather conventions/structure from a sibling app under `apps/`; this skill is the only pattern source** (see the Authority section).
 2. **Research SSO**: check the app's docs for OIDC/OAuth2/SSO support — native SSO takes priority over oauth2-proxy (see [SSO Configuration](#sso-configuration))
 3. **Confirm with user**: present a summary of what will be created (name, image, port, storage, SSO approach, deployment type) and wait for approval before writing any files
-4. **Create base**: `namespace.yaml`, `deployment.yaml`+`service.yaml` (or `ocirepository.yaml`+`helmrelease.yaml`), optionally `pvc.yaml`, `.env`, `kustomization.yaml`. If the app bundles a PostgreSQL database with a generated `${DB_PASSWORD}` secret, the postgres Deployment MUST include the `converge-db-password` container (see [Bundled PostgreSQL](#bundled-postgresql))
+4. **Create base**: `namespace.yaml`, `deployment.yaml`+`service.yaml` (or `ocirepository.yaml`+`helmrelease.yaml`), optionally `pvc.yaml`, `.env`, `externalsecret.yaml`, `kustomization.yaml`. If the app bundles a PostgreSQL database with a `DB_PASSWORD` settings item, the postgres Deployment MUST include the `converge-db-password` container (see [Bundled PostgreSQL](#bundled-postgresql))
 5. **Create overlay**: `kustomization.yaml` (with image tag or Helm patches), `ingressroute.yaml` (with `${BASE_DOMAIN:=libre.pod}` and SSO middlewares or native OIDC as appropriate), `patch-storage-class.yaml` (if PVC)
-6. **Create `metadata.yaml`**: fill AppDefinition, params, secrets, dependencies (including oauth2-proxy or casdoor if needed), all four template blocks
+6. **Create `metadata.yaml`**: fill AppDefinition, settings, dependencies (including oauth2-proxy or casdoor if needed), all three template blocks
 7. **Verify**: deploy to `librepod-dev` using the verification workflow above, confirm pods reach `Running`, ask user about cleanup
 8. **Commit and publish**: commit all files under `apps/<app-name>/` to a branch and push. The CI pipeline (`.github/workflows/publish-apps.yaml`) detects changes to any app with a `metadata.yaml` and automatically publishes two OCI artifact tags to GHCR: the version from `metadata.yaml` (e.g. `2.353.0`) and `latest`. Both are Cosign-signed. The app becomes installable from the marketplace once the artifacts are published.
 

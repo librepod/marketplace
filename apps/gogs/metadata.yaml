@@ -18,13 +18,6 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/gogs"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain for cluster (Gogs will be at gogs.BASE_DOMAIN)"
-        type: string
-        example: "example.com"
-
   dependencies:
     required:
       - kind: IngressController
