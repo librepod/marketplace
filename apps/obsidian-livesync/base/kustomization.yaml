@@ -20,9 +20,16 @@ configMapGenerator:
   - init-script.sh
   options:
     disableNameSuffixHash: true
+    # The script interpolates shell variables (${hostname}, ${password}, …) that
+    # must be expanded at RUNTIME from the job's env — never by Flux's
+    # postBuild.substitute, which would blank them. This annotation opts the
+    # generated ConfigMap out of Flux variable substitution entirely.
+    annotations:
+      kustomize.toolkit.fluxcd.io/substitute: disabled
 
 resources:
 - namespace.yaml
+- externalsecret.yaml
 - pvc.yaml
 - service.yaml
 - job.yaml

@@ -17,26 +17,25 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/obsidian-livesync"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain (app will be at obsidian-livesync.BASE_DOMAIN)"
-        type: string
-        example: "example.com"
-
-  secrets:
-    - name: COUCHDB_PASSWORD
-      description: "CouchDB password"
-      required: false
-      generate:
-        type: random
-        length: 32
-    - name: COUCHDB_SECRET
-      description: "CouchDB cookie secret"
-      required: false
-      generate:
-        type: random
-        length: 32
+  # Generate-only settings (never shown in the install dialog): on reinstall the
+  # stored values are reused. This app has NO converge/self-healing container —
+  # CouchDB persists the admin-password hash in its NFS-surviving data dir, so a
+  # changed COUCHDB_PASSWORD locks every client out permanently. Treat both
+  # values as immutable once installed.
+  settings:
+    items:
+      - name: COUCHDB_PASSWORD
+        label: "CouchDB admin password"
+        description: "Admin password for the embedded CouchDB (user: admin). Generated once per install — do NOT change: CouchDB keeps the old hash in its persistent data, so a new value locks all synced clients out with no recovery path."
+        sensitive: true
+        generate:
+          length: 32
+      - name: COUCHDB_SECRET
+        label: "CouchDB cookie secret"
+        description: "Secret used to sign CouchDB session cookies. Generated once per install — changing it invalidates all active sync sessions."
+        sensitive: true
+        generate:
+          length: 32
 
   dependencies:
     required:
@@ -81,26 +80,9 @@ spec:
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
-          substituteFrom:
-            - kind: Secret
-              name: obsidian-livesync-config
-    secret: |
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: obsidian-livesync-config
-        namespace: flux-system
-        labels:
-          marketplace.io/managed: "true"
-          marketplace.io/app: "obsidian-livesync"
-      type: Opaque
-      stringData:
-        COUCHDB_PASSWORD: "${COUCHDB_PASSWORD}"
-        COUCHDB_SECRET: "${COUCHDB_SECRET}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization
       resources:
         - source.yaml
         - release.yaml
-        - secret.yaml
