@@ -7,6 +7,14 @@
 
 ## 1. Merge order gate
 
+> **2026-10-08 update**: PR 1 (#226) is merged and deployed. The app wave was
+> split into **per-app PRs** for incremental rollout: the cross-cutting
+> `settings-client` PR merges **next** (it carries the ClusterSecretStore
+> `path: apps` fix, the marketplace-ui client write path, and the one-click
+> predicate — and its merge is what republishes the final 0.8.0 image), then
+> each app PR merges **independently, in any order** — one app at a time, test
+> it, merge the next. §2–§5 checks apply per app PR.
+
 - **PR 1 = Wave 0 + Wave 0.5** (plan Tasks 1–6, ending with the marketplace-ui **0.8.0**
   release) must merge **and deploy** (image published + `infrastructure/system-apps/marketplace-ui.yaml`
   `ref.tag: 0.8.0` landed on clusters) **before any app-wave PR merges**.
@@ -33,10 +41,11 @@
 - **marketplace-ui 0.8.0 image published** (`gh run list --workflow=publish-marketplace-ui.yaml`)
   and the `system-apps` pin matches. Catalog CI (`publish-catalog.yaml`) regenerates from the
   migrated `metadata.yaml` — no manual step.
-- **After the app-wave PR merges: the 0.8.0 image must be REPUBLISHED.** The PR-1 image is
-  interim — it predates the ui fixes that ride the app-wave PR (client write path
+- **After the settings-client PR merges: the 0.8.0 image must be REPUBLISHED.** The PR-1 image is
+  interim — it predates the ui fixes that ride the settings-client PR (client write path
   `<mount>/<app>`, one-click predicate). Its flaws are inert while PR 1 is alone on master (no
-  catalog app has settings yet), but the final image must carry them. The workflow triggers on
+  catalog app has settings yet), but the final image must carry them — **this gate must be green
+  before the FIRST per-app PR merges**. The workflow triggers on
   `ui/**` pushes to master and tags from `ui/package.json` (still 0.8.0), so the merge
   republishes automatically — verify it ran and the tag digest moved:
   `gh run list --workflow=publish-marketplace-ui.yaml --limit 3`; if missed,

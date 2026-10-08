@@ -60,11 +60,11 @@ export class OpenBaoClient {
     return this.config.get<string>('OPENBAO_ADDR', '').replace(/\/+$/, '');
   }
 
-  /** Replaces the whole KV v2 entry apps/<app>: a new version; earlier ones stay as history. */
+  /** Replaces the whole KV v2 entry <mount>/<app> (apps/<app> on the cluster): a new version; earlier ones stay as history. */
   async writeAppSettings(app: string, data: Record<string, string>): Promise<void> {
     if (!this.addr) throw new OpenBaoMisconfiguredError('OPENBAO_ADDR is not set');
     const mount = this.config.get<string>('OPENBAO_KV_MOUNT', 'secret');
-    const url = `${this.addr}/v1/${mount}/data/apps/${encodeURIComponent(app)}`;
+    const url = `${this.addr}/v1/${mount}/data/${encodeURIComponent(app)}`;
 
     let res = await this.post(url, { data }, { 'X-Vault-Token': await this.clientToken() });
     if (res.status === 403 && this.token) {
@@ -79,7 +79,7 @@ export class OpenBaoClient {
   async readAppSettings(app: string): Promise<Record<string, string> | null> {
     if (!this.addr) throw new OpenBaoMisconfiguredError('OPENBAO_ADDR is not set');
     const mount = this.config.get<string>('OPENBAO_KV_MOUNT', 'secret');
-    const url = `${this.addr}/v1/${mount}/data/apps/${encodeURIComponent(app)}`;
+    const url = `${this.addr}/v1/${mount}/data/${encodeURIComponent(app)}`;
 
     let res = await this.get(url, { 'X-Vault-Token': await this.clientToken() });
     if (res.status === 404) return null;

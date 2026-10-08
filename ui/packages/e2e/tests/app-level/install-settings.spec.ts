@@ -13,10 +13,17 @@ const OPENBAO_TOKEN = "tier1-e2e-root-token";
 const GIT_ORIGIN = "http://flux:pass%40w0rd@127.0.0.1:43000/flux/user-apps.git";
 const TOKEN = "tier1-secret-token-7f3a";
 const PROXY = "http://proxy.lan:3128";
+// The fixture's generated item (E2E_FIXTURE_CACHE_KEY, generate.length 32) resolves
+// server-side to a fresh 32-hex value — the dialog never asks for it.
+const EXPECTED_STORED = {
+  RENOVATE_TOKEN: TOKEN,
+  HTTP_PROXY: PROXY,
+  E2E_FIXTURE_CACHE_KEY: expect.stringMatching(/^[0-9a-f]{32}$/),
+};
 
 /** The renovate entry as stored in OpenBao, or undefined when there is none. */
 async function storedSettings(request: APIRequestContext): Promise<Record<string, string> | undefined> {
-  const res = await request.get(`${OPENBAO}/v1/secret/data/apps/renovate`, {
+  const res = await request.get(`${OPENBAO}/v1/secret/data/renovate`, {
     headers: { "X-Vault-Token": OPENBAO_TOKEN },
   });
   if (res.status() === 404) return undefined;
@@ -69,6 +76,10 @@ test.describe("install with settings", () => {
     const dialog = detail.installDialog();
     await expect(dialog.getByRole("heading", { name: "Install Renovate" })).toBeVisible();
 
+    // Generated items are machine-made secrets resolved by the server: the dialog
+    // never renders a field for them (only the two question items are asked).
+    await expect(dialog.getByLabel("Fixture cache key")).toHaveCount(0);
+
     // The server validates: the required token is missing.
     await dialog.getByRole("button", { name: "Install", exact: true }).click();
     await expect(dialog.getByText("Required", { exact: true })).toBeVisible();
@@ -84,7 +95,7 @@ test.describe("install with settings", () => {
     await expect(dialog).toBeHidden();
     await expect
       .poll(() => storedSettings(request), { message: "answers land in OpenBao" })
-      .toEqual({ RENOVATE_TOKEN: TOKEN, HTTP_PROXY: PROXY });
+      .toEqual(EXPECTED_STORED);
     await expect
       .poll(() => installedNames(request), { message: "renovate enters /api/installed", timeout: 15_000 })
       .toContain("renovate");
@@ -98,6 +109,6 @@ test.describe("install with settings", () => {
     await expect
       .poll(() => installedNames(request), { message: "renovate leaves /api/installed", timeout: 15_000 })
       .not.toContain("renovate");
-    expect(await storedSettings(request)).toEqual({ RENOVATE_TOKEN: TOKEN, HTTP_PROXY: PROXY });
+    expect(await storedSettings(request)).toEqual(EXPECTED_STORED);
   });
 });

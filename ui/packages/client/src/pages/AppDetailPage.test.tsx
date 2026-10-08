@@ -179,6 +179,53 @@ describe('AppDetailPage', () => {
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     })
 
+    it('keeps one-click install (no body) when the only settings are machine-generated items', async () => {
+      const fetchSpy = vi
+        .spyOn(global, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            ...mockApp,
+            installedStatus: 'not_installed',
+            settings: { items: [{ name: 'DB_PASSWORD', generate: { length: 40 } }] },
+          }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true, message: 'ok' }),
+        } as Response)
+      render(<AppDetailPage />, { wrapper: createWrapper() })
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Install App' }))
+
+      // A successful install invalidates the detail query, so more GETs may follow the POST.
+      await waitFor(() => expect(fetchSpy.mock.calls.length).toBeGreaterThanOrEqual(2))
+      const [url, init] = fetchSpy.mock.calls[1] as [string, RequestInit]
+      expect(url).toBe('/api/apps/vaultwarden/install')
+      expect(init.body).toBeUndefined()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('opens the dialog for generated-only settings when custom variables are allowed (a deliberate offer)', async () => {
+      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ...mockApp,
+          installedStatus: 'not_installed',
+          settings: { allowCustom: true, items: [{ name: 'DB_PASSWORD', generate: { length: 40 } }] },
+        }),
+      } as Response)
+      render(<AppDetailPage />, { wrapper: createWrapper() })
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Install App' }))
+
+      expect(await screen.findByRole('dialog')).toHaveTextContent('Install Vaultwarden')
+      expect(fetchSpy).toHaveBeenCalledTimes(1) // the detail GET only — nothing posted yet
+    })
+
     it('keeps one-click install (no body) for apps without questions', async () => {
       const fetchSpy = vi
         .spyOn(global, 'fetch')

@@ -11,13 +11,6 @@ export interface AppTemplate {
   kustomization: string;
 }
 
-export interface AppParam {
-  name: string;
-  description: string;
-  type: string;
-  example?: string;
-}
-
 export interface AppSecretDef {
   name: string;
   description?: string;
@@ -114,7 +107,6 @@ export interface CatalogApp {
   // web UI). Absent (undefined) means "unknown" and is treated as launchable.
   launchable?: boolean;
   templates?: AppTemplate;
-  params?: { required?: AppParam[] };
   secrets?: AppSecretDef[];
   // Install questions + custom-variable opt-in; apps with this open the install dialog.
   settings?: AppSettings;
