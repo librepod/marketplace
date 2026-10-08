@@ -18,5 +18,7 @@ spec:
           envFrom:
             - configMapRef:
                 name: xray-checker
+            # Settings Secret last: custom values override the .env defaults.
+            # Non-optional — pods wait (CreateContainerConfigError) until ESO syncs.
             - secretRef:
-                name: xray-checker-secret
+                name: xray-checker-settings
