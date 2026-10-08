@@ -310,17 +310,15 @@ else
   echo "Repo already has history; skipping seed."
 fi
 
-# Create the Secret with Reflector annotations (mirror to flux-system +
-# marketplace-ui). Phase 1 only consumes the flux-system reflection.
+# Create the Secret. It is NOT reflected anywhere: the GitRepository clones
+# over HTTP with user-apps-source-auth, and the key's only consumer is this
+# script's own SSH seed push — plus its existence is the Job's idempotency
+# guard (the e2e cold-boot gate relies on that; see ui/packages/e2e/support/
+# cold-boot-repro.sh).
 echo "Creating Secret/${SECRET_NAME}..."
 kubectl create secret generic "$SECRET_NAME" -n "$NS" \
   --from-file=identity=/tmp/id \
   --from-file=known_hosts=/tmp/known_hosts \
   --dry-run=client -o yaml | kubectl apply -f -
-kubectl annotate secret "$SECRET_NAME" -n "$NS" \
-  reflector.v1.k8s.emberstack.com/reflection-allowed=true \
-  reflector.v1.k8s.emberstack.com/reflection-auto-enabled=true \
-  reflector.v1.k8s.emberstack.com/reflection-auto-namespaces=flux-system,marketplace-ui \
-  --overwrite
 
 echo "Done. Flux GitRepository/user-apps-source can now clone over SSH."
