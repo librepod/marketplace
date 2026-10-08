@@ -15,6 +15,11 @@ spec:
           envFrom:
             - configMapRef:
                 name: vaultwarden
+            # Settings Secret: non-optional — pods wait (CreateContainerConfigError)
+            # until ESO syncs it from OpenBao. Last in envFrom, so ADMIN_TOKEN and
+            # any custom variables override the .env ConfigMap defaults.
+            - secretRef:
+                name: vaultwarden-settings
           env:
             - name: SSO_CLIENT_ID
               valueFrom:
