@@ -15,4 +15,5 @@ labels:
 resources:
   - namespace.yaml
   - helmrepository.yaml
+  - externalsecret.yaml
   - pvc.yaml

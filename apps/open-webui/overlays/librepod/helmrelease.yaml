@@ -25,11 +25,16 @@ spec:
         name: open-webui
         namespace: open-webui
       interval: 12h
+  valuesFrom:
+    # OLLAMA_ENABLED (from Secret/open-webui-settings, synced from OpenBao by
+    # ESO) drives the chart's ollama subchart. Must NOT also appear in inline
+    # values — Flux merges inline last, which would make the question inert.
+    - kind: Secret
+      name: open-webui-settings
+      valuesKey: OLLAMA_ENABLED
+      targetPath: ollama.enabled
   values:
     # See https://github.com/open-webui/helm-charts/blob/main/charts/open-webui/values.yaml
-
-    ollama:
-      enabled: false
 
     pipelines:
       enabled: false
@@ -88,6 +93,15 @@ spec:
             readOnly: true
           - name: merged-ca-bundle
             mountPath: /mnt/merged-ca
+
+    # Every key of the settings Secret becomes a container env var, so
+    # user-added custom settings (metadata settings.allowCustom) reach the app
+    # the same way they do on Kustomize apps. OLLAMA_ENABLED itself is not a
+    # real Open WebUI variable — the app ignores it; the chart value above is
+    # what counts.
+    extraEnvFrom:
+      - secretRef:
+          name: open-webui-settings
 
     extraEnvVars:
         # Set default connection for users and share admin models
