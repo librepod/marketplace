@@ -24,6 +24,67 @@ echo "Welcome to Step CA resource bootstrapper."
 # IPv6-only egress loses both hosts.
 SA=/var/run/secrets/kubernetes.io/serviceaccount
 
+# Publish the public CA (root + intermediate) into the openbao KV store at
+# apps/step-ca — the single path every consumer namespace syncs from via
+# ExternalSecret (docs/sso-app-author-guide.md §4). Producer-push: openbao
+# never reads from this namespace; it only admits this Job's ServiceAccount
+# through the "step-certificates" kubernetes-auth role (provisioned by the
+# openbao bootstrap Job, policy step-certificates-write-apps — write-only on
+# that one KV path).
+#
+# Runs before the idempotency early-exit below so EVERY Job re-run publishes
+# (ttlSecondsAfterFinished + the Flux recreate cycle re-run this Job every
+# ~10m); that loop is also the CA-rotation refresh path — the certs are read
+# fresh from the PVC each time.
+#
+# Deliberately non-fatal on every failure path: this Job gates
+# step-issuer -> casdoor -> openbao, so blocking on (or failing because of)
+# openbao would deadlock a cold boot. If publication cannot proceed, warn and
+# let the next re-run retry; openbao's own bootstrap (which needs the CA in
+# KV to configure its OIDC trust) is the loud alarm if it never lands.
+publish_ca() {
+  local root_ca="${STEPPATH}/certs/root_ca.crt"
+  local intermediate_ca="${STEPPATH}/certs/intermediate_ca.crt"
+  if [ ! -s "$root_ca" ] || [ ! -s "$intermediate_ca" ]; then
+    echo "WARNING: CA certs not found on the PVC (${root_ca}); skipping openbao publication." >&2
+    return 0
+  fi
+  # sys/health answers with an HTTP status on ANY running openbao (sealed
+  # included); a transport failure (code 000) means it is not deployed yet —
+  # the normal state during a cold boot, when this Job runs long before
+  # openbao exists.
+  local health_code
+  health_code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 10 \
+    "$OPENBAO_ADDR/v1/sys/health" 2>/dev/null)" || health_code=000
+  if [ "$health_code" = "000" ]; then
+    echo "openbao not reachable at ${OPENBAO_ADDR} (not deployed yet); skipping CA publication — the next Job re-run retries."
+    return 0
+  fi
+  local login_json token
+  if ! login_json="$(curl -fsS --connect-timeout 5 --max-time 15 -X POST \
+      -H 'Content-Type: application/json' \
+      -d "{\"role\":\"step-certificates\",\"jwt\":\"$(cat "$SA/token")\"}" \
+      "$OPENBAO_ADDR/v1/auth/kubernetes/login")"; then
+    echo "WARNING: openbao kubernetes-auth login failed (sealed, or the step-certificates role is not provisioned yet); skipping CA publication — the next Job re-run retries." >&2
+    return 0
+  fi
+  token="$(printf '%s' "$login_json" | sed -n 's/.*"client_token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+  if [ -z "$token" ]; then
+    echo "WARNING: no client_token in the openbao login response; skipping CA publication." >&2
+    return 0
+  fi
+  # PEM holds no quotes or backslashes — only the newlines need JSON escaping.
+  if ! curl -fsS --connect-timeout 5 --max-time 30 -X PUT \
+      -H "X-Vault-Token: ${token}" -H 'Content-Type: application/json' \
+      -d "{\"data\":{\"root_ca.crt\":\"$(awk '{printf "%s\\n", $0}' "$root_ca")\",\"intermediate_ca.crt\":\"$(awk '{printf "%s\\n", $0}' "$intermediate_ca")\"}}" \
+      "$OPENBAO_ADDR/v1/apps/data/step-ca" >/dev/null; then
+    echo "WARNING: openbao KV put apps/step-ca failed; skipping CA publication — the next Job re-run retries." >&2
+    return 0
+  fi
+  echo "LibrePod CA published to openbao KV at apps/step-ca."
+}
+publish_ca
+
 # Cheap idempotency BEFORE any download, via the raw API: with
 # ttlSecondsAfterFinished (job.yaml), Flux recreates this Job after every TTL
 # GC — this check makes those re-runs ~free instead of re-fetching the ~60MB
