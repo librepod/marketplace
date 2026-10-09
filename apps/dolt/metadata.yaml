@@ -1,0 +1,95 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: dolt
+spec:
+  displayName: "Dolt"
+  description: "Git-style version-controlled SQL database, MySQL-compatible — branch, diff, merge and clone your data"
+  icon: "https://raw.githubusercontent.com/dolthub/dolt/main/images/Dolt-Logo@3x.svg"
+  category: "Development"
+  website: "https://www.dolthub.com/"
+
+  # renovate: datasource=docker depName=dolthub/dolt-sql-server
+  version: "2.4.2"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/dolt"
+    path: ./overlays/librepod
+
+  # No BASE_DOMAIN param: Dolt has no web UI or IngressRoute. Clients connect
+  # in-cluster to dolt.dolt.svc:3306 as root with DOLT_ROOT_PASSWORD.
+  secrets:
+    - name: DOLT_ROOT_PASSWORD
+      description: "Password of the Dolt root SQL user"
+      required: true
+      generate:
+        type: random
+        length: 32
+
+  dependencies:
+    required:
+      - kind: StorageClass
+        description: "nfs-client (provided by nfs-provisioner app)"
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-dolt
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "dolt"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/dolt
+        ref:
+          tag: "__VERSION__"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-dolt
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "dolt"
+      spec:
+        dependsOn:
+          - name: storage
+        force: true
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-dolt
+        path: ./overlays/librepod
+        # Explicit (matches the overlay's `namespace:`) so that installing several
+        # Dolt instances later only needs this value made per-instance — every
+        # object, including the Namespace itself, follows targetNamespace.
+        targetNamespace: dolt
+        prune: true
+        wait: true
+        postBuild:
+          substituteFrom:
+            - kind: Secret
+              name: dolt-config
+    secret: |
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: dolt-config
+        namespace: flux-system
+      type: Opaque
+      stringData:
+        DOLT_ROOT_PASSWORD: "${DOLT_ROOT_PASSWORD}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml
+        - secret.yaml

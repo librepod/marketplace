@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: dolt
+spec:
+  type: ClusterIP
+  # MySQL wire protocol, not HTTP: clients connect to dolt.<namespace>.svc:3306,
+  # so the Service keeps the protocol's well-known port instead of 80.
+  ports:
+    - port: 3306
+      targetPort: mysql
+      protocol: TCP
+      name: mysql
