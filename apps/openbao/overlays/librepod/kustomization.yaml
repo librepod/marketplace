@@ -15,26 +15,17 @@ components:
 
 configMapGenerator:
   # Site-specific OpenBao policies: every *.hcl here becomes a policy named
-  # after its file (written by the bootstrap Job).
+  # after its file (written by the bootstrap Job). Bump the Job's
+  # openbao.librepod/policies-version annotation when these change.
   - name: openbao-policies
     files:
       - eso-read-apps.hcl=policies/eso-read-apps.hcl
       - marketplace-ui-write-apps.hcl=policies/marketplace-ui-write-apps.hcl
+      - step-certificates-write-apps.hcl=policies/step-certificates-write-apps.hcl
     options:
       # the bootstrap Job mounts this ConfigMap; a name hash would rewrite
       # the immutable Job spec on every content change and brick the apply
       disableNameSuffixHash: true
-  # LibrePod root CA stub, mirrored by Reflector from step-ca: the bootstrap
-  # Job mounts it and passes it to the server via oidc_discovery_ca_pem, so
-  # the server's OIDC calls to https://id.<BASE_DOMAIN> verify the private
-  # CA (docs/sso-app-author-guide.md §4).
-  # disableNameSuffixHash is REQUIRED: Reflector keys replication off this
-  # exact object name, and the pods mount the ConfigMap by name.
-  - name: step-certificates-certs
-    options:
-      disableNameSuffixHash: true
-      annotations:
-        reflector.v1.k8s.emberstack.com/reflects: "step-ca/step-certificates-certs"
 
 # Structural exception (skill "Image versions", cross-renderer category): the
 # bootstrap Job is a Kustomize-rendered resource that must run the SAME openbao

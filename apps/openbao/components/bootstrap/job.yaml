@@ -13,7 +13,19 @@ metadata:
     app.kubernetes.io/name: openbao
 spec:
   backoffLimit: 6
-  activeDeadlineSeconds: 900
+  # ≥ the two bounded waits in bootstrap.sh: up to 15 min for the
+  # step-certificates publisher to land apps/step-ca in KV (cold boot) + 5 min
+  # for the SSO Secret, plus the init/API-wait budget.
+  activeDeadlineSeconds: 1800
+  # ttlSecondsAfterFinished: Flux recreates the Job on each reconcile after
+  # the TTL GC (same pattern as the step-ca bootstrap Job). Every re-run
+  # re-applies the configuration idempotently and refreshes the OIDC trust CA
+  # from KV (apps/step-ca) — so a re-initialized step-ca CA is picked up
+  # within ~one recreate cycle. (The CA *publication* into KV lives in the
+  # step-certificates bootstrap Job, not here.) The script rides the
+  # hash-disabled openbao-bootstrap ConfigMap, so script edits never touch
+  # this (immutable-while-the-object-exists) spec.
+  ttlSecondsAfterFinished: 600
   template:
     metadata:
       labels:
@@ -22,7 +34,7 @@ spec:
         # Bump whenever an overlay policy .hcl changes: the Job spec is
         # immutable, so this is what makes the apply recreate (force:true) and
         # re-run the bootstrap, which re-applies policies idempotently.
-        openbao.librepod/policies-version: "2"
+        openbao.librepod/policies-version: "3"
     spec:
       restartPolicy: Never
       serviceAccountName: openbao-bootstrap
@@ -61,11 +73,6 @@ spec:
             # itself. Kubelet populates the volume once the Secret appears.
             - name: sso
               mountPath: /sso
-              readOnly: true
-            # LibrePod root CA, read by the script and passed to the server
-            # via oidc_discovery_ca_pem (the discovery fetch runs server-side)
-            - name: ca
-              mountPath: /ca
               readOnly: true
         # Persists the root token + recovery keys to the openbao-credentials
         # Secret on first init and mirrors them to the seal PVC, so a
@@ -110,10 +117,3 @@ spec:
           secret:
             secretName: openbao-sso
             optional: true
-        # LibrePod root CA (Reflector-mirrored stub from step-ca)
-        - name: ca
-          configMap:
-            name: step-certificates-certs
-            items:
-              - key: root_ca.crt
-                path: root_ca.crt

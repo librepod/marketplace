@@ -49,6 +49,9 @@ idempotently:
      **read** `apps/*`
    - `marketplace-ui-write-apps` ← role `marketplace-ui`
      (SA `marketplace-ui`, ns `marketplace-ui`): **create/update** `apps/*`
+   - `step-certificates-write-apps` ← role `step-certificates`
+     (SA `step-ca-bootstrap-step-issuer`, ns `step-ca`): **create/update**
+     `apps/step-ca` only — see "LibrePod CA distribution" below
 5. enables and configures the **OIDC auth method** (SSO — see below)
 6. enables the **file audit device** at `/openbao/audit/audit.log`
 
@@ -67,8 +70,9 @@ The UI (and `bao login -method=oidc`) authenticate via the platform IdP:
   CLI loopback (`http://localhost:8250/oidc/callback`); they must match the
   SSOClient CR exactly.
 - The CA for the server-side calls to `https://id.<BASE_DOMAIN>` is scoped to
-  the auth method (`oidc_discovery_ca_pem` written by the bootstrap Job) —
-  the server pod itself carries no CA wiring.
+  the auth method (`oidc_discovery_ca_pem` written by the bootstrap Job from
+  KV `apps/step-ca` — see "LibrePod CA distribution" below) — the server pod
+  itself carries no CA wiring.
 - To log in: open the UI → sign in with method **OIDC** → the default role
   `admin-sso` applies (no role needs to be entered).
 
@@ -127,6 +131,33 @@ spec:
         key: apps/demo   # KV v2: engine-relative path
         property: password
 ```
+
+## LibrePod CA distribution (`apps/step-ca`)
+
+The step-ca root + intermediate certificates (public material, no keys) are
+distributed to consumer namespaces through the store — producer-push,
+consumer-pull:
+
+- the **step-certificates bootstrap Job** (in `step-ca`) publishes both certs
+  into KV at **`apps/step-ca`** (keys `root_ca.crt`, `intermediate_ca.crt`)
+  on every run, authenticating with kubernetes-auth role `step-certificates`
+  (policy `step-certificates-write-apps`: write-only on that one path).
+  Publication is best-effort by design — that Job gates
+  `step-issuer -> casdoor -> openbao`, so it must never block on openbao; a
+  cold-boot run simply skips and the next one (its TTL'd Job re-runs every
+  ~10m) retries;
+- consumer namespaces sync `Secret/step-certificates-certs` from that path
+  via an ExternalSecret (docs/sso-app-author-guide.md §4);
+- this app's own OIDC trust CA comes from the same KV path: the bootstrap
+  Job waits (≤15 min, then fails loud) for `apps/step-ca` to appear and
+  passes the root CA as `oidc_discovery_ca_pem`.
+
+openbao itself never reads from the step-ca namespace — the only coupling is
+the writer role above (the store admitting a producer, same as
+marketplace-ui). CA rotation propagates through the same loops: the
+step-certificates Job re-publishes from its PVC every ~10m, ESO re-syncs
+consumers per their `refreshInterval`, and this app's TTL'd bootstrap Job
+re-runs pick up the new `oidc_discovery_ca_pem`.
 
 ## TLS
 

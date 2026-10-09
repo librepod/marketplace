@@ -32,10 +32,12 @@ spec:
   # wedges the apply ("updates to job template are not allowed"). force lets
   # Flux delete+recreate the Job — the re-run is idempotent by design.
   force: true
-  # ≥ the bootstrap Job's activeDeadlineSeconds (900s): with wait:true the
+  # ≥ the bootstrap Job's activeDeadlineSeconds (1800s): with wait:true the
   # health check waits on that Job, and a shorter timeout reports spurious
-  # Ready=False on slow networks.
-  timeout: 20m
+  # Ready=False while the Job is still inside its legitimate cold-boot
+  # budget (it may wait up to 15 min for the step-certificates publisher to
+  # land apps/step-ca in KV — see bootstrap.sh).
+  timeout: 35m
   sourceRef:
     kind: OCIRepository
     name: openbao
