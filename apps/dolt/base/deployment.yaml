@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dolt
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    spec:
+      initContainers:
+        # The image's entrypoint only runs `CREATE USER IF NOT EXISTS root`, so a
+        # reinstall that rebinds the old NFS folder keeps the OLD root password while
+        # the marketplace generated a new one. This converges it before the server
+        # starts: with no server running, `dolt sql` runs embedded and rewrites
+        # .doltcfg/privileges.db, which the server then loads. Users and databases
+        # created over SQL are untouched. A fresh data dir is skipped — the
+        # entrypoint creates root from env there.
+        # A sidecar can't do this: its `dolt sql` doesn't attach to the live server,
+        # it edits the file on disk and the server never reloads it.
+        # `$VAR` without braces: Flux postBuild.substitute would rewrite `${VAR}`.
+        - name: converge-root-password
+          image: dolthub/dolt-sql-server   # same image → overlay pins the same tag
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: dolt
+            - secretRef:
+                name: dolt-secret
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              cd /var/lib/dolt
+              if [ ! -f .doltcfg/privileges.db ]; then
+                echo "fresh data dir, nothing to converge"
+                exit 0
+              fi
+              printf "ALTER USER IF EXISTS 'root'@'%s' IDENTIFIED BY '%s';\n" \
+                "$DOLT_ROOT_HOST" "$DOLT_ROOT_PASSWORD" | dolt sql
+              echo "root password converged"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/dolt
+      containers:
+        - name: dolt
+          image: dolthub/dolt-sql-server   # NO TAG — tag is set in overlay
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: mysql
+              containerPort: 3306
+          envFrom:
+            - configMapRef:
+                name: dolt
+            - secretRef:
+                name: dolt-secret
+          readinessProbe:
+            tcpSocket:
+              port: mysql
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: mysql
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/dolt
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: dolt-data

@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: dolt
+
+# No ingressroute.yaml: Dolt speaks the MySQL wire protocol and has no web UI.
+# Clients (other apps) reach it in-cluster at dolt.dolt.svc:3306; with no
+# IngressRoute the marketplace treats the app as non-launchable.
+resources:
+- ../../base
+
+images:
+- name: dolthub/dolt-sql-server
+  newTag: 2.4.2
+
+patches:
+- path: ./patch-storage-class.yaml
+  target:
+    kind: PersistentVolumeClaim
