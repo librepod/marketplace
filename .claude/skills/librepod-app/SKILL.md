@@ -63,6 +63,19 @@ This skill covers creating LibrePod Marketplace applications using Kustomize. Ev
 
 ---
 
+## Product philosophy — self-heal, never nag
+
+LibrePod is a consumer product for non-technical users. Nobody is watching `kubectl`; the only human in the loop is an end user who must never be shown an error they cannot act on. **An error surfaced to a user is a design failure.** Design apps and updates so transient problems converge silently through reconciliation:
+
+- **Prefer reconciliation over loud failure.** Where a choice exists between "block or fail fast until a human intervenes" and "Flux retries / recreates until it converges", choose convergence. `force: true` on a Kustomization (standard in `templates.release` and system-app Kustomizations) is the canonical case: an immutable-field conflict is resolved by delete+recreate, not by a stuck `Ready=False` waiting for an operator.
+- **Recreation is cheap; user data is not.** Workloads are cattle — Flux may delete and recreate them freely, and NFS-backed PVC contents survive recreation. The only thing that must never be destroyed silently is user data.
+- **Absorb ordering races with `dependsOn`, retries, and generous budgets — not fail-fast.** Bootstrap Jobs warn+skip and let the next reconcile retry; HelmReleases use `RetryOnFailure`; health-check timeouts are sized for worst-case convergence (e.g. 35m for user-apps-source) because slow convergence is fine, stuck convergence is not.
+- **Error visibly only when reconciliation provably cannot fix it** — i.e. a human decision or a human-supplied credential is required. Everything else must self-heal.
+
+**Reviewing/auditing under this lens:** silent recreation by Flux (`force: true`, TTL+version-annotation Job re-runs, workload delete+recreate) is **not** a defect by itself. The two questions that matter: (1) does reconciliation actually converge to the desired state, and (2) does user data survive the recreation? A design that flaps forever, blocks on a condition that can never become true, or loses data is the bug — not the absence of a loud error.
+
+---
+
 ## Authority — this skill is the source of truth
 
 This skill is the **canonical, authoritative specification** of LibrePod app conventions. The templates, naming, field placements, and rules documented here *are* the standard — not one option among several. Treat them as the reference when creating, auditing, or fixing any app.
