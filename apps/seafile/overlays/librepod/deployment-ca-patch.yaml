@@ -4,7 +4,7 @@
 #
 # Canonical LibrePod CA-trust pattern (same as vaultwarden/headscale/open-webui):
 # an init container (alpine) fuses the system CA bundle with the LibrePod root
-# CA (from configMap/step-certificates-certs, Reflector-replicated from step-ca),
+# CA (from secret/step-certificates-certs, synced from openbao),
 # then the seafile container mounts the merged bundle over the system bundle
 # path (/etc/ssl/certs/ca-certificates.crt). The trust env vars that point
 # seafile's Python stack at it — SSL_CERT_FILE + REQUESTS_CA_BUNDLE (the latter
@@ -16,9 +16,9 @@
 # same way: a deployment-ca-patch.yaml strategic-merge patch. Mirrors
 # headscale/vaultwarden.
 #
-# PLATFORM DEPENDENCY: configMap/step-certificates-certs must exist in THIS
-# namespace — see the Reflector stub in overlays/librepod/kustomization.yaml
-# (it reflects step-ca/step-certificates-certs).
+# PLATFORM DEPENDENCY: secret/step-certificates-certs must exist in THIS
+# namespace — see the ExternalSecret in overlays/librepod/kustomization.yaml
+# (it syncs openbao apps/step-ca).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -52,8 +52,8 @@ spec:
               readOnly: true
       volumes:
         - name: root-ca-cert
-          configMap:
-            name: step-certificates-certs
+          secret:
+            secretName: step-certificates-certs
             items:
               - key: root_ca.crt
                 path: root_ca.crt
