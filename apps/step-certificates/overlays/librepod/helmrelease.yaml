@@ -205,6 +205,9 @@ spec:
               spec:
                 template:
                   spec:
+                    # SA under which the pod (incl. the restore initContainer)
+                    # runs; bound in openbao to the CA-backup restore role.
+                    serviceAccountName: step-ca-restore
                     volumes:
                       - name: certs
                         $patch: delete

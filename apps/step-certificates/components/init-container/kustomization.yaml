@@ -1,6 +1,11 @@
 apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 
+resources:
+  # ServiceAccount under which the Deployment (and its init container) runs;
+  # used for the openbao CA-backup restore login.
+  - serviceaccount.yaml
+
 generatorOptions:
   disableNameSuffixHash: true
 
@@ -19,6 +24,5 @@ configMapGenerator:
     envs:
       - init-container.env
 
-# NOTE: patch.yaml (adds initContainer to Deployment) is no longer used.
-# The initContainer is now declared natively via spec.values.extraInitContainers
-# in the HelmRelease, which avoids the need to patch post-render targets.
+# NOTE: the initContainer is declared natively via spec.values.extraInitContainers
+# in the HelmRelease — no Deployment patch needed here.

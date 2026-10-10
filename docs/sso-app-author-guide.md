@@ -202,12 +202,11 @@ at it.
 
 ### (1) Sync the CA into the namespace (ExternalSecret)
 
-The CA lives in `ConfigMap/step-certificates-certs` in namespace `step-ca`
-(the local source for step-issuer). The step-certificates bootstrap Job
-publishes it into the openbao KV store at `apps/step-ca`, and each app syncs
-a copy into its own namespace with an ExternalSecret — add
-`externalsecret-ca.yaml` to the overlay `resources` (identical for every
-app):
+The CA lives on the step-certificates PVC in namespace `step-ca`; the
+step-certificates bootstrap Job publishes the public certs into the openbao
+KV store at `apps/step-ca`, and each app syncs a copy into its own namespace
+with an ExternalSecret — add `externalsecret-ca.yaml` to the overlay
+`resources` (identical for every app):
 
 ```yaml
 apiVersion: external-secrets.io/v1

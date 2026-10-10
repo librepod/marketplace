@@ -39,7 +39,9 @@ idempotently:
    kubectl get secret openbao-credentials -n openbao \
      -o jsonpath='{.data.recovery-keys}' | base64 -d
    ```
-2. enables the **KV v2 engine at `apps/`**
+2. enables the **KV v2 engines at `apps/`** (app secrets, readable by ESO)
+   and **`system/`** (infrastructure/DR secrets that regular apps must not
+   see — e.g. the step-ca CA backup)
 3. enables the **Kubernetes auth method** (no static reviewer JWT — the
    server ServiceAccount holds `system:auth-delegator` via the chart)
 4. writes the policies and roles. Policies are site-specific: every `*.hcl`
@@ -49,9 +51,13 @@ idempotently:
      **read** `apps/*`
    - `marketplace-ui-write-apps` ← role `marketplace-ui`
      (SA `marketplace-ui`, ns `marketplace-ui`): **create/update** `apps/*`
-   - `step-certificates-write-apps` ← role `step-certificates`
-     (SA `step-ca-bootstrap-step-issuer`, ns `step-ca`): **create/update**
-     `apps/step-ca` only — see "LibrePod CA distribution" below
+   - `step-certificates-write-apps` + `step-ca-backup` ← role
+     `step-certificates` (SA `step-ca-bootstrap-step-issuer`, ns `step-ca`):
+     **create/update** `apps/step-ca` (public certs) and `system/step-ca`
+     (full CA backup) — see "LibrePod CA distribution" below
+   - `step-ca-restore` ← role `step-ca-restore` (SA `step-ca-restore`,
+     ns `step-ca`): **read** `system/step-ca` only — the step-ca
+     initContainer restoring the CA from backup on an empty PVC
 5. enables the **file audit device** at `/openbao/audit/audit.log`
 
 There is deliberately **no OIDC/SSO auth method**: configuring one would
@@ -130,6 +136,15 @@ consumer-pull:
   ~10m) retries;
 - consumer namespaces sync `Secret/step-certificates-certs` from that path
   via an ExternalSecret (docs/sso-app-author-guide.md).
+
+The same Job also writes the **CA backup** to KV at **`system/step-ca`**
+(full material: certs, private keys, `ca.json`/`defaults.json`, both
+passwords; policy `step-ca-backup`). When the step-ca PVC turns up empty,
+the step-certificates initContainer restores the CA from it (role
+`step-ca-restore`, read-only) instead of minting a new root — a wiped PVC
+must not silently rotate the device's trust anchor. `system/` is a separate
+engine because `eso-read-apps` reads all of `apps/*`: regular apps can
+never reach the private keys.
 
 openbao itself never reads from the step-ca namespace and consumes no part
 of the CA — the only coupling is the writer role above (the store admitting

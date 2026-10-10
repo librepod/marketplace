@@ -20,6 +20,5 @@ resources:
   - service.yaml
   - ingressroute.yaml
 
-# NOTE: patch-add-sidecar.yaml (adds nginx container to Deployment) is no longer
-# used. The sidecar is now declared natively via spec.values.extraContainers in
-# the HelmRelease.
+# NOTE: the sidecar is declared natively via spec.values.extraContainers in
+# the HelmRelease — no Deployment patch needed here.

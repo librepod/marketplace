@@ -73,6 +73,13 @@ if ! bao secrets list -format=json | grep -q '"apps/"'; then
   bao secrets enable -path=apps kv-v2
 fi
 
+# KV v2 secrets engine at system/ — infrastructure/DR secrets that regular
+# apps must not see (eso-read-apps grants read on apps/* only). Currently
+# holds the step-ca CA backup (system/step-ca).
+if ! bao secrets list -format=json | grep -q '"system/"'; then
+  bao secrets enable -path=system kv-v2
+fi
+
 # Kubernetes auth method. No token_reviewer_jwt: the chart binds the server
 # ServiceAccount to system:auth-delegator, so OpenBao reviews client tokens
 # with its own auto-rotating SA token.
@@ -101,13 +108,22 @@ bao write auth/kubernetes/role/marketplace-ui \
   policies=marketplace-ui-write-apps ttl=20m
 
 # CA producer: the step-certificates bootstrap Job logs in with this role to
-# push the public root + intermediate CA into KV apps/step-ca (write-only on
-# that one path — policy step-certificates-write-apps). Producer-push: this
-# bootstrap never reads from the step-ca namespace.
+# push the public root + intermediate CA into KV apps/step-ca (policy
+# step-certificates-write-apps) and the full CA backup — keys, config,
+# passwords — into KV system/step-ca (policy step-ca-backup). Producer-push:
+# this bootstrap never reads from the step-ca namespace.
 bao write auth/kubernetes/role/step-certificates \
   bound_service_account_names=step-ca-bootstrap-step-issuer \
   bound_service_account_namespaces=step-ca \
-  policies=step-certificates-write-apps ttl=20m
+  policies=step-certificates-write-apps,step-ca-backup ttl=20m
+
+# CA restore: the step-certificates Deployment (SA step-ca-restore) logs in
+# with this role to restore the CA from the system/step-ca backup when its
+# PVC turns up empty (policy step-ca-restore, read-only).
+bao write auth/kubernetes/role/step-ca-restore \
+  bound_service_account_names=step-ca-restore \
+  bound_service_account_namespaces=step-ca \
+  policies=step-ca-restore ttl=20m
 
 # Credential producer: the gogs publish-auth Job logs in with this role to
 # push the committed flux-account credential into KV apps/user-apps-source
