@@ -16,4 +16,5 @@ images:
 
 components:
 - ../../components/bootstrap-admin
+- ../../components/publish-auth
 # - ../../components/postgres

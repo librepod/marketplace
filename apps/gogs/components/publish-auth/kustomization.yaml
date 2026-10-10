@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+namespace: gogs
+
+# Producer side of the Reflector -> openbao+ESO migration for the user-apps
+# source credential (#253): pushes the committed flux-account credential into
+# openbao KV apps/user-apps-source. The bootstrap-admin component's
+# secretGenerator stays the local source of truth (the gogs deployment's
+# postStart hook and the bootstrap-ssh-key Job read the Secret directly).
+resources:
+  - serviceaccount.yaml
+  - job.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  - name: cm-gogs-publish-source-auth
+    files:
+      - publish-source-auth.sh=job.sh

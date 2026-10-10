@@ -351,7 +351,7 @@ Restart / Users) marked with `SoonTag`. All status dots read from the single
 | `USER_APPS_GIT_BRANCH` | `master` | only consulted alongside `USER_APPS_GIT_URL`; otherwise from `spec.ref.branch` |
 | `USER_APPS_GIT_USERNAME` | (empty) | overrides the `username` file in the credentials dir |
 | `USER_APPS_GIT_PASSWORD` | (empty) | overrides the `password` file in the credentials dir |
-| `USER_APPS_GIT_CREDENTIALS_DIR` | `/etc/user-apps-git` | mounted Secret with `username`/`password` files (Reflector-populated) |
+| `USER_APPS_GIT_CREDENTIALS_DIR` | `/etc/user-apps-git` | mounted Secret with `username`/`password` files (ESO-synced from openbao KV apps/user-apps-source) |
 | `USER_APPS_WORK_DIR` | `/var/lib/user-apps` | working copy (`repo/`) + the generated `0600 .git-credentials`; disposable emptyDir |
 | `BASE_DOMAIN` | `libre.pod` | `${BASE_DOMAIN}` substituted into templates |
 | `OPENBAO_ADDR` | (empty) | settings store for install questions. Unset ⇒ installing an app that has `settings` returns 503; other apps are unaffected |

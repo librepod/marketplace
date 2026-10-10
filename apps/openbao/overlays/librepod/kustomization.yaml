@@ -18,6 +18,7 @@ configMapGenerator:
   - name: openbao-policies
     files:
       - eso-read-apps.hcl=policies/eso-read-apps.hcl
+      - gogs-write-apps.hcl=policies/gogs-write-apps.hcl
       - marketplace-ui-write-apps.hcl=policies/marketplace-ui-write-apps.hcl
       - step-certificates-write-apps.hcl=policies/step-certificates-write-apps.hcl
     options:

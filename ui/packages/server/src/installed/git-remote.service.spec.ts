@@ -106,9 +106,10 @@ describe('GitRemoteService', () => {
   });
 
   it('fails with an actionable message when the credential is missing', async () => {
-    // The mounted Secret is Reflector-populated and starts EMPTY, so this is a real
-    // startup state, not a hypothetical. It must be a clear error and it must NOT be
-    // cached — the next call has to succeed once Reflector fills it.
+    // The mounted Secret is ESO-synced and starts ABSENT (optional volume before
+    // the first sync), so this is a real startup state, not a hypothetical. It must
+    // be a clear error and it must NOT be cached — the next call has to succeed
+    // once ESO syncs it.
     const svc = new GitRemoteService(configOf({
       USER_APPS_GIT_URL: 'http://gogs/flux/user-apps.git',
       USER_APPS_GIT_CREDENTIALS_DIR: join(root, 'empty'),

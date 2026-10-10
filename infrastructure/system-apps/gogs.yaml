@@ -32,8 +32,17 @@ spec:
   dependsOn:
     - name: storage
     - name: traefik
-  interval: 1h
+  # 10m, not 1h: the publish-auth Job is TTL'd (ttlSecondsAfterFinished), so
+  # every reconcile recreates it — that loop is the Job's retry cadence for
+  # its warn+skip runs (a cold boot routinely runs it before openbao exists)
+  # and the only refresh path for a credential rotation.
+  interval: 10m
   retryInterval: 2m
+  # The publish-auth Job's spec evolves (script/annotation changes); a
+  # Completed Job is immutable, so without force every such change wedges the
+  # apply. force lets Flux delete+recreate the Job — the re-run is
+  # idempotent (warn+skip) by design.
+  force: true
   timeout: 5m
   sourceRef:
     kind: OCIRepository
