@@ -9,16 +9,18 @@ spec:
   template:
     spec:
       initContainers:
-        # The image's entrypoint only runs `CREATE USER IF NOT EXISTS root`, so a
-        # reinstall that rebinds the old NFS folder keeps the OLD root password while
-        # the marketplace generated a new one. This converges it before the server
-        # starts: with no server running, `dolt sql` runs embedded and rewrites
-        # .doltcfg/privileges.db, which the server then loads. Users and databases
-        # created over SQL are untouched. A fresh data dir is skipped — the
-        # entrypoint creates root from env there.
+        # The image's entrypoint only runs `CREATE USER IF NOT EXISTS root`, so the
+        # root password in the data dir never follows DOLT_ROOT_PASSWORD once it
+        # exists. Install reuses the generated value stored in OpenBao, but the two
+        # can still diverge over surviving NFS data: the OpenBao entry was edited
+        # (a password rotation) or lost while the volume was kept. This converges
+        # it before the server starts: with no server running, `dolt sql` runs
+        # embedded and rewrites .doltcfg/privileges.db, which the server then loads.
+        # Users and databases created over SQL are untouched. A fresh data dir is
+        # skipped — the entrypoint creates root from env there.
         # A sidecar can't do this: its `dolt sql` doesn't attach to the live server,
         # it edits the file on disk and the server never reloads it.
-        # `$VAR` without braces: Flux postBuild.substitute would rewrite `${VAR}`.
+        # `$VAR` without braces: shell variables, resolved from envFrom at runtime.
         - name: converge-root-password
           image: dolthub/dolt-sql-server   # same image → overlay pins the same tag
           imagePullPolicy: IfNotPresent
@@ -26,7 +28,7 @@ spec:
             - configMapRef:
                 name: dolt
             - secretRef:
-                name: dolt-secret
+                name: dolt-settings   # LAST: settings override the .env defaults
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -53,7 +55,7 @@ spec:
             - configMapRef:
                 name: dolt
             - secretRef:
-                name: dolt-secret
+                name: dolt-settings   # LAST: settings override the .env defaults
           readinessProbe:
             tcpSocket:
               port: mysql
