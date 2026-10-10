@@ -1,11 +1,17 @@
 #!/bin/sh
 # One-time (idempotent) OpenBao bootstrap: init, KV v2 engine, Kubernetes
-# auth, OIDC auth (Casdoor SSO), policies, roles. Runs in the bootstrap Job
-# alongside the store-credentials container; they exchange state through
-# /shared. Policies are site-specific: every *.hcl mounted at /policies
-# (openbao-policies ConfigMap from the overlay) becomes an OpenBao policy
-# named after the file. (The audit device is declared in the server config —
-# see helmrelease.yaml.)
+# auth, policies, roles. Runs in the bootstrap Job alongside the
+# store-credentials container; they exchange state through /shared. Policies
+# are site-specific: every *.hcl mounted at /policies (openbao-policies
+# ConfigMap from the overlay) becomes an OpenBao policy named after the
+# file. (The audit device is declared in the server config — see
+# helmrelease.yaml.)
+#
+# Deliberately NO OIDC/SSO auth method: configuring one would make this
+# bootstrap depend on the IdP chain (the step-ca CA as
+# oidc_discovery_ca_pem + the casdoor-sso-controller output) and order
+# openbao behind step-issuer -> casdoor. openbao is a system app and stays
+# independent of all of that; login is token-based (README "Login").
 set -e
 
 SA_DIR=/var/run/secrets/kubernetes.io/serviceaccount
@@ -94,50 +100,19 @@ bao write auth/kubernetes/role/marketplace-ui \
   bound_service_account_namespaces=marketplace-ui \
   policies=marketplace-ui-write-apps ttl=20m
 
-# OIDC auth method (SSO login to the UI / bao CLI) backed by Casdoor.
-# Credentials come from Secret/openbao-sso, provisioned by the
-# casdoor-sso-controller from the SSOClient CR in the overlay. Everything
-# above this point (init, KV, k8s auth, policies, roles) is already done, so
-# a missing/broken SSO chain only ever delays SSO login — ESO and
-# marketplace-ui keep working. `bao write auth/oidc/config` triggers an
-# immediate SERVER-side discovery fetch; the CA is passed to the server via
-# oidc_discovery_ca_pem (the CLI itself never talks TLS to the IdP).
-# Reflector fills the mirrored CA ConfigMap stub asynchronously (it starts
-# empty), and the controller may lag the Job start — wait for both.
-for i in $(seq 1 30); do
-  [ -s /ca/root_ca.crt ] && break
-  sleep 2
-done
-if [ ! -s /ca/root_ca.crt ]; then
-  echo "ERROR: ConfigMap step-certificates-certs (Reflector mirror of the step-ca root CA) has no root_ca.crt after 60s — check the reflector annotation in the overlay kustomization and the step-ca app; OIDC discovery cannot verify the IdP certificate without it." >&2
-  exit 1
-fi
-for i in $(seq 1 150); do
-  [ -s /sso/client_id ] && [ -s /sso/client_secret ] && break
-  sleep 2
-done
-if [ ! -s /sso/client_id ] || [ ! -s /sso/client_secret ]; then
-  echo "ERROR: Secret/openbao-sso (casdoor-sso-controller output for SSOClient/openbao-sso) is absent or empty after 300s — check 'kubectl get ssoclient openbao-sso -n openbao', the controller logs and Secret/casdoor-api-credentials. Delete this Job to re-run once fixed; SSO stays unconfigured until then, everything else is already bootstrapped." >&2
-  exit 1
-fi
-if ! bao auth list -format=json | grep -q '"oidc/"'; then
-  bao auth enable oidc
-fi
-bao write auth/oidc/config \
-  oidc_client_id="$(cat /sso/client_id)" \
-  oidc_client_secret="$(cat /sso/client_secret)" \
-  default_role="admin-sso" \
-  oidc_discovery_url="$SSO_DISCOVERY_URL" \
-  oidc_discovery_ca_pem=@/ca/root_ca.crt
-# Platform model: every Casdoor login is a trusted cluster admin (same as
-# the other SSO apps). allowed_redirect_uris must match the SSOClient CR's
-# redirectUris exactly.
-bao write auth/oidc/role/admin-sso \
-  role_type="oidc" \
-  user_claim="sub" \
-  policies="admin,default" \
-  oidc_scopes="openid,profile,email" \
-  allowed_redirect_uris="$BAO_PUBLIC_ADDR/ui/vault/auth/oidc/oidc/callback,http://localhost:8250/oidc/callback"
+# CA producer: the step-certificates bootstrap Job logs in with this role to
+# push the public root + intermediate CA into KV apps/step-ca (write-only on
+# that one path — policy step-certificates-write-apps). Producer-push: this
+# bootstrap never reads from the step-ca namespace.
+bao write auth/kubernetes/role/step-certificates \
+  bound_service_account_names=step-ca-bootstrap-step-issuer \
+  bound_service_account_namespaces=step-ca \
+  policies=step-certificates-write-apps ttl=20m
+
+# NOTE (post-SSO migration): this script provisions but never removes auth
+# methods, so clusters bootstrapped while the OIDC/SSO auth method existed
+# keep auth/oidc and its admin-sso role (policies admin,default) enabled.
+# Disable once by hand on those clusters: bao auth disable oidc
 
 # The audit device is declared in the server configuration (see
 # helmrelease.yaml), not enabled via the API.

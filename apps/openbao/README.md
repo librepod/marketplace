@@ -49,50 +49,36 @@ idempotently:
      **read** `apps/*`
    - `marketplace-ui-write-apps` ← role `marketplace-ui`
      (SA `marketplace-ui`, ns `marketplace-ui`): **create/update** `apps/*`
-5. enables and configures the **OIDC auth method** (SSO — see below)
-6. enables the **file audit device** at `/openbao/audit/audit.log`
+   - `step-certificates-write-apps` ← role `step-certificates`
+     (SA `step-ca-bootstrap-step-issuer`, ns `step-ca`): **create/update**
+     `apps/step-ca` only — see "LibrePod CA distribution" below
+5. enables the **file audit device** at `/openbao/audit/audit.log`
 
-## SSO login (Casdoor OIDC)
+There is deliberately **no OIDC/SSO auth method**: configuring one would
+make the bootstrap depend on the IdP chain (the step-ca CA +
+casdoor-sso-controller) and order openbao behind step-issuer → casdoor.
+openbao is a system app and stays independent of all of that — see
+"Login (token)" below.
 
-The UI (and `bao login -method=oidc`) authenticate via the platform IdP:
+## Login (token)
 
-- `overlays/librepod/ssoclient.yaml` declares the `openbao` Casdoor client;
-  the casdoor-sso-controller writes its credentials into
-  `Secret/openbao-sso` (nothing committed).
-- The bootstrap Job consumes that Secret and configures `auth/oidc`: the
-  `admin-sso` role maps every Casdoor login to the **`admin`** policy —
-  platform model: each SSO user is a trusted cluster admin (same as wg-easy,
-  immich, …). Redirect URIs: the UI callback
-  (`https://openbao.<BASE_DOMAIN>/ui/vault/auth/oidc/oidc/callback`) and the
-  CLI loopback (`http://localhost:8250/oidc/callback`); they must match the
-  SSOClient CR exactly.
-- The CA for the server-side calls to `https://id.<BASE_DOMAIN>` is scoped to
-  the auth method (`oidc_discovery_ca_pem` written by the bootstrap Job) —
-  the server pod itself carries no CA wiring.
-- To log in: open the UI → sign in with method **OIDC** → the default role
-  `admin-sso` applies (no role needs to be entered).
+openbao performs its own authentication; with no OIDC method configured,
+login is token-based:
 
-SSO is **additive**, not a replacement: token login keeps working — the UI
-method dropdown always offers **Token**, and the root token is in
-`Secret/openbao-credentials` (or re-mint it from the recovery keys via
-`bao operator generate-root`).
+- the **root token** is in `Secret/openbao-credentials` (key `root-token`,
+  namespace `openbao`):
+  ```sh
+  kubectl -n openbao get secret openbao-credentials \
+    -o jsonpath='{.data.root-token}' | base64 -d
+  ```
+  Paste it into the UI (method **Token**) or `bao login <token>`.
+- lost token? Mint a new root from the **recovery keys** (stored with the
+  first-boot credentials, `Secret/openbao-credentials` key `recovery-keys`)
+  via `bao operator generate-root`, or run it in-pod:
+  `kubectl -n openbao exec openbao-0 -- bao operator generate-root -init`.
 
-The OIDC section runs **last** in the bootstrap: if the SSO Secret is
-missing (controller/casdoor trouble), the Job waits 5 min per attempt and
-fails with a named error, retrying within its deadline — init, KV, k8s auth,
-policies and roles are already applied at that point, so External Secrets
-and marketplace-ui keep working while only SSO login is delayed. Fix the
-cause, then `kubectl delete job openbao-bootstrap -n openbao` to re-wire.
-
-**Secret rotation**: rotating the client secret
-(`kubectl annotate ssoclient openbao-sso -n openbao
-marketplace.librepod.org/rotate-secret=true --overwrite`) updates the
-Secret, but OpenBao keeps the old value until the bootstrap Job re-runs —
-delete it (`kubectl delete job openbao-bootstrap -n openbao`) and let Flux
-recreate, then re-login. The same delete-and-recreate is the manual path
-after a failed SSO bootstrap; for spec changes (new volumes/env on the Job)
-the system-apps Kustomization has `force: true`, so Flux recreates the
-completed Job automatically and the idempotent re-run picks up the change.
+The audit device logs token usage without a human identity — the trade-off
+for openbao staying independent of the IdP chain.
 
 ## Audit logs (10Gi, 30 day retention)
 
@@ -128,10 +114,35 @@ spec:
         property: password
 ```
 
+## LibrePod CA distribution (`apps/step-ca`)
+
+The step-ca root + intermediate certificates (public material, no keys) are
+distributed to consumer namespaces through the store — producer-push,
+consumer-pull:
+
+- the **step-certificates bootstrap Job** (in `step-ca`) publishes both certs
+  into KV at **`apps/step-ca`** (keys `root_ca.crt`, `intermediate_ca.crt`)
+  on every run, authenticating with kubernetes-auth role `step-certificates`
+  (policy `step-certificates-write-apps`: write-only on that one path).
+  Publication is best-effort by design — that Job gates
+  `step-issuer -> casdoor -> openbao`, so it must never block on openbao; a
+  cold-boot run simply skips and the next one (its TTL'd Job re-runs every
+  ~10m) retries;
+- consumer namespaces sync `Secret/step-certificates-certs` from that path
+  via an ExternalSecret (docs/sso-app-author-guide.md).
+
+openbao itself never reads from the step-ca namespace and consumes no part
+of the CA — the only coupling is the writer role above (the store admitting
+a producer, same as marketplace-ui). CA rotation propagates through the same
+loops: the step-certificates Job re-publishes from its PVC every ~10m, and
+ESO re-syncs consumers per their `refreshInterval`.
+
 ## TLS
 
-A dedicated certificate for `openbao.<BASE_DOMAIN>` is issued by
-cert-manager via the cluster's `StepClusterIssuer` (secret `openbao-tls`).
+No dedicated certificate: the browser route rides the cluster's shared
+default wildcard cert (Traefik default TLS store — same step-ca issuer, so
+no trust change). All machine traffic is in-cluster HTTP
+(`http://openbao.openbao.svc:8200`), so nothing else consumes TLS here.
 The IngressRoute is TLS-only on `websecure` — there is intentionally no
 plain-HTTP route.
 

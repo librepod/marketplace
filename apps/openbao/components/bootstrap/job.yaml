@@ -1,9 +1,9 @@
 # Post-deploy bootstrap: initializes OpenBao on first boot (recovery keys +
 # root token land in the openbao-credentials Secret) and configures the KV v2
-# engine, Kubernetes auth, OIDC auth (Casdoor SSO), policies and roles.
-# Site-specific policies come from the overlay's openbao-policies ConfigMap
-# (optional mount). (The audit device is declared in the server
-# configuration instead — see helmrelease.yaml.)
+# engine, Kubernetes auth, policies and roles. Site-specific policies come
+# from the overlay's openbao-policies ConfigMap (optional mount). (The audit
+# device is declared in the server configuration instead — see
+# helmrelease.yaml.)
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -22,7 +22,7 @@ spec:
         # Bump whenever an overlay policy .hcl changes: the Job spec is
         # immutable, so this is what makes the apply recreate (force:true) and
         # re-run the bootstrap, which re-applies policies idempotently.
-        openbao.librepod/policies-version: "2"
+        openbao.librepod/policies-version: "3"
     spec:
       restartPolicy: Never
       serviceAccountName: openbao-bootstrap
@@ -34,13 +34,6 @@ spec:
           env:
             - name: BAO_ADDR
               value: http://openbao.openbao.svc.cluster.local:8200
-            # Public coordinates of the OIDC setup (substituted by Flux
-            # postBuild.substitute at deploy time — never inside the script
-            # itself, whose ${...} patterns Flux would mangle).
-            - name: BAO_PUBLIC_ADDR
-              value: https://openbao.${BASE_DOMAIN:=libre.pod}
-            - name: SSO_DISCOVERY_URL
-              value: https://id.${BASE_DOMAIN:=libre.pod}
           command: ["/bin/sh", "/bootstrap/bootstrap.sh"]
           volumeMounts:
             - name: bootstrap
@@ -53,20 +46,6 @@ spec:
             # data volume turns out to have been wiped (see bootstrap.sh)
             - name: seal
               mountPath: /seal
-            # OIDC client credentials (provisioned by the
-            # casdoor-sso-controller from the SSOClient CR). optional:true —
-            # the SECRET is late (controller reconcile lag): the script waits
-            # for the files in-pod (bootstrap.sh), so a missing Secret delays
-            # only the SSO section, never the init/KV/k8s-auth bootstrap
-            # itself. Kubelet populates the volume once the Secret appears.
-            - name: sso
-              mountPath: /sso
-              readOnly: true
-            # LibrePod root CA, read by the script and passed to the server
-            # via oidc_discovery_ca_pem (the discovery fetch runs server-side)
-            - name: ca
-              mountPath: /ca
-              readOnly: true
         # Persists the root token + recovery keys to the openbao-credentials
         # Secret on first init and mirrors them to the seal PVC, so a
         # reinstall that preserves the volumes restores the Secret (and thus
@@ -104,16 +83,3 @@ spec:
         - name: seal
           persistentVolumeClaim:
             claimName: openbao-seal
-        # OIDC client credentials written by the casdoor-sso-controller
-        # (SSOClient CR in the overlay); optional — see the mount comment
-        - name: sso
-          secret:
-            secretName: openbao-sso
-            optional: true
-        # LibrePod root CA (Reflector-mirrored stub from step-ca)
-        - name: ca
-          configMap:
-            name: step-certificates-certs
-            items:
-              - key: root_ca.crt
-                path: root_ca.crt

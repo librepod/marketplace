@@ -21,14 +21,12 @@ metadata:
 spec:
   dependsOn:
     - name: storage
+    # IngressRoute CRD + entrypoints
     - name: traefik
-    - name: step-issuer
-    # SSOClient CR + Secret need the CRD/controller to exist first
-    - name: casdoor-sso-controller
   interval: 1h
   retryInterval: 2m
-  # The bootstrap Job's spec evolves (volumes/env change with features like
-  # SSO); a Completed Job is immutable, so without force every such change
+  # The bootstrap Job's spec evolves (volumes/env change as auth roles are
+  # added); a Completed Job is immutable, so without force every such change
   # wedges the apply ("updates to job template are not allowed"). force lets
   # Flux delete+recreate the Job — the re-run is idempotent by design.
   force: true

@@ -10,13 +10,13 @@ credentials the controller produced at runtime.
 This guide shows how to add SSO to a new app. `open-webui` is the reference
 implementation — see `apps/open-webui/overlays/librepod/`.
 
-> **Apps that configure OIDC via API instead of env vars** (openbao): some
-> apps can't read OIDC config from the environment — their auth method is
+> **Apps that configure OIDC via API instead of env vars**: some apps
+> can't read OIDC config from the environment — their auth method is
 > configured through their own API after boot. Pattern: mount the controller's
-> `Secret` (and the CA ConfigMap) as **files into a post-deploy Job** and have
-> it run the app's config commands. Reference: `apps/openbao/components/bootstrap/`
-> (`job.yaml` mounts, `bootstrap.sh` runs `bao write auth/oidc/config`). Two
-> rules from that reference implementation:
+> `Secret` (and the CA) as **files into a post-deploy Job** and have it run
+> the app's config commands. (openbao used to be the in-repo reference but
+> its OIDC auth method was removed to keep the store independent of the IdP
+> chain.) Two rules for that pattern:
 >
 > - Mount the Secret `optional: true` and **wait for it in the script**
 >   (bounded, then exit non-zero with a message naming the SSOClient/Secret).
@@ -26,11 +26,10 @@ implementation — see `apps/open-webui/overlays/librepod/`.
 >   provisions it.
 > - Writing the config typically triggers an immediate **server-side**
 >   discovery fetch. Prefer the app's **scoped CA parameter** when it has one
->   (openbao: `oidc_discovery_ca_pem` on `auth/oidc/config`) — the server
->   then needs no CA wiring at all. Only fall back to a server-wide
->   `SSL_CERT_FILE` if no scoped option exists, and then use the §4 merge
->   pattern (root-only `SSL_CERT_FILE` shadows the system trust store and
->   breaks any future outbound public-TLS).
+>   (e.g. `oidc_discovery_ca_pem`) — the server then needs no CA wiring at
+>   all. Only fall back to a server-wide `SSL_CERT_FILE` if no scoped option
+>   exists, and then use the §4 merge pattern (root-only `SSL_CERT_FILE`
+>   shadows the system trust store and breaks any future outbound public-TLS).
 
 ## Prerequisite
 

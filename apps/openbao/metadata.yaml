@@ -29,12 +29,8 @@ spec:
         description: "Traefik (provided by traefik app)"
       - kind: StorageClass
         description: "nfs-client (provided by nfs-provisioner app)"
-      - kind: CertificateIssuer
-        description: "step-issuer (provided by step-issuer app; issues the dedicated openbao certificate)"
       - kind: SecretStoreOperator
         description: "external-secrets (provided by the external-secrets system app; provides the ClusterSecretStore CRD)"
-      - kind: SSOProvider
-        description: "Casdoor SSO (provided by casdoor-sso-controller)"
 
   templates:
     source: |
@@ -64,17 +60,13 @@ spec:
         dependsOn:
           - name: traefik
           - name: storage
-          - name: step-issuer
           - name: external-secrets
-          # SSOClient CR + Secret need the CRD/controller to exist first
-          - name: casdoor-sso-controller
         force: true
         interval: 1h
         retryInterval: 2m
         # ≥ the bootstrap Job's activeDeadlineSeconds (900s): with wait:true
-        # the health check waits on that Job, and a 5m timeout reports
-        # spurious Ready=False when the Job spends minutes waiting for the
-        # SSO Secret (controller reconcile lag).
+        # the health check waits on that Job, and a shorter timeout reports
+        # spurious Ready=False on slow networks.
         timeout: 20m
         sourceRef:
           kind: OCIRepository
