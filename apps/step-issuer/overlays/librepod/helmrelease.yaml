@@ -40,7 +40,8 @@ spec:
   # Inject the bootstrap initContainer into the step-issuer Deployment.
   # It runs the cluster-issuer bootstrap script before the controller starts,
   # using the chart's own ServiceAccount (which has been granted the necessary
-  # RBAC via the bootstrap-cluster-issuer component).
+  # RBAC via the bootstrap-cluster-issuer component). All inputs come from
+  # the step-certificates-provisioner-password Secret — no PVC mount.
   postRenderers:
     - kustomize:
         patches:
@@ -72,9 +73,6 @@ spec:
                           - mountPath: /scripts
                             name: bootstrap-script
                             readOnly: true
-                          - mountPath: /home/step
-                            name: ca-data
-                            readOnly: true
                           - mountPath: /tmp
                             name: tmp
                     volumes:
@@ -84,8 +82,5 @@ spec:
                           items:
                             - key: step-ca-bootstrap-cluster-issuer.sh
                               path: step-ca-bootstrap-cluster-issuer.sh
-                      - name: ca-data
-                        persistentVolumeClaim:
-                          claimName: step-certificates-data
                       - name: tmp
                         emptyDir: {}

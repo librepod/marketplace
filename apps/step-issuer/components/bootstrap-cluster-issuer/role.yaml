@@ -1,4 +1,5 @@
-# ClusterRole for creating the cluster-scoped StepClusterIssuer resource
+# ClusterRole for creating the StepClusterIssuer resource. Idempotent flow
+# is GET (exists → skip) + POST (create); re-provisioning goes via delete.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -6,9 +7,10 @@ metadata:
 rules:
   - apiGroups: ["certmanager.step.sm"]
     resources: ["stepclusterissuers"]
-    verbs: ["get", "create", "update", "patch"]
+    verbs: ["get", "create"]
 ---
-# Namespace-scoped Role for Secret access in step-ca namespace
+# Namespace-scoped Role for reading the bootstrap Secret (password/kid/
+# caBundle) produced by the step-certificates bootstrap Job.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -17,4 +19,4 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get"]

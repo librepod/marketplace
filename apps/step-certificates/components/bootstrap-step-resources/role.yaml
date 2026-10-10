@@ -1,24 +1,12 @@
+# The bootstrap Job creates exactly one Kubernetes object: the
+# step-certificates-provisioner-password Secret (password + kid + caBundle)
+# consumed by step-issuer's StepClusterIssuer. Everything else it produces
+# goes to the openbao KV store.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: step-ca-bootstrap-step-issuer
 rules:
-  # Allow creating and managing ConfigMaps
-  - apiGroups: [""]
-    resources: ["configmaps"]
-    verbs: ["get", "create", "update", "patch", "delete"]
-
-  # Allow creating and managing Secrets
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get", "create", "update", "patch", "delete"]
-
-  # Allow creating and managing StepIssuer resources (if needed in the future)
-  - apiGroups: ["certmanager.step.sm"]
-    resources: ["stepissuers"]
-    verbs: ["get", "create", "update", "delete", "list"]
-
-  # Allow checking StepIssuer status
-  - apiGroups: ["certmanager.step.sm"]
-    resources: ["stepissuers/status"]
-    verbs: ["get"]
+    verbs: ["get", "create", "patch"]
