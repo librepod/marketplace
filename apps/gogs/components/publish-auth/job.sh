@@ -17,8 +17,9 @@
 # this Job's log for "skipping".
 #
 # Env (envFrom Secret/user-apps-source-auth): username, password.
-# Shell vars are braceless on purpose: Flux postBuild.substitute rewrites
-# ${VAR} patterns in ConfigMap content (docs/FLUX_WORKFLOW.md).
+# The generated ConfigMap is annotated substitute: disabled — Flux
+# postBuild.substitute must not touch shell variables in this script
+# (docs/FLUX_WORKFLOW.md).
 SA=/var/run/secrets/kubernetes.io/serviceaccount
 
 if [ -z "$username" ] || [ -z "$password" ]; then

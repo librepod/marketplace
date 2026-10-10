@@ -12,10 +12,16 @@ resources:
   - serviceaccount.yaml
   - job.yaml
 
-generatorOptions:
-  disableNameSuffixHash: true
-
 configMapGenerator:
   - name: cm-gogs-publish-source-auth
     files:
       - publish-source-auth.sh=job.sh
+    options:
+      annotations:
+        # shell variables in the script must not be interpreted by
+        # Flux postBuild.substitute (strict envsubst fails the whole
+        # Kustomization on any unmapped ${VAR})
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      # the Job mounts this ConfigMap; a name hash would rewrite the
+      # immutable Job spec on every content change and brick the apply
+      disableNameSuffixHash: true
