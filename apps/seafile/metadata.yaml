@@ -19,44 +19,47 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/seafile"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain (app will be at seafile.BASE_DOMAIN)"
-        type: string
-        example: "example.com"
-
-  secrets:
-    - name: MYSQL_ROOT_PASSWORD
-      description: "MySQL root password"
-      required: false
-      generate:
-        type: random
-        length: 32
-    - name: SEAFILE_MYSQL_DB_PASSWORD
-      description: "Seafile database password"
-      required: false
-      generate:
-        type: random
-        length: 32
-    - name: REDIS_PASSWORD
-      description: "Redis password"
-      required: false
-      generate:
-        type: random
-        length: 32
-    - name: INIT_SEAFILE_ADMIN_PASSWORD
-      description: "Seafile admin password"
-      required: true
-      generate:
-        type: random
-        length: 32
-    - name: JWT_PRIVATE_KEY
-      description: "Seafile JWT signing key (surfaced to seafile-mc as SEAFILE_AI_SECRET_KEY); stable per-install"
-      required: false
-      generate:
-        type: random
-        length: 40
+  # Closed settings (no allowCustom): seafile has no user-facing install
+  # questions — everything here is a machine secret, generate-only (never shown
+  # in the install dialog). On reinstall the stored values are reused, so MySQL
+  # credentials keep working against the NFS-surviving MariaDB data (this app
+  # has NO converge container) and existing sessions/JWTs stay valid.
+  #
+  # NOTE: JWT_PRIVATE_KEY is a random opaque string by legacy design (surfaced
+  # to seafile-mc as SEAFILE_AI_SECRET_KEY) — NOT a PEM key. Preserve that
+  # semantics; do not "fix" it into a real key in this migration.
+  settings:
+    items:
+      - name: MYSQL_ROOT_PASSWORD
+        label: "MySQL root password"
+        description: "MariaDB root password, shared by the mysql container and seafile's DB bootstrap (INIT_SEAFILE_MYSQL_ROOT_PASSWORD derives from it). Generated once per install."
+        sensitive: true
+        generate:
+          length: 32
+      - name: SEAFILE_MYSQL_DB_PASSWORD
+        label: "Seafile database password"
+        description: "Password of the seafile MySQL user (ccnet/seahub/seafile DBs). Generated once per install."
+        sensitive: true
+        generate:
+          length: 32
+      - name: REDIS_PASSWORD
+        label: "Redis password"
+        description: "Redis requirepass, shared by the redis container and seafile's cache config. Generated once per install."
+        sensitive: true
+        generate:
+          length: 32
+      - name: INIT_SEAFILE_ADMIN_PASSWORD
+        label: "Seafile admin password"
+        description: "Initial admin (admin@<domain>) password, applied on first bootstrap. Generated once per install."
+        sensitive: true
+        generate:
+          length: 32
+      - name: JWT_PRIVATE_KEY
+        label: "Seafile JWT signing key"
+        description: "Random opaque signing key (surfaced to seafile-mc as SEAFILE_AI_SECRET_KEY); stable per-install, so existing tokens stay valid across restarts."
+        sensitive: true
+        generate:
+          length: 40
 
   dependencies:
     required:
@@ -107,30 +110,9 @@ spec:
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
-          substituteFrom:
-            - kind: Secret
-              name: seafile-config
-    secret: |
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: seafile-config
-        namespace: flux-system
-        labels:
-          marketplace.io/managed: "true"
-          marketplace.io/app: "seafile"
-      type: Opaque
-      stringData:
-        MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD}"
-        INIT_SEAFILE_MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD}"
-        SEAFILE_MYSQL_DB_PASSWORD: "${SEAFILE_MYSQL_DB_PASSWORD}"
-        REDIS_PASSWORD: "${REDIS_PASSWORD}"
-        INIT_SEAFILE_ADMIN_PASSWORD: "${INIT_SEAFILE_ADMIN_PASSWORD}"
-        JWT_PRIVATE_KEY: "${JWT_PRIVATE_KEY}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization
       resources:
         - source.yaml
         - release.yaml
-        - secret.yaml
