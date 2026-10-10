@@ -116,19 +116,6 @@ publish_ca
 if curl -fsS --cacert "$SA/ca.crt" -H "Authorization: Bearer $(cat "$SA/token")" \
   "https://kubernetes.default.svc/api/v1/namespaces/${STEPISSUER_NAMESPACE}/configmaps/step-certificates-certs" >/dev/null 2>&1; then
   echo "ConfigMap step-certificates-certs already exists; nothing to do."
-  # Ensure the publication annotations on this source: Reflector owns the
-  # distribution of these public certs (auto-creates mirrors in every
-  # namespace), but only while auto-mirroring is enabled — sources created
-  # before that carry only reflection-allowed. Idempotent: a no-op PATCH when
-  # the annotations already match, a source UPDATE event (Reflector re-sweeps
-  # all mirrors) when they don't. Raw API via curl — deliberately no kubectl
-  # download on this path.
-  curl -fsS --cacert "$SA/ca.crt" -H "Authorization: Bearer $(cat "$SA/token")" \
-    -H "Content-Type: application/merge-patch+json" -X PATCH \
-    "https://kubernetes.default.svc/api/v1/namespaces/${STEPISSUER_NAMESPACE}/configmaps/step-certificates-certs" \
-    -d '{"metadata":{"annotations":{"reflector.v1.k8s.emberstack.com/reflection-allowed":"true","reflector.v1.k8s.emberstack.com/reflection-auto-enabled":"true"}}}' \
-    >/dev/null 2>&1 \
-    || echo "WARNING: could not ensure reflection annotations (will retry next run)" >&2
   exit 0
 fi
 
@@ -248,24 +235,16 @@ echo "ConfigMap step-certificates-config created/updated."
 echo -e "\e[1mCreating ConfigMap: step-certificates-certs...\e[0m"
 
 # Create ConfigMap for certificates (root_ca.crt and intermediate_ca.crt).
-# Reflector owns the distribution of these public certs: reflection-allowed
-# + reflection-auto-enabled make it create and maintain same-named mirrors in
-# every namespace (consumer apps just mount step-certificates-certs; no stub
-# manifests, no hand-off events to lose). Data AND annotations go in a
-# SINGLE apply: with a create-then-annotate two-step, Reflector could observe
-# the CM mid-transition (empty or unannotated) and never re-sync, leaving
-# consumer pods FailedMount until the next full sweep. One atomic
-# annotated+filled creation means Reflector only ever sees the final state.
-# See https://github.com/emberstack/kubernetes-reflector
+# This CM is the local source of truth for step-issuer and the root-ca-server
+# sidecar (both consume it in this namespace). Cross-namespace distribution
+# is also this Job's doing: publish_ca (top of this script) pushes the same
+# certs into the openbao KV store at apps/step-ca, which consumer namespaces
+# sync via ExternalSecret.
 kubectl create configmap step-certificates-certs \
   --from-file=root_ca.crt="${CA_CERTS_DIR}/root_ca.crt" \
   --from-file=intermediate_ca.crt="${CA_CERTS_DIR}/intermediate_ca.crt" \
   --namespace="$STEPISSUER_NAMESPACE" \
-  --dry-run=client -o yaml \
-| kubectl patch --local --type merge -f - \
-    -p '{"metadata":{"annotations":{"reflector.v1.k8s.emberstack.com/reflection-allowed":"true","reflector.v1.k8s.emberstack.com/reflection-auto-enabled":"true"}}}' \
-    -o yaml \
-| kubectl apply -f -
+  --dry-run=client -o yaml | kubectl apply -f -
 
 echo "ConfigMap step-certificates-certs created/updated."
 

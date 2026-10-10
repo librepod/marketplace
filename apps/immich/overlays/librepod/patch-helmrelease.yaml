@@ -70,10 +70,11 @@ spec:
                 SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
                 NODE_EXTRA_CA_CERTS: /etc/ssl/certs/ca-certificates.crt
       persistence:
-        # LibrePod CA bundle (root + intermediate), mirrored from step-ca by
-        # Reflector (see kustomization.yaml). Mounted into the init container.
+        # LibrePod CA bundle (root + intermediate), synced from openbao
+        # (apps/step-ca) by the ExternalSecret in kustomization.yaml.
+        # Mounted into the init container.
         root-ca-cert:
-          type: configMap
+          type: secret
           name: step-certificates-certs
           advancedMounts:
             main:

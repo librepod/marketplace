@@ -4,7 +4,7 @@
 # TLS verification (Node needs NODE_EXTRA_CA_CERTS; SSL_CERT_FILE is set for
 # parity per docs/sso-app-author-guide.md §4).
 #
-# Same Reflector + init-container pattern as vaultwarden / headscale / seafile.
+# Same ExternalSecret + init-container pattern as vaultwarden / headscale / seafile.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -58,8 +58,8 @@ spec:
               value: /etc/ssl/certs/ca-certificates.crt
       volumes:
         - name: root-ca-cert
-          configMap:
-            name: step-certificates-certs
+          secret:
+            secretName: step-certificates-certs
             items:
               - key: root_ca.crt
                 path: root_ca.crt

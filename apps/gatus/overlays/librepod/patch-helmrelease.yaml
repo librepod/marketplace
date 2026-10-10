@@ -34,10 +34,10 @@ spec:
     envFrom:
     - secretRef:
         name: gatus-sso
-    # Fuse the LibrePod root CA into the pod trust bundle (replicated into this
-    # namespace by the Reflector stub in kustomization.yaml). Chart quirk used
-    # here: extraVolumeMounts entries with existingConfigMap/emptydir
-    # auto-create the pod volumes — the chart has no extraVolumes key.
+    # Fuse the LibrePod root CA into the pod trust bundle (synced into this
+    # namespace by the ExternalSecret in kustomization.yaml). Chart quirk used
+    # here: extraVolumeMounts entries with existingSecret/emptydir auto-create
+    # the pod volumes — the chart has no extraVolumes key.
     extraInitContainers:
     - name: merge-ca-bundle
       image: alpine:3.19
@@ -59,7 +59,7 @@ spec:
     - name: root-ca-cert
       mountPath: /mnt/root-ca
       readOnly: true
-      existingConfigMap: step-certificates-certs
+      existingSecret: step-certificates-certs
     - name: merged-ca-bundle
       mountPath: /etc/ssl/certs/ca-certificates.crt
       subPath: ca-certificates.crt
