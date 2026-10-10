@@ -23,10 +23,14 @@ spec:
     - name: storage
     # IngressRoute CRD + entrypoints
     - name: traefik
+    # certificate.yaml applies kind Certificate (cert-manager CRD) whose
+    # issuerRef names StepClusterIssuer (step-issuer CRD); step-issuer itself
+    # depends on cert-manager, so this edge transitively orders both CRD sets.
+    - name: step-issuer
   interval: 1h
   retryInterval: 2m
-  # The bootstrap Job's spec evolves (volumes/env change with features like
-  # SSO); a Completed Job is immutable, so without force every such change
+  # The bootstrap Job's spec evolves (volumes/env change as auth roles are
+  # added); a Completed Job is immutable, so without force every such change
   # wedges the apply ("updates to job template are not allowed"). force lets
   # Flux delete+recreate the Job — the re-run is idempotent by design.
   force: true

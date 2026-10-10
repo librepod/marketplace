@@ -28,8 +28,8 @@ implementation — see `apps/open-webui/overlays/librepod/`.
 >   discovery fetch. Prefer the app's **scoped CA parameter** when it has one
 >   (e.g. `oidc_discovery_ca_pem`) — the server then needs no CA wiring at
 >   all. Only fall back to a server-wide `SSL_CERT_FILE` if no scoped option
->   exists, and then use the §4 merge pattern
->   breaks any future outbound public-TLS).
+>   exists, and then use the §4 merge pattern (root-only `SSL_CERT_FILE`
+>   shadows the system trust store and breaks any future outbound public-TLS).
 
 ## Prerequisite
 

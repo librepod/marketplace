@@ -129,7 +129,7 @@ consumer-pull:
   cold-boot run simply skips and the next one (its TTL'd Job re-runs every
   ~10m) retries;
 - consumer namespaces sync `Secret/step-certificates-certs` from that path
-  via an ExternalSecret (docs/sso-app-author-guide.md §4).
+  via an ExternalSecret (docs/sso-app-author-guide.md).
 
 openbao itself never reads from the step-ca namespace and consumes no part
 of the CA — the only coupling is the writer role above (the store admitting

@@ -109,6 +109,11 @@ bao write auth/kubernetes/role/step-certificates \
   bound_service_account_namespaces=step-ca \
   policies=step-certificates-write-apps ttl=20m
 
+# NOTE (post-SSO migration): this script provisions but never removes auth
+# methods, so clusters bootstrapped while the OIDC/SSO auth method existed
+# keep auth/oidc and its admin-sso role (policies admin,default) enabled.
+# Disable once by hand on those clusters: bao auth disable oidc
+
 # The audit device is declared in the server configuration (see
 # helmrelease.yaml), not enabled via the API.
 
