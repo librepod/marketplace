@@ -1,0 +1,62 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: reflector
+spec:
+  displayName: "Reflector"
+  description: "Kubernetes operator that reflects Kubernetes resources across namespaces and configmaps/secrets for auto-reload"
+  icon: "https://raw.githubusercontent.com/emberstack/kubernetes-reflector/main/docs/assets/logo.png"
+  category: "Infrastructure"
+  website: "https://github.com/emberstack/kubernetes-reflector"
+
+  # renovate: datasource=docker depName=ghcr.io/emberstack/helm-charts/reflector
+  # serge: notesRepo=emberstack/kubernetes-reflector
+  version: "10.0.0"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/reflector"
+    path: ./overlays/librepod
+
+  dependencies: []
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-reflector
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "reflector"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/reflector
+        ref:
+          tag: "__VERSION__"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-reflector
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "reflector"
+      spec:
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-reflector
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml
