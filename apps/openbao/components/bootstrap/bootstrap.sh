@@ -1,11 +1,17 @@
 #!/bin/sh
 # One-time (idempotent) OpenBao bootstrap: init, KV v2 engine, Kubernetes
-# auth, OIDC auth (Casdoor SSO), policies, roles. Runs in the bootstrap Job
-# alongside the store-credentials container; they exchange state through
-# /shared. Policies are site-specific: every *.hcl mounted at /policies
-# (openbao-policies ConfigMap from the overlay) becomes an OpenBao policy
-# named after the file. (The audit device is declared in the server config —
-# see helmrelease.yaml.)
+# auth, policies, roles. Runs in the bootstrap Job alongside the
+# store-credentials container; they exchange state through /shared. Policies
+# are site-specific: every *.hcl mounted at /policies (openbao-policies
+# ConfigMap from the overlay) becomes an OpenBao policy named after the
+# file. (The audit device is declared in the server config — see
+# helmrelease.yaml.)
+#
+# Deliberately NO OIDC/SSO auth method: configuring one would make this
+# bootstrap depend on the IdP chain (the step-ca CA as
+# oidc_discovery_ca_pem + the casdoor-sso-controller output) and order
+# openbao behind step-issuer -> casdoor. openbao is a system app and stays
+# independent of all of that; login is token-based (README "Login").
 set -e
 
 SA_DIR=/var/run/secrets/kubernetes.io/serviceaccount
@@ -102,56 +108,6 @@ bao write auth/kubernetes/role/step-certificates \
   bound_service_account_names=step-ca-bootstrap-step-issuer \
   bound_service_account_namespaces=step-ca \
   policies=step-certificates-write-apps ttl=20m
-
-# OIDC auth method (SSO login to the UI / bao CLI) backed by Casdoor.
-# Credentials come from Secret/openbao-sso, provisioned by the
-# casdoor-sso-controller from the SSOClient CR in the overlay. Everything
-# above this point (init, KV, k8s auth, policies, roles) is already done, so
-# a missing/broken SSO chain only ever delays SSO login — ESO and
-# marketplace-ui keep working. `bao write auth/oidc/config` triggers an
-# immediate SERVER-side discovery fetch; the CA is passed to the server via
-# oidc_discovery_ca_pem (the CLI itself never talks TLS to the IdP).
-#
-# The root CA comes from KV apps/step-ca, published by the step-certificates
-# bootstrap Job (the producer role above). On a cold boot that publisher
-# lands the CA shortly after the role exists — its TTL'd Job re-runs every
-# ~10m — so wait for it here. Bounded to 15 min, then fail loud: without the
-# CA the server-side discovery fetch cannot verify the IdP certificate.
-for i in $(seq 1 90); do
-  bao kv get -field=root_ca.crt apps/step-ca > /shared/ca-root.pem 2>/dev/null && break
-  sleep 10
-done
-if [ ! -s /shared/ca-root.pem ]; then
-  echo "ERROR: apps/step-ca is absent from KV after 15min — the step-certificates bootstrap Job publishes the CA there; check its logs (job-step-ca-bootstrap-resources in step-ca) and the step-certificates role/policy above. Delete this Job to re-run once fixed; SSO stays unconfigured until then, everything else is already bootstrapped." >&2
-  exit 1
-fi
-# The SSO Secret may lag the Job start (controller reconcile lag) — wait.
-for i in $(seq 1 150); do
-  [ -s /sso/client_id ] && [ -s /sso/client_secret ] && break
-  sleep 2
-done
-if [ ! -s /sso/client_id ] || [ ! -s /sso/client_secret ]; then
-  echo "ERROR: Secret/openbao-sso (casdoor-sso-controller output for SSOClient/openbao-sso) is absent or empty after 300s — check 'kubectl get ssoclient openbao-sso -n openbao', the controller logs and Secret/casdoor-api-credentials. Delete this Job to re-run once fixed; SSO stays unconfigured until then, everything else is already bootstrapped." >&2
-  exit 1
-fi
-if ! bao auth list -format=json | grep -q '"oidc/"'; then
-  bao auth enable oidc
-fi
-bao write auth/oidc/config \
-  oidc_client_id="$(cat /sso/client_id)" \
-  oidc_client_secret="$(cat /sso/client_secret)" \
-  default_role="admin-sso" \
-  oidc_discovery_url="$SSO_DISCOVERY_URL" \
-  oidc_discovery_ca_pem=@/shared/ca-root.pem
-# Platform model: every Casdoor login is a trusted cluster admin (same as
-# the other SSO apps). allowed_redirect_uris must match the SSOClient CR's
-# redirectUris exactly.
-bao write auth/oidc/role/admin-sso \
-  role_type="oidc" \
-  user_claim="sub" \
-  policies="admin,default" \
-  oidc_scopes="openid,profile,email" \
-  allowed_redirect_uris="$BAO_PUBLIC_ADDR/ui/vault/auth/oidc/oidc/callback,http://localhost:8250/oidc/callback"
 
 # The audit device is declared in the server configuration (see
 # helmrelease.yaml), not enabled via the API.

@@ -1,7 +1,7 @@
 # OpenBao is API-first: the injector webhook, the bao CLI and in-cluster
 # clients talk to :8200 directly with their own credentials, so no oauth2
 # forward-auth middlewares here — OpenBao performs its own authentication
-# (tokens, or the Kubernetes / OIDC auth methods configured post-install).
+# (tokens and the Kubernetes auth method configured post-install).
 #
 # TLS-only on websecure with the dedicated per-app certificate (the route
 # would otherwise be served the cluster's shared wildcard cert). A tls:

@@ -7,7 +7,6 @@ resources:
 - ../../base
 - ingressroute.yaml
 - certificate.yaml
-- ssoclient.yaml
 
 components:
 - ../../components/audit-rotation
