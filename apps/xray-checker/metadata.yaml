@@ -16,17 +16,13 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/xray-checker"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain (app will be at xray-checker.BASE_DOMAIN)"
-        type: string
-        example: "example.com"
-
-  secrets:
-    - name: SUBSCRIPTION_URL
-      description: "Proxy subscription URL (https://, base64 string, or file path). For Remnawave panels use the JSON subscription link."
-      required: true
+  settings:
+    items:
+      - name: SUBSCRIPTION_URL
+        label: "Subscription URL"
+        description: "Proxy subscription URL (https://, base64 string, or file path). For Remnawave panels use the JSON subscription link."
+        sensitive: true
+        required: true
 
   dependencies:
     required:
@@ -76,25 +72,9 @@ spec:
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
-          substituteFrom:
-            - kind: Secret
-              name: xray-checker-config
-    secret: |
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: xray-checker-config
-        namespace: flux-system
-        labels:
-          marketplace.io/managed: "true"
-          marketplace.io/app: "xray-checker"
-      type: Opaque
-      stringData:
-        SUBSCRIPTION_URL: "${SUBSCRIPTION_URL}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization
       resources:
         - source.yaml
         - release.yaml
-        - secret.yaml
