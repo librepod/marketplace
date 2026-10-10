@@ -16,7 +16,7 @@ configMapGenerator:
 
 resources:
 - namespace.yaml
-- secret.yaml
+- externalsecret.yaml
 - pvc.yaml
 - service.yaml
 - deployment.yaml

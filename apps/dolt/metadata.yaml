@@ -17,15 +17,17 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/dolt"
     path: ./overlays/librepod
 
-  # No BASE_DOMAIN param: Dolt has no web UI or IngressRoute. Clients connect
-  # in-cluster to dolt.dolt.svc:3306 as root with DOLT_ROOT_PASSWORD.
-  secrets:
-    - name: DOLT_ROOT_PASSWORD
-      description: "Password of the Dolt root SQL user"
-      required: true
-      generate:
-        type: random
-        length: 32
+  # Dolt has no web UI or IngressRoute (so no BASE_DOMAIN either). Clients connect
+  # in-cluster to dolt.dolt.svc:3306 as root with DOLT_ROOT_PASSWORD, which is
+  # generated at install (one-click, never asked) and readable in OpenBao at apps/dolt.
+  settings:
+    items:
+      - name: DOLT_ROOT_PASSWORD
+        label: "Root password"
+        description: "Password of the Dolt root SQL user"
+        sensitive: true
+        generate:
+          length: 32
 
   dependencies:
     required:
@@ -73,23 +75,9 @@ spec:
         targetNamespace: dolt
         prune: true
         wait: true
-        postBuild:
-          substituteFrom:
-            - kind: Secret
-              name: dolt-config
-    secret: |
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: dolt-config
-        namespace: flux-system
-      type: Opaque
-      stringData:
-        DOLT_ROOT_PASSWORD: "${DOLT_ROOT_PASSWORD}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization
       resources:
         - source.yaml
         - release.yaml
-        - secret.yaml
