@@ -60,9 +60,14 @@ spec:
           containers:
             main:
               # DB_* connection vars come from the immich-env ConfigMap.
+              # DB_PASSWORD itself comes from Secret/immich-settings (synced
+              # from OpenBao by ESO): envFrom works here because the env name
+              # matches the key. LAST so its values override .env defaults.
               envFrom:
                 - configMapRef:
                     name: immich-env
+                - secretRef:
+                    name: immich-settings
               env:
                 # Trust the merged CA bundle (system + LibrePod CAs) for the
                 # OIDC HTTPS calls. SSL_CERT_FILE covers OpenSSL-based tooling;
