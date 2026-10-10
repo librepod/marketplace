@@ -6,7 +6,6 @@ namespace: openbao
 resources:
 - ../../base
 - ingressroute.yaml
-- certificate.yaml
 
 components:
 - ../../components/audit-rotation

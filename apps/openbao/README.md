@@ -139,8 +139,10 @@ ESO re-syncs consumers per their `refreshInterval`.
 
 ## TLS
 
-A dedicated certificate for `openbao.<BASE_DOMAIN>` is issued by
-cert-manager via the cluster's `StepClusterIssuer` (secret `openbao-tls`).
+No dedicated certificate: the browser route rides the cluster's shared
+default wildcard cert (Traefik default TLS store — same step-ca issuer, so
+no trust change). All machine traffic is in-cluster HTTP
+(`http://openbao.openbao.svc:8200`), so nothing else consumes TLS here.
 The IngressRoute is TLS-only on `websecure` — there is intentionally no
 plain-HTTP route.
 

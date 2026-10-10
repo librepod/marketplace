@@ -3,10 +3,12 @@
 # forward-auth middlewares here — OpenBao performs its own authentication
 # (tokens and the Kubernetes auth method configured post-install).
 #
-# TLS-only on websecure with the dedicated per-app certificate (the route
-# would otherwise be served the cluster's shared wildcard cert). A tls:
-# block makes the router TLS-only, so there is deliberately no plain-HTTP
-# web entrypoint route.
+# TLS-only on websecure, served by the cluster's shared default wildcard
+# cert (Traefik default TLS store) — no dedicated Certificate: every machine
+# client reaches openbao over in-cluster HTTP (openbao.openbao.svc:8200), so
+# only the browser route needs TLS and it rides the wildcard like every other
+# app. A tls: block makes the router TLS-only, so there is deliberately no
+# plain-HTTP web entrypoint route.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -21,5 +23,4 @@ spec:
     services:
     - name: openbao
       port: 8200
-  tls:
-    secretName: openbao-tls
+  tls: {}

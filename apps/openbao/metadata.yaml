@@ -29,8 +29,6 @@ spec:
         description: "Traefik (provided by traefik app)"
       - kind: StorageClass
         description: "nfs-client (provided by nfs-provisioner app)"
-      - kind: CertificateIssuer
-        description: "step-issuer (provided by step-issuer app; issues the dedicated openbao certificate)"
       - kind: SecretStoreOperator
         description: "external-secrets (provided by the external-secrets system app; provides the ClusterSecretStore CRD)"
 
@@ -62,7 +60,6 @@ spec:
         dependsOn:
           - name: traefik
           - name: storage
-          - name: step-issuer
           - name: external-secrets
         force: true
         interval: 1h
