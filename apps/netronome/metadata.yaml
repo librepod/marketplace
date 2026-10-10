@@ -16,20 +16,18 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/netronome"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain (app will be at netronome.BASE_DOMAIN)"
-        type: string
-        example: "example.com"
-
-  secrets:
-    - name: SESSION_SECRET
-      description: "Signs session cookies and encrypts OIDC refresh tokens"
-      required: true
-      generate:
-        type: random
-        length: 64
+  # SESSION_SECRET is machine-generated (never shown in the install dialog);
+  # the installer reuses the stored value on reinstall so existing sessions
+  # and OIDC refresh tokens stay valid. Custom overrides ride the netronome-env
+  # Secret channel instead, so allowCustom stays off.
+  settings:
+    items:
+      - name: SESSION_SECRET
+        label: "Session secret"
+        description: "Signs session cookies and encrypts OIDC refresh tokens"
+        sensitive: true
+        generate:
+          length: 64
 
   dependencies:
     required:
@@ -82,22 +80,9 @@ spec:
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
-          substituteFrom:
-            - kind: Secret
-              name: netronome-config
-    secret: |
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: netronome-config
-        namespace: flux-system
-      type: Opaque
-      stringData:
-        SESSION_SECRET: "${SESSION_SECRET}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization
       resources:
         - source.yaml
         - release.yaml
-        - secret.yaml
