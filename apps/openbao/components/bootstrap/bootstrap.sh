@@ -109,6 +109,16 @@ bao write auth/kubernetes/role/step-certificates \
   bound_service_account_namespaces=step-ca \
   policies=step-certificates-write-apps ttl=20m
 
+# Credential producer: the gogs publish-auth Job logs in with this role to
+# push the committed flux-account credential into KV apps/user-apps-source
+# (write-only on that one path — policy gogs-write-apps). Consumers
+# (flux-system, marketplace-ui) sync it via ExternalSecret. Producer-push:
+# this bootstrap never reads from the gogs namespace.
+bao write auth/kubernetes/role/gogs \
+  bound_service_account_names=gogs-publish-source-auth \
+  bound_service_account_namespaces=gogs \
+  policies=gogs-write-apps ttl=20m
+
 # NOTE (post-SSO migration): this script provisions but never removes auth
 # methods, so clusters bootstrapped while the OIDC/SSO auth method existed
 # keep auth/oidc and its admin-sso role (policies admin,default) enabled.

@@ -14,7 +14,7 @@
 # Gogs API accepts flux basic auth -> skip if Secret exists (idempotent + override
 # hook) -> ensure the user-apps repo -> generate keypair -> register pubkey to the
 # flux user -> ssh-keyscan Gogs -> seed the initial commit over SSH -> create the
-# Secret with Reflector annotations.
+# Secret.
 #
 # AUTH NOTE: this Job authenticates every Gogs API call with HTTP Basic auth
 # (flux:password) against the /api/v1/admin/* and /api/v1/repos/* endpoints it

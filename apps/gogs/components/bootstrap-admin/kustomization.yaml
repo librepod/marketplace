@@ -10,12 +10,13 @@ patches:
 generatorOptions:
   disableNameSuffixHash: true
 
+# Local source of truth for the flux-account credential (issue #253 option a:
+# rotation stays a git commit; the repo treats it as a low-sensitivity machine
+# credential — docs/DECISIONS_LOG.md row 7). Consumed in this namespace by the
+# deployment's postStart hook and the bootstrap-ssh-key Job; the publish-auth
+# component pushes it to openbao KV apps/user-apps-source, from where consumer
+# namespaces (flux-system, marketplace-ui) sync it via ExternalSecret.
 secretGenerator:
   - name: user-apps-source-auth
     envs:
       - secret.env
-    options:
-      annotations:
-        reflector.v1.k8s.emberstack.com/reflection-allowed: "true"
-        reflector.v1.k8s.emberstack.com/reflection-auto-enabled: "true"
-        reflector.v1.k8s.emberstack.com/reflection-auto-namespaces: "flux-system"

@@ -13,7 +13,6 @@ resources:
   - storage.yaml
   - oauth2-proxy.yaml
   - openbao.yaml
-  - reflector.yaml
   - step-certificates.yaml
   - step-issuer.yaml
   - marketplace-ui.yaml

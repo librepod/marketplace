@@ -108,7 +108,8 @@ kubectl --kubeconfig ~/.kube/librepod-dev.config describe pod -n gogs -l app=gog
 - Gogs service not running (pod crashed or not deployed)
 - Authentication secret `user-apps-source-auth` expired or missing — since #182 this is
   the HTTP basic credential BOTH Flux and the marketplace-ui installer authenticate
-  with (the installer gets a Reflector-mirrored copy mounted at `/etc/user-apps-git`),
+  with (the installer gets an ESO-synced copy mounted at `/etc/user-apps-git`,
+  from openbao KV apps/user-apps-source),
   so a bad value breaks reconciliation and installs together
 - Port-forward disconnected during testing (if using local port-forward)
 
