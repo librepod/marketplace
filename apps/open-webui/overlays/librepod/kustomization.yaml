@@ -8,13 +8,7 @@ resources:
   - ingressroute.yaml
   - helmrelease.yaml
   - ssoclient.yaml
-
-configMapGenerator:
-- name: step-certificates-certs
-  options:
-    disableNameSuffixHash: true
-    annotations:
-      reflector.v1.k8s.emberstack.com/reflects: "step-ca/step-certificates-certs"
+  - externalsecret-ca.yaml
 
 patches:
   - path: patch-pvc.yaml

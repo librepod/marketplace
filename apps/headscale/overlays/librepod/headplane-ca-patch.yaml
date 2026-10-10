@@ -23,11 +23,11 @@
 # image swap to a Go binary would still work). See headplane's own TLS docs:
 # https://headplane.net/configuration/tls#custom-certificate-authorities
 #
-# PLATFORM DEPENDENCY: configMap/step-certificates-certs must exist in THIS
-# namespace (headscale) — see the Reflector stub in overlays/librepod/
-# kustomization.yaml (it reflects step-ca/step-certificates-certs). headplane
+# PLATFORM DEPENDENCY: secret/step-certificates-certs must exist in THIS
+# namespace (headscale) — see the ExternalSecret in overlays/librepod/
+# kustomization.yaml (it syncs openbao apps/step-ca). headplane
 # is a component deployed into the headscale namespace, so it reuses the same
-# reflected ConfigMap; no second declaration is needed.
+# synced Secret; no second declaration is needed.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -73,8 +73,8 @@ spec:
               value: /etc/ssl/certs/ca-certificates.crt
       volumes:
         - name: root-ca-cert
-          configMap:
-            name: step-certificates-certs
+          secret:
+            secretName: step-certificates-certs
             items:
               - key: root_ca.crt
                 path: root_ca.crt

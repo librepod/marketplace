@@ -107,6 +107,13 @@ The Step Certificates application provides a Certificate Authority (CA) for the 
    - ConfigMaps: `step-certificates-config`, `step-certificates-certs`
    - Secrets: `step-certificates-ca-password`, `step-certificates-provisioner-password`, `step-certificates-certificate-issuer-password`, `step-certificates-secrets` (private keys)
 
+`step-certificates-certs` (public root + intermediate) stays local to this
+namespace: step-issuer and the root-ca-server sidecar consume it here.
+Cross-namespace distribution rides the same bootstrap Job: its `publish_ca`
+step pushes the certs into the openbao KV store at `apps/step-ca`
+(kubernetes-auth role `step-certificates`), which consumer namespaces sync
+via ExternalSecret (docs/sso-app-author-guide.md §4).
+
 **Why PostSync Job?**
 - **Namespace-scoped**: Must create resources in step-ca namespace
 - **One-time operation**: Only runs after initial deployment or CA re-initialization
