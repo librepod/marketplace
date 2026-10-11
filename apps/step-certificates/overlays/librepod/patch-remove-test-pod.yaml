@@ -1,9 +1,0 @@
-# This patch removes the Helm test pod from the deployment
-apiVersion: v1
-kind: Pod
-metadata:
-  name: step-certificates-test-connection
-  namespace: step-ca
-  annotations:
-    helm.sh/hook: test
-$patch: delete

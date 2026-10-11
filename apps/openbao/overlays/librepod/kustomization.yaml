@@ -21,6 +21,8 @@ configMapGenerator:
       - gogs-write-apps.hcl=policies/gogs-write-apps.hcl
       - marketplace-ui-write-apps.hcl=policies/marketplace-ui-write-apps.hcl
       - step-certificates-write-apps.hcl=policies/step-certificates-write-apps.hcl
+      - step-ca-backup.hcl=policies/step-ca-backup.hcl
+      - step-ca-restore.hcl=policies/step-ca-restore.hcl
     options:
       # the bootstrap Job mounts this ConfigMap; a name hash would rewrite
       # the immutable Job spec on every content change and brick the apply

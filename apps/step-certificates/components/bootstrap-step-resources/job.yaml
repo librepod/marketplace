@@ -45,7 +45,7 @@ spec:
           runAsNonRoot: true
           runAsUser: 1000
       containers:
-      - image: cr.smallstep.com/smallstep/step-ca
+      - image: cr.smallstep.com/smallstep/step-ca:0.29.0
         imagePullPolicy: IfNotPresent
         name: job-step-ca-bootstrap-resources
         command: ["/bin/bash", "/scripts/step-ca-bootstrap-resources.sh"]
