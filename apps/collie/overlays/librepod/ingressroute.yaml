@@ -1,0 +1,70 @@
+# /auth and /auth/* → oauth2-proxy's own sign-in. Collie reserves exactly those
+# paths for the fronting proxy's login flow (the PWA's "Sign in" banner links
+# there; collie itself answers 404). It has to be a 302 with rd pointing back at
+# the app root: a replacePathRegex rewrite to /oauth2/sign_in?rd=… does not
+# work, because traefik treats the replacement as a raw path and
+# percent-encodes the '?'.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: collie-auth-signin
+spec:
+  redirectRegex:
+    regex: ^https?://[^/]+/auth([/?].*)?$
+    replacement: https://oauth2-proxy.${BASE_DOMAIN:=libre.pod}/oauth2/sign_in?rd=https%3A%2F%2Fcollie.${BASE_DOMAIN:=libre.pod}%2F
+    permanent: false
+---
+# The shared oauth2-proxy/oauth2-errors middleware, narrowed to 401. The shared
+# one also catches 402-403 and replaces the body with the sign-in page, which
+# would swallow collie's own 403s: the PWA reads `device not paired` and
+# `device expired` to prompt pairing, and shows a generic "not connected"
+# instead when the body is gone.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: collie-oauth2-errors
+spec:
+  errors:
+    status:
+      - "401"
+    query: "/oauth2/sign_in?rd={url}"
+    service:
+      name: oauth2-proxy
+      namespace: oauth2-proxy
+      port: 80
+    statusRewrites:
+      "401": 302
+---
+# Every /api route but /api/health and /api/pair needs a paired device, reads
+# included; this route adds SSO in front. Never drop the middlewares, and never
+# expose the lead with `tailscale funnel`. Tailnet peers do not pass through
+# here (see networkpolicy.yaml).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: collie
+spec:
+  entryPoints:
+  - web
+  - websecure
+  routes:
+  # Higher priority than the catch-all below, so /auth never reaches collie.
+  # noop@internal is traefik's placeholder service for redirect-only rules.
+  - kind: Rule
+    match: Host(`collie.${BASE_DOMAIN:=libre.pod}`) && (Path(`/auth`) || PathPrefix(`/auth/`))
+    priority: 100
+    middlewares:
+    - name: collie-auth-signin
+    services:
+    - name: noop@internal
+      kind: TraefikService
+  - kind: Rule
+    match: Host(`collie.${BASE_DOMAIN:=libre.pod}`)
+    priority: 1
+    middlewares:
+    - name: collie-oauth2-errors
+    - name: oauth2-forwardauth
+      namespace: oauth2-proxy
+    services:
+    - name: collie
+      port: 80

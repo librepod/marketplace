@@ -1,0 +1,27 @@
+# Compensating control for the wide bind: the image binds the bridge on
+# 0.0.0.0 so traefik (another pod) can reach it, so on the pod network only
+# traefik may.
+#
+# It does not cover the tailnet. The tailscale sidecar shares the pod's network
+# namespace, so a tailnet peer reaches the bridge on <lead tailnet IP>:8787
+# without crossing this policy or the SSO middlewares. Crew members need that
+# path (/crew/v1/*, admitted by collie's own crew credentials); for any other
+# peer, collie's device pairing is the only gate. Restrict tcp:8787 on the lead
+# to the crew members in the tailnet policy (README, "Tailnet access").
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: collie
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: collie
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik
+      ports:
+        - port: 8787

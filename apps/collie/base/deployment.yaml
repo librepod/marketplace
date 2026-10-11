@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: collie
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        # `kubectl exec deploy/collie -- collie …` (crew invite, pair,
+        # push-keys) lands here even when a sidecar is listed first.
+        kubectl.kubernetes.io/default-container: collie
+    spec:
+      # Service links would inject COLLIE_PORT=tcp://<ip>:80 (from the Service
+      # named collie), which collie reads as its listen port.
+      enableServiceLinks: false
+      # Paired phones can open shells in the collie container, so it gets no
+      # API token. A container that needs one mounts it itself.
+      automountServiceAccountToken: false
+      # The image runs as 65534:65534.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      initContainers:
+        # collie's config dir lives under HOME=/state; the image's entrypoint
+        # only creates TMUX_TMPDIR.
+        - name: init-state
+          image: ghcr.io/cyxou/collie-lead
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c", "mkdir -p /state/.config/collie"]
+          volumeMounts:
+            - name: state
+              mountPath: /state
+      containers:
+        # The entrypoint holds one tmux session open (a dead mux reads as
+        # "Herdr is down" in the PWA), then execs the bridge on 8787.
+        - name: collie
+          image: ghcr.io/cyxou/collie-lead
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8787
+          envFrom:
+            - configMapRef:
+                name: collie
+          # Not the whole settings Secret via envFrom: it also holds the
+          # tailnet auth key, and paired phones can run `env` in a shell here.
+          env:
+            - name: COLLIE_PUBLIC_URL
+              valueFrom:
+                secretKeyRef:
+                  name: collie-settings
+                  key: COLLIE_PUBLIC_URL
+                  optional: true
+          volumeMounts:
+            - name: state
+              mountPath: /state
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 30
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: collie-data

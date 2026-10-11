@@ -1,0 +1,97 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: collie
+spec:
+  displayName: "ColliePWA"
+  description: "Self-hosted phone UI for the AI agents in your terminal (herdr/tmux/zellij)"
+  icon: "https://raw.githubusercontent.com/AltanS/collie/main/web/public/web-app-manifest-192x192.png"
+  category: "AI"
+  website: "https://colliepwa.dev"
+
+  # serge: notesRepo=AltanS/collie
+  # renovate: datasource=docker depName=ghcr.io/cyxou/collie-lead
+  version: "1.19.2"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/collie"
+    path: ./overlays/librepod
+
+  settings:
+    items:
+      - name: TS_AUTHKEY
+        label: "Tailnet auth key"
+        description: "Pre-auth key that joins the lead to your tailnet (Headscale: headscale preauthkeys create). Only needed to join the first time; the lead keeps its tailnet identity after that."
+        required: true
+        sensitive: true
+      - name: TS_EXTRA_ARGS
+        label: "Extra tailscale up flags"
+        description: "For a Headscale tailnet: --login-server=https://headscale.example.com. Leave empty for Tailscale."
+      - name: COLLIE_PUBLIC_URL
+        label: "Lead address for crew members"
+        description: "The URL crew members join at: the lead's tailnet name or IP on port 8787, e.g. http://collie-lead.ts.example.com:8787."
+
+  dependencies:
+    required:
+      - kind: IngressController
+        description: "Traefik (provided by traefik app)"
+      - kind: StorageClass
+        description: "nfs-client (provided by nfs-provisioner app)"
+      - kind: AuthProxy
+        description: "oauth2-proxy (provided by oauth2-proxy app)"
+
+  # templates.source tracks a semver range, not the exact __VERSION__ tag:
+  # collie ships several releases a day, but marketplace-ui has no update flow,
+  # so an exact tag would keep an installed lead on its install-time version.
+  # With a range it follows each merged version bump. The floor is the catalog
+  # version at install time; the caret caps it below the next major, so a
+  # breaking collie release reaches a lead only by reinstalling.
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-collie
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "collie"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/collie
+        ref:
+          semver: "^__VERSION__"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-collie
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "collie"
+      spec:
+        dependsOn:
+          - name: traefik
+          - name: storage
+          - name: oauth2-proxy
+        force: true
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-collie
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+        postBuild:
+          substitute:
+            BASE_DOMAIN: "${BASE_DOMAIN}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml
