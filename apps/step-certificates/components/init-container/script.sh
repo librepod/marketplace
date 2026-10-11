@@ -61,19 +61,17 @@ fi
 # with no recovery path for a non-technical owner.
 #
 # Fresh-init fallbacks:
-#   · openbao not deployed here (its Service DNS has not resolved for 30s) —
-#     virgin boot, no backup can exist. The 30s grace is what tells a virgin
-#     boot from a rebuild racing CoreDNS; only the former may fall through
-#     to a fresh CA.
 #   · backup path empty (404) — no backup was ever written.
 #   · incomplete backup — the Job writes the payload atomically per KV
 #     version, so this means garbage; don't wait for it to heal.
-#   · retry deadline (5 min) exceeded — openbao deployed but not yet
-#     usable (mid-bootstrap race on a rebuild); rotating after a loud
-#     warning beats a permanently wedged CA.
-# Transport-level failures (openbao booting, sealed, network) retry until
-# the deadline: on a REBUILD (PVC wiped, openbao restarting) the backup is
-# there and only needs openbao to come up.
+#   · retry deadline (5 min) exceeded — openbao not reachable in time;
+#     rotating after a loud warning beats a permanently wedged CA.
+# Transport-level failures (DNS not resolving yet, openbao booting, sealed,
+# network) retry until the deadline: openbao reconciles after storage+
+# traefik — in parallel with this app, not after it — so on ANY cold boot
+# its Service may not exist for the first minutes. An unresolvable name is
+# not proof openbao is absent, and on a REBUILD (PVC wiped, NFS intact)
+# the backup is there and only needs openbao to come up.
 # ---------------------------------------------------------------------------
 SA=/var/run/secrets/kubernetes.io/serviceaccount
 OPENBAO_ADDR="${OPENBAO_ADDR:-http://openbao.openbao.svc.cluster.local:8200}"
@@ -87,27 +85,15 @@ kv_get () {
 
 restore_ca_from_backup () {
   local deadline=$((SECONDS + 300))
-  local dns_deadline=0
   local rc=0 login_json token body code backup
   while [ "$SECONDS" -lt "$deadline" ]; do
     login_json="$(curl -sS --connect-timeout 5 --max-time 15 -X POST \
       -H 'Content-Type: application/json' \
       -d "{\"role\":\"step-ca-restore\",\"jwt\":\"$(cat "$SA/token")\"}" \
       "$OPENBAO_ADDR/v1/auth/kubernetes/login" 2>/dev/null)" || rc=$?
-    if [ "$rc" -eq 6 ]; then
-      # DNS for the openbao Service not resolving: either a virgin boot
-      # (openbao never deployed — nothing to restore) or CoreDNS still
-      # coming up on a rebuild (backup present; minting a fresh root CA
-      # here would orphan every device trust anchor). Indistinguishable
-      # for the first ~30s; only then conclude "not deployed".
-      [ "$dns_deadline" -eq 0 ] && dns_deadline=$((SECONDS + 30))
-      if [ "$SECONDS" -lt "$dns_deadline" ]; then
-        echo "openbao DNS not resolving yet (curl rc=6); retrying..."
-        rc=0; sleep 5; continue
-      fi
-      echo "openbao is not deployed in this cluster (${OPENBAO_ADDR} does not resolve); no backup possible."
-      return 1
-    elif [ "$rc" -ne 0 ]; then
+    if [ "$rc" -ne 0 ]; then
+      # Includes rc=6 (name not resolving): openbao's Service may simply
+      # not exist YET — see the comment block above.
       echo "openbao login not ready yet (curl rc=${rc}); retrying..."; rc=0; sleep 10; continue
     fi
     token="$(printf '%s' "$login_json" | jq -r '.auth.client_token // empty')"
@@ -145,6 +131,15 @@ restore_ca_from_backup () {
       echo "WARNING: backup at system/step-ca is incomplete; proceeding with fresh init." >&2
       return 1
     fi
+    # Validate the staged set BEFORE moving: if the backup itself is
+    # corrupt the CA is already lost — fall back to fresh init, not an
+    # endless restore-retry loop over unrecoverable data.
+    if ! jq -e . "${stage}/ca.json" >/dev/null 2>&1 \
+       || ! step certificate fingerprint "${stage}/root_ca.crt" >/dev/null 2>&1; then
+      rm -rf "$stage"
+      echo "WARNING: backup at system/step-ca is corrupt (unparseable ca.json or root cert); the CA is already lost — proceeding with fresh init." >&2
+      return 1
+    fi
     mkdir -p "$STEPPATH/certs" "$STEPPATH/config" \
              "$STEPPATH/secrets/passwords" "$STEPPATH/secrets/certificate-issuer"
     # Move the whole tree in one fail-fast chain: any failed step leaves
@@ -155,15 +150,21 @@ restore_ca_from_backup () {
        mv "${stage}/ca_password" "$STEPPATH/secrets/passwords/password" &&
        mv "${stage}/provisioner_password" "$STEPPATH/secrets/certificate-issuer/password" &&
        mv "${stage}/defaults.json" "$STEPPATH/config/" &&
-       mv "${stage}/ca.json" "$STEPPATH/config/"; then
+       mv "${stage}/ca.json" "$STEPPATH/config/" &&
+       jq -e . "$STEPPATH/config/ca.json" >/dev/null 2>&1 &&
+       FINGERPRINT="$(step certificate fingerprint "$STEPPATH/certs/root_ca.crt")"; then
       rm -rf "$stage"
       echo -e "\e[1mStep CA RESTORED from the openbao backup (system/step-ca).\e[0m"
-      FINGERPRINT=$(step certificate fingerprint "$STEPPATH/certs/root_ca.crt")
       echo "CA Fingerprint: ${FINGERPRINT}"
       return 0
     else
+      # Validate-before-victory matters: an emptyDir→NFS mv is copy+unlink
+      # and can die partway, leaving a present-but-truncated ca.json that
+      # the "already initialized" check above would trust forever. Remove
+      # it so the PVC looks uninitialized again and the retry re-restores.
+      rm -f "$STEPPATH/config/ca.json"
       rm -rf "$stage"
-      echo "WARNING: restore failed while moving files into place; ca.json was not installed." >&2
+      echo "WARNING: restore failed or produced an invalid tree (truncated move?); removed ca.json — the retry re-attempts." >&2
       # rc=2, not 1: the backup exists and is restorable — the caller must
       # NOT fall through to a fresh init over it.
       return 2
