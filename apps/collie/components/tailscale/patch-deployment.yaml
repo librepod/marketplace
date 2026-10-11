@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: collie
+spec:
+  template:
+    spec:
+      serviceAccountName: collie
+      # MagicDNS first: it answers tailnet names and forwards the rest; CoreDNS
+      # second is only consulted on SERVFAIL. Cluster-internal names therefore
+      # resolve via hostAliases, not DNS. The search domain is the MagicDNS
+      # base domain the headscale app configures (ts.<BASE_DOMAIN>).
+      # 10.43.0.10 (CoreDNS) and 10.43.0.1 (API server) below are k3s's
+      # default service-CIDR addresses.
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+          - 100.100.100.100
+          - 10.43.0.10
+        searches:
+          - ts.${BASE_DOMAIN:=libre.pod}
+      # containerboot's kube client needs the API server under a name its
+      # certificate is valid for.
+      hostAliases:
+        - ip: 10.43.0.1
+          hostnames:
+            - kubernetes.default.svc
+            - kubernetes.default
+            - kubernetes
+      containers:
+        - name: tailscale
+          image: tailscale/tailscale
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+            capabilities:
+              add: ["NET_ADMIN"]
+          envFrom:
+            - configMapRef:
+                name: collie-tailscale
+          env:
+            - name: TS_AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: collie-settings
+                  key: TS_AUTHKEY
+            - name: TS_EXTRA_ARGS
+              valueFrom:
+                secretKeyRef:
+                  name: collie-settings
+                  key: TS_EXTRA_ARGS
+                  optional: true
+          volumeMounts:
+            - name: tun
+              mountPath: /dev/net/tun
+            # kubelet creates the subPath dir on first mount.
+            - name: state
+              mountPath: /var/lib/tailscale
+              subPath: tailscale
+      volumes:
+        - name: tun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice

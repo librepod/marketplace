@@ -1,0 +1,32 @@
+# containerboot keeps the node identity in the Secret named by TS_KUBE_SECRET
+# and exits without access to it. create covers a fresh install, where the
+# Secret does not exist yet.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: collie
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: collie-tailscale
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["collie-tailscale-state"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: collie-tailscale
+subjects:
+  - kind: ServiceAccount
+    name: collie
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: collie-tailscale

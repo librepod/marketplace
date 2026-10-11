@@ -1,0 +1,19 @@
+# Compensating control for the wide bind: the image binds the bridge on
+# 0.0.0.0 so traefik (another pod) can reach it, so only traefik may.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: collie
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: collie
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik
+      ports:
+        - port: 8787

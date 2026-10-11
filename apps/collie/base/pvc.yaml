@@ -1,0 +1,24 @@
+# The lead's identity: crew trust store (pinned mTLS with every member),
+# device pairings, VAPID keys and the tailscale sidecar's state dir. Losing it
+# means every member re-runs `collie crew join` and every phone re-pairs.
+#
+# Named collie-lead-state, not the conventional collie-data: leads deployed
+# before this app existed already hold their state under that name, and the
+# app adopts it instead of starting fresh.
+#
+# ssa: IfNotPresent: Flux creates the claim when it is missing and never
+# patches an existing one. PVC specs are immutable once bound, and the
+# Kustomization runs with force: true, so any field mismatch with an adopted
+# claim would otherwise be resolved by deleting and recreating it.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: collie-lead-state
+  annotations:
+    kustomize.toolkit.fluxcd.io/ssa: IfNotPresent
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 512Mi
