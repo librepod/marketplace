@@ -28,6 +28,9 @@ spec:
       - name: TS_EXTRA_ARGS
         label: "Extra tailscale up flags"
         description: "For a Headscale tailnet: --login-server=https://headscale.example.com. Leave empty for Tailscale."
+      - name: TS_HOSTNAME
+        label: "Tailnet hostname"
+        description: "The lead's tailnet hostname when it first joins (default collie-lead; MagicDNS address collie-lead.ts.<domain>). Only needed when the default is taken. Changing it later keeps the MagicDNS name on Headscale; on Tailscale it renames the node and breaks the address members joined at."
       - name: COLLIE_PUBLIC_URL
         label: "Lead address for crew members"
         description: "The URL crew members join at: the lead's tailnet name or IP on port 8787, e.g. http://collie-lead.ts.example.com:8787."
