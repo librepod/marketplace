@@ -31,9 +31,6 @@ spec:
       - name: COLLIE_PUBLIC_URL
         label: "Lead address for crew members"
         description: "The URL crew members join at: the lead's tailnet name or IP on port 8787, e.g. http://collie-lead.ts.example.com:8787."
-      - name: COLLIE_PUBLIC_HOSTS
-        label: "Lead tailnet hosts"
-        description: "Comma-separated host:port values members reach the lead at. Include the host of the address above, e.g. collie-lead.ts.example.com:8787,100.64.0.5:8787."
 
   dependencies:
     required:
@@ -48,7 +45,8 @@ spec:
   # collie ships several releases a day, but marketplace-ui has no update flow,
   # so an exact tag would keep an installed lead on its install-time version.
   # With a range it follows each merged version bump. The floor is the catalog
-  # version at install time.
+  # version at install time; the caret caps it below the next major, so a
+  # breaking collie release reaches a lead only by reinstalling.
   templates:
     source: |
       apiVersion: source.toolkit.fluxcd.io/v1
@@ -63,7 +61,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/collie
         ref:
-          semver: ">=__VERSION__"
+          semver: "^__VERSION__"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization

@@ -16,6 +16,9 @@ spec:
       # Service links would inject COLLIE_PORT=tcp://<ip>:80 (from the Service
       # named collie), which collie reads as its listen port.
       enableServiceLinks: false
+      # Paired phones can open shells in the collie container, so it gets no
+      # API token. A container that needs one mounts it itself.
+      automountServiceAccountToken: false
       # The image runs as 65534:65534.
       securityContext:
         runAsNonRoot: true
@@ -43,8 +46,15 @@ spec:
           envFrom:
             - configMapRef:
                 name: collie
-            - secretRef:
-                name: collie-settings
+          # Not the whole settings Secret via envFrom: it also holds the
+          # tailnet auth key, and paired phones can run `env` in a shell here.
+          env:
+            - name: COLLIE_PUBLIC_URL
+              valueFrom:
+                secretKeyRef:
+                  name: collie-settings
+                  key: COLLIE_PUBLIC_URL
+                  optional: true
           volumeMounts:
             - name: state
               mountPath: /state

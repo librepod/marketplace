@@ -5,11 +5,15 @@ metadata:
 spec:
   template:
     spec:
+      # Its token is mounted into the tailscale container only (kube-api-access
+      # below): base turns automounting off for the whole pod.
       serviceAccountName: collie
       # MagicDNS first: it answers tailnet names and forwards the rest; CoreDNS
-      # second is only consulted on SERVFAIL. Cluster-internal names therefore
-      # resolve via hostAliases, not DNS. The search domain is the MagicDNS
-      # base domain the headscale app configures (ts.<BASE_DOMAIN>).
+      # second is consulted on SERVFAIL, or once MagicDNS has not answered
+      # within the timeout (tailscaled down or restarting), so a sidecar outage
+      # costs each lookup ~1s instead of the resolver's default 5s. Cluster-
+      # internal names resolve via hostAliases, not DNS. The search domain is
+      # the MagicDNS base domain the headscale app configures (ts.<BASE_DOMAIN>).
       # 10.43.0.10 (CoreDNS) and 10.43.0.1 (API server) below are k3s's
       # default service-CIDR addresses.
       dnsPolicy: None
@@ -19,6 +23,11 @@ spec:
           - 10.43.0.10
         searches:
           - ts.${BASE_DOMAIN:=libre.pod}
+        options:
+          - name: timeout
+            value: "1"
+          - name: attempts
+            value: "2"
       # containerboot's kube client needs the API server under a name its
       # certificate is valid for.
       hostAliases:
@@ -51,6 +60,17 @@ spec:
                   name: collie-settings
                   key: TS_EXTRA_ARGS
                   optional: true
+          # containerboot's /healthz answers 200 once the node holds a tailnet
+          # IP. A startup probe only: the pod stays unready (and the install
+          # fails visibly) until the lead first joins the tailnet, e.g. on a
+          # wrong auth key or login server, while a later tailnet blip leaves
+          # the PWA up.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 9002
+            periodSeconds: 10
+            failureThreshold: 30
           volumeMounts:
             - name: tun
               mountPath: /dev/net/tun
@@ -58,8 +78,28 @@ spec:
             - name: state
               mountPath: /var/lib/tailscale
               subPath: tailscale
+            - name: kube-api-access
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
       volumes:
         - name: tun
           hostPath:
             path: /dev/net/tun
             type: CharDevice
+        # What kubelet would automount, for this container alone.
+        - name: kube-api-access
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3607
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+              - downwardAPI:
+                  items:
+                    - path: namespace
+                      fieldRef:
+                        fieldPath: metadata.namespace

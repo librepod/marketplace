@@ -12,8 +12,8 @@ release; its tag is the collie version.
 
 - **Front door**: traefik, SSO-gated by the oauth2-proxy forward-auth
   middlewares. `/auth` (the PWA's "Sign in" link) redirects to oauth2-proxy's
-  sign-in. Writes are additionally gated by collie's device pairing. Never
-  expose the lead with `tailscale funnel`.
+  sign-in. Every `/api` route but `/api/health` and `/api/pair` also needs a
+  paired device, reads included. Never expose the lead with `tailscale funnel`.
 - **Tailscale sidecar** (`components/tailscale`): joins the pod to your
   tailnet, giving the lead egress to the members and an address members join
   at.
@@ -31,10 +31,21 @@ release; its tag is the collie version.
 | `TS_AUTHKEY` | Pre-auth key that joins the lead to the tailnet on first start. |
 | `TS_EXTRA_ARGS` | Extra `tailscale up` flags, e.g. `--login-server=https://headscale.example.com` for a Headscale tailnet. |
 | `COLLIE_PUBLIC_URL` | The address crew members join at (`http://<lead tailnet name or IP>:8787`). |
-| `COLLIE_PUBLIC_HOSTS` | Comma-separated `host:port` values members reach the lead at; must include the host of `COLLIE_PUBLIC_URL`. |
 
-The public hostname needs no `COLLIE_PUBLIC_HOSTS` entry: collie accepts the
-host of every `COLLIE_ALLOWED_ORIGINS` entry, which the app sets.
+`COLLIE_PUBLIC_HOSTS` is deliberately not a setting. The public hostname needs
+no entry (collie accepts the host of every `COLLIE_ALLOWED_ORIGINS` entry, which
+the app sets), crew traffic never checks it, and a tailnet host listed there
+would serve the PWA on the tailnet, where no SSO applies.
+
+## Tailnet access
+
+The sidecar shares the pod's network namespace, so any tailnet peer that can
+reach the lead's port 8787 gets past the NetworkPolicy and the SSO middlewares.
+Crew members need that port: they call the lead's `/crew/v1/*` there. Any other
+peer meets only collie's device pairing. In the tailnet policy, allow
+`tcp:8787` on the lead from the crew members' machines and nothing else (syntax
+for Tailscale and Headscale: upstream's
+[deployment guide](https://github.com/AltanS/collie/blob/main/docs/deployment.md#tailscale-acls-mandatory)).
 
 ## Operating the lead
 
@@ -65,5 +76,6 @@ kubectl -n collie exec deploy/collie -- collie push-test
 
 Each new image tag reaches the catalog through a Renovate PR. Once it is
 merged, an installed lead follows within about ten minutes: its source tracks
-every version at or above the one it was installed at. Crew members are
-updated separately, on their own machines.
+every version at or above the one it was installed at, up to the next major. A
+new major version reaches a lead only by reinstalling. Crew members are updated
+separately, on their own machines.
