@@ -22,8 +22,11 @@ release; its tag is the collie version.
   (`init-tailscale-state`) migrates pre-existing installs off the legacy
   `collie-tailscale-state` Secret; the Secret can be deleted once migrated.
 - **State**: the PVC `collie-data` (crew trust store, device pairings,
-  push keys, and the sidecar's `tailscaled.state`). Losing it
-  means every member re-runs `collie crew join` and every phone re-pairs.
+  push keys, and the sidecar's `tailscaled.state`). Losing it means every
+  member re-runs `collie crew join`, every phone re-pairs, and the lead joins
+  the tailnet as a new node. Delete the old node on the control server first,
+  or the new one gets a suffixed name (`collie-lead-<random>`) and
+  `COLLIE_PUBLIC_URL` points at the dead node.
 
 ## Install settings
 

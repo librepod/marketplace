@@ -5,18 +5,25 @@ metadata:
 spec:
   template:
     spec:
-      # No serviceAccountName and no API token: the sidecar's node identity
-      # lives in tailscaled.state on the state PVC (TS_KUBE_SECRET=""), so
-      # containerboot never talks to the Kubernetes API. Base's automount
-      # off for the whole pod stands; nothing re-adds the token now that
-      # rbac.yaml is gone.
+      # No API token: the sidecar's node identity lives in tailscaled.state on
+      # the state PVC (TS_KUBE_SECRET=""), so containerboot never talks to the
+      # Kubernetes API. Base's automount off for the whole pod stands.
+      #
+      # serviceAccountName is set to default rather than omitted: installs
+      # from before this change run as the since-removed collie
+      # ServiceAccount, and on them the API server refills an omitted
+      # serviceAccountName from the deprecated serviceAccount alias (still
+      # collie) under both client- and server-side apply. The new pods would
+      # then reference the pruned ServiceAccount and never be created.
+      serviceAccountName: default
       #
       # MagicDNS first: it answers tailnet names and forwards the rest; CoreDNS
       # second is consulted on SERVFAIL, or once MagicDNS has not answered
-      # internal names resolve via hostAliases, not DNS. The search domain is
-      # the MagicDNS base domain the headscale app configures (ts.<BASE_DOMAIN>).
-      # 10.43.0.10 (CoreDNS) and 10.43.0.1 (API server) below are k3s's
-      # default service-CIDR addresses.
+      # within the timeout (tailscaled down or restarting), so a sidecar outage
+      # costs each lookup ~1s instead of the resolver's default 5s. The search
+      # domain is the MagicDNS base domain the headscale app configures
+      # (ts.<BASE_DOMAIN>). 10.43.0.10 (CoreDNS) below is k3s's default
+      # service-CIDR address.
       dnsPolicy: None
       dnsConfig:
         nameservers:
@@ -29,30 +36,25 @@ spec:
             value: "1"
           - name: attempts
             value: "2"
-      # containerboot's kube client needs the API server under a name its
-      # certificate is valid for.
-      hostAliases:
-        - ip: 10.43.0.1
-          hostnames:
-            - kubernetes.default.svc
-            - kubernetes.default
-            - kubernetes
       initContainers:
         # One-shot migration (and safety net) for installs whose lead's
         # identity still lives in the legacy collie-tailscale-state Secret:
         # serialise that Secret into tailscaled.state in TS_STATE_DIR, the
         # file store containerboot now uses (TS_KUBE_SECRET=""). No-op on a
-        # fresh install (no legacy Secret, empty state dir) and on any pod
-        # restart after the first (state file exists). busybox-only: the
-        # kube state store is a set of base64 fields; the file store is a
-        # JSON object of the same keys with base64 values (ipn/store/stores.go
-        # NewFileStore / ipn/store/kubestore), so plain base64 -d + a shell
-        # JSON writer are enough. Inherits the pod security context (65534),
-        # which owns the state subPath dir; tailscaled (root) can read and
-        # rewrite the file regardless.
+        # fresh install (no legacy Secret) and on any pod restart after the
+        # first (state file exists). The formats map 1:1: the kube store keeps
+        # each state key as a Secret data key (mounted below as a file of the
+        # raw, already-decoded bytes); the file store is a JSON object of the
+        # same keys with base64 values (ipn/store/stores.go FileStore,
+        # ipn/store/kubestore). The kube store sanitises keys to
+        # [-._a-zA-Z0-9], so they need no JSON escaping. The tailscale image
+        # (busybox) as root: the user tailscaled writes the state dir as.
         - name: init-tailscale-state
-          image: ghcr.io/cyxou/collie-lead
+          image: tailscale/tailscale
           imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
           command: ["/bin/sh", "-ec"]
           args:
             - |
@@ -61,8 +63,10 @@ spec:
                 echo "tailscaled state already on the PVC; nothing to migrate"
                 exit 0
               fi
-              if [ ! -d /ts-secret ] || [ -z "$(ls -A /ts-secret)" ]; then
-                echo "no legacy state Secret mounted; fresh install"
+              # Not an emptiness test of /ts-secret: kubelet populates even an
+              # absent optional Secret's volume with its ..data entries.
+              if [ ! -s /ts-secret/_machinekey ]; then
+                echo "no legacy state Secret; fresh install"
                 exit 0
               fi
               echo "migrating kube-Secret state to $STATE"
@@ -72,16 +76,12 @@ spec:
                 for f in /ts-secret/*; do
                   [ -f "$f" ] || continue
                   key=$(basename "$f")
-                  val=$(base64 -d <"$f" | base64 | tr -d '\n')
+                  val=$(base64 <"$f" | tr -d '\n')
                   if [ "$first" = "1" ]; then first=0; else printf ','; fi
                   printf '"%s":"%s"' "$key" "$val"
                 done
                 printf '}'
               } >"$STATE.tmp"
-              # Sanity check the result is loadable JSON before installing it.
-              if ! grep -q '^{.*}$' "$STATE.tmp"; then
-                echo "state file failed sanity check"; rm -f "$STATE.tmp"; exit 1
-              fi
               chmod 600 "$STATE.tmp"
               mv -f "$STATE.tmp" "$STATE"
               echo "migration complete: $(wc -c <"$STATE") bytes"
