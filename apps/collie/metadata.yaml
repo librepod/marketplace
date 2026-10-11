@@ -45,10 +45,10 @@ spec:
         description: "oauth2-proxy (provided by oauth2-proxy app)"
 
   # templates.source tracks a semver range, not the exact __VERSION__ tag:
-  # collie ships several releases a day and Renovate automerges each bump
-  # (renovate.json5), but marketplace-ui has no update flow, so an exact tag
-  # would keep an installed lead on its install-time version. The floor is the
-  # catalog version at install time.
+  # collie ships several releases a day, but marketplace-ui has no update flow,
+  # so an exact tag would keep an installed lead on its install-time version.
+  # With a range it follows each merged version bump. The floor is the catalog
+  # version at install time.
   templates:
     source: |
       apiVersion: source.toolkit.fluxcd.io/v1

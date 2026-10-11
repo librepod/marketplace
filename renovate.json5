@@ -7,8 +7,7 @@
   // config:recommended defaults to prHourlyLimit: 2, which parks most updates
   // as "rate-limited" on the dashboard (security PRs consume the budget first).
   // 0 = unlimited: open every pending PR each run. Safe here because there is
-  // no auto-merge — a human still reviews and merges each one (sole exception:
-  // the collie image, see its packageRule).
+  // no auto-merge — a human still reviews and merges each one.
   prHourlyLimit: 0,
   prConcurrentLimit: 0,
   kustomize: { managerFilePatterns: ["/apps/.*/overlays/.*/kustomization\\.ya?ml/"] },
@@ -67,27 +66,6 @@
     // Extracting index 1 of the split path ("<app>") collapses every file under
     // apps/<app>/ into one group → one PR per app.
     { matchFileNames: ["apps/*/**"], groupName: "{{lookup (split packageFileDir '/') 1}}" },
-
-    // --- collie rides every upstream release. ghcr.io/cyxou/collie-lead is
-    // republished within ~2h of each collie release (several a day), and an
-    // installed collie follows merged bumps (its templates.source tracks a
-    // semver range). ignoreTests merges in the same run: Renovate runs once per
-    // weekday, so a PR that waited for checks would be moved on to the next
-    // release on nearly every run and rarely merge. Majors stay manual.
-    {
-      matchPackageNames: ["ghcr.io/cyxou/collie-lead"],
-      matchUpdateTypes: ["minor", "patch"],
-      automerge: true,
-      ignoreTests: true,
-    },
-    // --- collie's tailscale sidecar gets its own, hand-reviewed PR: the client
-    // must stay within what the tailnet's control server supports, and sharing
-    // the collie group would block that group's automerge.
-    {
-      matchFileNames: ["apps/collie/**"],
-      matchPackageNames: ["tailscale/tailscale"],
-      groupName: "collie-tailscale",
-    },
 
     // --- Major bumps get the e2e label + their own PR.
     { matchUpdateTypes: ["major"], addLabels: ["renovate-e2e"] },

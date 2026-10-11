@@ -63,8 +63,7 @@ kubectl -n collie exec deploy/collie -- collie push-test
 
 ## Updates
 
-Each new image tag reaches the catalog through an automerged Renovate PR,
-and an installed lead follows within about ten minutes: its source tracks
-every version at or above the one it was installed at. Major versions wait
-for a manual merge. Crew members are updated separately, on their own
-machines.
+Each new image tag reaches the catalog through a Renovate PR. Once it is
+merged, an installed lead follows within about ten minutes: its source tracks
+every version at or above the one it was installed at. Crew members are
+updated separately, on their own machines.
