@@ -18,9 +18,7 @@ release; its tag is the collie version.
   tailnet, giving the lead egress to the members and an address members join
   at. The node identity is `tailscaled.state` on the `collie-data` volume
   (containerboot runs with `TS_KUBE_SECRET=""`), so the lead keeps its tailnet
-  address across restarts, reinstalls and namespace churn. An init container
-  (`init-tailscale-state`) migrates pre-existing installs off the legacy
-  `collie-tailscale-state` Secret; the Secret can be deleted once migrated.
+  address across restarts, reinstalls and namespace churn.
 - **State**: the PVC `collie-data` (crew trust store, device pairings,
   push keys, and the sidecar's `tailscaled.state`). Losing it means every
   member re-runs `collie crew join`, every phone re-pairs, and the lead joins

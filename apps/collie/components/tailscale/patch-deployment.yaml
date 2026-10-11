@@ -36,62 +36,6 @@ spec:
             value: "1"
           - name: attempts
             value: "2"
-      initContainers:
-        # One-shot migration (and safety net) for installs whose lead's
-        # identity still lives in the legacy collie-tailscale-state Secret:
-        # serialise that Secret into tailscaled.state in TS_STATE_DIR, the
-        # file store containerboot now uses (TS_KUBE_SECRET=""). No-op on a
-        # fresh install (no legacy Secret) and on any pod restart after the
-        # first (state file exists). The formats map 1:1: the kube store keeps
-        # each state key as a Secret data key (mounted below as a file of the
-        # raw, already-decoded bytes); the file store is a JSON object of the
-        # same keys with base64 values (ipn/store/stores.go FileStore,
-        # ipn/store/kubestore). The kube store sanitises keys to
-        # [-._a-zA-Z0-9], so they need no JSON escaping. The tailscale image
-        # (busybox) as root: the user tailscaled writes the state dir as.
-        - name: init-tailscale-state
-          image: tailscale/tailscale
-          imagePullPolicy: IfNotPresent
-          securityContext:
-            runAsUser: 0
-            runAsNonRoot: false
-          command: ["/bin/sh", "-ec"]
-          args:
-            - |
-              STATE=/var/lib/tailscale/tailscaled.state
-              if [ -s "$STATE" ]; then
-                echo "tailscaled state already on the PVC; nothing to migrate"
-                exit 0
-              fi
-              # Not an emptiness test of /ts-secret: kubelet populates even an
-              # absent optional Secret's volume with its ..data entries.
-              if [ ! -s /ts-secret/_machinekey ]; then
-                echo "no legacy state Secret; fresh install"
-                exit 0
-              fi
-              echo "migrating kube-Secret state to $STATE"
-              first=1
-              {
-                printf '{'
-                for f in /ts-secret/*; do
-                  [ -f "$f" ] || continue
-                  key=$(basename "$f")
-                  val=$(base64 <"$f" | tr -d '\n')
-                  if [ "$first" = "1" ]; then first=0; else printf ','; fi
-                  printf '"%s":"%s"' "$key" "$val"
-                done
-                printf '}'
-              } >"$STATE.tmp"
-              chmod 600 "$STATE.tmp"
-              mv -f "$STATE.tmp" "$STATE"
-              echo "migration complete: $(wc -c <"$STATE") bytes"
-          volumeMounts:
-            - name: state
-              mountPath: /var/lib/tailscale
-              subPath: tailscale
-            - name: ts-legacy-state
-              mountPath: /ts-secret
-              readOnly: true
       containers:
         - name: tailscale
           image: tailscale/tailscale
@@ -150,9 +94,3 @@ spec:
           hostPath:
             path: /dev/net/tun
             type: CharDevice
-        # The legacy kube-Secret state store (pre-PVC-identity installs).
-        # optional: absent on fresh installs and after the Secret is dropped.
-        - name: ts-legacy-state
-          secret:
-            secretName: collie-tailscale-state
-            optional: true

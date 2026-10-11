@@ -4,9 +4,7 @@
 #
 # No RBAC resources: the node identity lives in tailscaled.state on the
 # collie-data PVC (TS_KUBE_SECRET explicitly empty in tailscale.env), so
-# containerboot never talks to the Kubernetes API. The legacy
-# collie-tailscale-state Secret is read by the init-tailscale-state init
-# container as a mounted volume, which needs no permissions.
+# containerboot never talks to the Kubernetes API.
 apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 
