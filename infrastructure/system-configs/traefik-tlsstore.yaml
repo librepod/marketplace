@@ -2,7 +2,12 @@ apiVersion: traefik.io/v1alpha1
 kind: TLSStore
 metadata:
   name: default
-  namespace: traefik
+  # Lives in step-ca, next to the CA that signs the default certificate:
+  # traefik reads it from there (providers.kubernetesCRD.
+  # defaultTLSResourcesNamespace in apps/traefik), so the cert secret is
+  # never mirrored into the traefik namespace and the step-certificates
+  # CA-rotation heal stays namespace-local.
+  namespace: step-ca
 spec:
   defaultCertificate:
     secretName: tls-traefik-default-cert

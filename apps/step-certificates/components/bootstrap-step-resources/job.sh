@@ -20,6 +20,9 @@
 #      local Secret (NOT an ExternalSecret): step-issuer readiness gates
 #      cert-manager -> the wildcard cert -> openbao's ingress, so sourcing
 #      it from openbao could deadlock a cold boot. Producer-push only.
+#      On CA rotation (kid/password no longer match the PVC) the whole
+#      issuance chain heals from here: Secret patch -> step-issuer restart
+#      -> StepClusterIssuer reconcile -> wildcard re-issue (see below).
 #
 #   3. delete the ConfigMaps/Secrets the pre-openbao bootstrap maintained
 #      (stale on upgraded clusters; see the cleanup loop below).
@@ -50,6 +53,7 @@ assert_variable "$STEPISSUER_NAMESPACE" "STEPISSUER_NAMESPACE"
 assert_variable "$STEPPATH" "STEPPATH"
 assert_variable "$OPENBAO_ADDR" "OPENBAO_ADDR"
 assert_variable "$PROVISIONER_NAME" "PROVISIONER_NAME"
+assert_variable "$WILDCARD_TLS_SECRET" "WILDCARD_TLS_SECRET"
 
 if ! command -v jq &>/dev/null; then
   echo "Error: jq is required but not found in the container image."
@@ -58,6 +62,8 @@ fi
 
 # k8s_api METHOD PATH [JSON] — Kubernetes API call with the ServiceAccount
 # token; non-2xx fails the curl (--fail, caught by set -e or the caller's if).
+# PATCH uses merge-patch: the targets here are built-ins where merge-patch
+# and strategic-merge behave identically for our field shapes.
 k8s_api () {
   local args=(
     -fsS --cacert "$SA/ca.crt"
@@ -65,7 +71,7 @@ k8s_api () {
     -X "$1"
   )
   if [ "$1" = PATCH ]; then
-    args+=(-H 'Content-Type: application/strategic-merge-patch+json' --data "$3")
+    args+=(-H 'Content-Type: application/merge-patch+json' --data "$3")
   elif [ -n "${3:-}" ]; then
     args+=(-H 'Content-Type: application/json' --data "$3")
   fi
@@ -203,18 +209,27 @@ for obj in step-certificates-ca-password step-certificates-secrets step-certific
 done
 
 # Ensure the provisioner-password Secret (password + kid + caBundle for
-# step-issuer). If it exists WITH the kid/ca_bundle keys there is nothing to
-# do — all three values are fixed at CA init. A Secret from an older
-# bootstrap (password only, no kid/ca_bundle) is healed in place with a
-# strategic-merge PATCH. To re-provision after a CA re-init: delete this
-# Secret AND the StepClusterIssuer, then reconcile.
+# step-issuer) and, on CA rotation, converge the whole issuance chain.
+# All three values are fixed at CA init, so an EXISTING Secret is healthy
+# only while its kid and password still match the PVC. A mismatch means
+# the CA was re-initialized (e.g. the restore deadline fell back to a
+# fresh CA) and everything downstream of the old provisioner must heal:
+#   1. PATCH the Secret with the current password/kid/ca_bundle
+#   2. restart step-issuer — its bootstrap initContainer reconciles the
+#      StepClusterIssuer spec to the healed Secret (kid/caBundle live in
+#      the issuer SPEC; the controller never re-reads a changed one)
+#   3. delete the platform wildcard TLS secret — cert-manager keeps an
+#      old-CA-signed cert until expiry otherwise, and the new CA bundles
+#      consumers sync from apps/step-ca would reject it. The secret is
+#      issued into THIS namespace (traefik reads it from here via
+#      defaultTLSResourcesNamespace), so the delete is namespace-local;
+#      cert-manager re-issues within seconds through the healed issuer and
+#      traefik hot-reloads the secret in place.
+# Fully automatic: this Job's ~10m re-run loop performs the convergence;
+# there is deliberately no manual re-provisioning runbook.
 SECRET_NAME=step-certificates-provisioner-password
 SECRET_API="/api/v1/namespaces/${STEPISSUER_NAMESPACE}/secrets/${SECRET_NAME}"
 existing="$(k8s_api GET "$SECRET_API" 2>/dev/null || true)"
-if [ -n "$existing" ] && printf '%s' "$existing" | jq -e '(.data.kid // "") != "" and (.data.ca_bundle // "") != ""' >/dev/null; then
-  echo "Secret ${SECRET_NAME} already exists; nothing to do."
-  exit 0
-fi
 
 CA_CONFIG="${STEPPATH}/config/ca.json"
 ROOT_CA="${STEPPATH}/certs/root_ca.crt"
@@ -238,23 +253,48 @@ if [ -z "$PROVISIONER_KID" ]; then
   echo "Error: Could not extract kid for provisioner '$PROVISIONER_NAME' from $CA_CONFIG"
   exit 1
 fi
+PROVISIONER_PASSWORD="$(cat "$PROVISIONER_PASSWORD_FILE")"
 
 secret_json="$(jq -n \
   --arg ns "$STEPISSUER_NAMESPACE" \
-  --arg password "$(cat "$PROVISIONER_PASSWORD_FILE")" \
+  --arg password "$PROVISIONER_PASSWORD" \
   --arg kid "$PROVISIONER_KID" \
   --arg ca_bundle "$(base64 -w0 "$ROOT_CA")" \
   '{apiVersion: "v1", kind: "Secret",
     metadata: {name: "step-certificates-provisioner-password", namespace: $ns},
     stringData: {password: $password, kid: $kid, ca_bundle: $ca_bundle}}')"
+
+rotation=false
 if [ -n "$existing" ]; then
-  echo "Secret ${SECRET_NAME} lacks kid/ca_bundle (old bootstrap format); patching..."
+  old_kid="$(printf '%s' "$existing" | jq -r '.data.kid // "" | @base64d')"
+  old_password="$(printf '%s' "$existing" | jq -r '.data.password // "" | @base64d')"
+  if [ "$old_kid" = "$PROVISIONER_KID" ] && [ "$old_password" = "$PROVISIONER_PASSWORD" ]; then
+    echo "Secret ${SECRET_NAME} is up to date; nothing to do."
+    exit 0
+  fi
+  rotation=true
+  echo "CA rotation detected (provisioner kid/password no longer match the PVC); healing ${SECRET_NAME}..."
   k8s_api PATCH "$SECRET_API" "$secret_json" >/dev/null
   echo "Secret ${SECRET_NAME} patched."
 else
   echo "Creating Secret ${SECRET_NAME}..."
   k8s_api POST "/api/v1/namespaces/${STEPISSUER_NAMESPACE}/secrets" "$secret_json" >/dev/null
   echo "Secret ${SECRET_NAME} created."
+fi
+
+if [ "$rotation" = true ]; then
+  # Restart step-issuer so its bootstrap initContainer reconciles the
+  # StepClusterIssuer to the healed Secret. Merge-patch of the standard
+  # restartedAt annotation is a rolling restart, not a disruption window.
+  k8s_api PATCH "/apis/apps/v1/namespaces/${STEPISSUER_NAMESPACE}/deployments/step-issuer" \
+    "$(jq -n --arg at "$(date -u +%FT%TZ)" \
+      '{spec: {template: {metadata: {annotations: {"kubectl.kubernetes.io/restartedAt": $at}}}}}')" >/dev/null
+  echo "step-issuer restarted to reconcile the StepClusterIssuer."
+  # Force the wildcard re-issue (see the comment block above). Same
+  # namespace as this Job — no cross-namespace RBAC involved.
+  k8s_api DELETE "/api/v1/namespaces/${STEPISSUER_NAMESPACE}/secrets/${WILDCARD_TLS_SECRET}" >/dev/null 2>&1 \
+    && echo "Deleted ${STEPISSUER_NAMESPACE}/${WILDCARD_TLS_SECRET} — cert-manager re-issues it with the current CA." \
+    || echo "${STEPISSUER_NAMESPACE}/${WILDCARD_TLS_SECRET} not present; nothing to re-issue."
 fi
 echo
 echo "Step CA resource bootstrap complete!"

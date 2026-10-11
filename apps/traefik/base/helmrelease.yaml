@@ -63,6 +63,15 @@ spec:
       kubernetesCRD:
         allowExternalNameServices: true
         allowCrossNamespace: true
+        # The platform default certificate (TLSStore `default` + its secret)
+        # is issued into the step-ca namespace, next to the CA that signs
+        # it; this points the CRD provider there so no mirroring into
+        # traefik's namespace is needed — and makes ours the only
+        # authoritative `default` TLSStore/TLSOption (resources anywhere
+        # else are ignored). Requires traefik >= v3.7.11; the bump is also
+        # the fix line for CVE-2026-85597 (TLS auth bypass via foreign
+        # `default` TLS resources).
+        defaultTLSResourcesNamespace: step-ca
 
     priorityClassName: "system-cluster-critical"
 
@@ -76,6 +85,6 @@ spec:
         operator: "Exists"
         effect: "NoSchedule"
 
-    logs:
-      access:
-        enabled: true
+    # v41 chart rename: logs.access -> accessLog (upstream traefik syntax)
+    accessLog:
+      enabled: true

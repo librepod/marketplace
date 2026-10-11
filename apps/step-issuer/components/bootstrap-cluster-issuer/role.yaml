@@ -1,5 +1,7 @@
-# ClusterRole for creating the StepClusterIssuer resource. Idempotent flow
-# is GET (exists → skip) + POST (create); re-provisioning goes via delete.
+# ClusterRole for the StepClusterIssuer resource: create on first boot,
+# patch when the provisioner Secret changes under a CA rotation (the
+# bootstrap initContainer is the issuer's reconciler — the controller never
+# re-reads a changed kid from the Secret on its own).
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -7,7 +9,7 @@ metadata:
 rules:
   - apiGroups: ["certmanager.step.sm"]
     resources: ["stepclusterissuers"]
-    verbs: ["get", "create"]
+    verbs: ["get", "create", "patch"]
 ---
 # Namespace-scoped Role for reading the bootstrap Secret (password/kid/
 # caBundle) produced by the step-certificates bootstrap Job.

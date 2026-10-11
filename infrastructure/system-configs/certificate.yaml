@@ -2,7 +2,11 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: traefik-default-cert
-  namespace: traefik
+  # Issued into step-ca (same namespace as the default TLSStore that serves
+  # it — traefik reads both from there via defaultTLSResourcesNamespace):
+  # no cross-namespace mirroring, and the step-certificates bootstrap Job
+  # can force a re-issue on CA rotation with same-namespace RBAC only.
+  namespace: step-ca
 spec:
   secretName: tls-traefik-default-cert
   privateKey:

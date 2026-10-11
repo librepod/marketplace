@@ -11,7 +11,7 @@ spec:
 
   # renovate: datasource=docker depName=traefik
   # serge: notesRepo=traefik/traefik
-  version: "v3.6.15"
+  version: "v3.7.13"
 
   source:
     type: oci-kustomize
