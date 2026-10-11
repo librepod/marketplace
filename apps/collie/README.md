@@ -16,13 +16,14 @@ release; its tag is the collie version.
   paired device, reads included. Never expose the lead with `tailscale funnel`.
 - **Tailscale sidecar** (`components/tailscale`): joins the pod to your
   tailnet, giving the lead egress to the members and an address members join
-  at.
+  at. The node identity is `tailscaled.state` on the `collie-data` volume
+  (containerboot runs with `TS_KUBE_SECRET=""`), so the lead keeps its tailnet
+  address across restarts, reinstalls and namespace churn. An init container
+  (`init-tailscale-state`) migrates pre-existing installs off the legacy
+  `collie-tailscale-state` Secret; the Secret can be deleted once migrated.
 - **State**: the PVC `collie-data` (crew trust store, device pairings,
-  push keys, the sidecar's state dir) and the Secret `collie-tailscale-state`
-  (the lead's tailnet identity, created on first start). Uninstalling deletes
-  the namespace and with it the Secret, so a reinstalled lead joins the
-  tailnet as a new node with a new address and members re-join. (The volume's
-  data is retained by the storage class.)
+  push keys, and the sidecar's `tailscaled.state`). Losing it
+  means every member re-runs `collie crew join` and every phone re-pairs.
 
 ## Install settings
 
@@ -30,6 +31,7 @@ release; its tag is the collie version.
 |---|---|
 | `TS_AUTHKEY` | Pre-auth key that joins the lead to the tailnet on first start. |
 | `TS_EXTRA_ARGS` | Extra `tailscale up` flags, e.g. `--login-server=https://headscale.example.com` for a Headscale tailnet. |
+| `TS_HOSTNAME` | Optional: the lead's tailnet hostname (default `collie-lead`). Set only when the default name is already taken on the tailnet. |
 | `COLLIE_PUBLIC_URL` | The address crew members join at (`http://<lead tailnet name or IP>:8787`). |
 
 `COLLIE_PUBLIC_HOSTS` is deliberately not a setting. The public hostname needs
