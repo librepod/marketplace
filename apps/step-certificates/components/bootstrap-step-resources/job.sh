@@ -21,6 +21,9 @@
 #      cert-manager -> the wildcard cert -> openbao's ingress, so sourcing
 #      it from openbao could deadlock a cold boot. Producer-push only.
 #
+#   3. delete the ConfigMaps/Secrets the pre-openbao bootstrap maintained
+#      (stale on upgraded clusters; see the cleanup loop below).
+#
 # All Kubernetes/openbao calls are plain curl with this Job's ServiceAccount
 # token: the step-ca image ships curl+jq but no kubectl, and downloading one
 # at runtime is ~60MB through the flaky egress this script avoids.
@@ -61,7 +64,9 @@ k8s_api () {
     -H "Authorization: Bearer $(cat "$SA/token")"
     -X "$1"
   )
-  if [ -n "${3:-}" ]; then
+  if [ "$1" = PATCH ]; then
+    args+=(-H 'Content-Type: application/strategic-merge-patch+json' --data "$3")
+  elif [ -n "${3:-}" ]; then
     args+=(-H 'Content-Type: application/json' --data "$3")
   fi
   curl "${args[@]}" "$K8S_API$2"
@@ -83,10 +88,29 @@ k8s_api () {
 publish_ca () {
   local root_ca="${STEPPATH}/certs/root_ca.crt"
   local intermediate_ca="${STEPPATH}/certs/intermediate_ca.crt"
+  # The rest of the full-backup file set — must stay in sync with the set
+  # the initContainer's restore requires. A partial backup is never PUT:
+  # the restore side would reject it and mint a fresh root CA, the exact
+  # disaster the backup exists to prevent, so verify loudly here instead.
+  local backup_files=(
+    "${STEPPATH}/config/ca.json"
+    "${STEPPATH}/config/defaults.json"
+    "${STEPPATH}/secrets/passwords/password"
+    "${STEPPATH}/secrets/certificate-issuer/password"
+    "${STEPPATH}/secrets/root_ca_key"
+    "${STEPPATH}/secrets/intermediate_ca_key"
+  )
   if [ ! -s "$root_ca" ] || [ ! -s "$intermediate_ca" ]; then
     echo "WARNING: CA certs missing/empty on the PVC; skipping openbao publication." >&2
     return 0
   fi
+  local f backup_ready=true
+  for f in "${backup_files[@]}"; do
+    if [ ! -s "$f" ]; then
+      echo "WARNING: CA backup incomplete — ${f} missing/empty on the PVC; skipping the system/step-ca backup PUT. The next Job re-run retries." >&2
+      backup_ready=false
+    fi
+  done
   # sys/health answers with an HTTP status on ANY running openbao (sealed
   # included); a transport failure (code 000) means it is not deployed yet —
   # the normal state during a cold boot, when this Job runs long before
@@ -116,31 +140,33 @@ publish_ca () {
   if curl -fsS --connect-timeout 5 --max-time 30 -X PUT \
       -H "X-Vault-Token: ${token}" -H 'Content-Type: application/json' \
       --data "$(jq -n \
-        --rawfile root "$( [ -s "$root_ca" ] && echo "$root_ca" || echo /dev/null )" \
-        --rawfile intermediate "$( [ -s "$intermediate_ca" ] && echo "$intermediate_ca" || echo /dev/null )" \
-        '{data: {"root_ca.crt": $root, "intermediate_ca.crt": $intermediate}
-         } | .data |= with_entries(select(.value != ""))')" \
+        --rawfile root "$root_ca" \
+        --rawfile intermediate "$intermediate_ca" \
+        '{data: {"root_ca.crt": $root, "intermediate_ca.crt": $intermediate}}')" \
       "$OPENBAO_ADDR/v1/apps/data/step-ca" >/dev/null; then
     echo "Public CA published to openbao KV at apps/step-ca."
   else
     echo "WARNING: openbao KV put apps/step-ca failed; the next Job re-run retries." >&2
     published=false
   fi
-  # Full CA backup for restore-on-empty-PVC. Files absent from the PVC are
-  # passed as /dev/null (empty string) and dropped by the with_entries
-  # filter; the restore side requires the complete set, so an incomplete
-  # backup is simply never written half-way — the PUT is atomic per version.
-  if curl -fsS --connect-timeout 5 --max-time 30 -X PUT \
+  # Full CA backup for restore-on-empty-PVC. The file set was verified
+  # complete above, so this always PUTs all eight keys — KV writes are
+  # atomic per version, and the restore side never sees a partial backup.
+  # ponytail: plaintext HTTP — openbao deliberately serves in-cluster HTTP
+  # only (apps/openbao has no TLS listener; every consumer — ESO, this Job —
+  # rides that pattern). Closing this hop means re-architecting openbao TLS
+  # cluster-wide, not just this PUT.
+  if [ "$backup_ready" = true ] && curl -fsS --connect-timeout 5 --max-time 30 -X PUT \
       -H "X-Vault-Token: ${token}" -H 'Content-Type: application/json' \
       --data "$(jq -n \
-        --rawfile root "$( [ -s "$root_ca" ] && echo "$root_ca" || echo /dev/null )" \
-        --rawfile intermediate "$( [ -s "$intermediate_ca" ] && echo "$intermediate_ca" || echo /dev/null )" \
-        --rawfile ca_json "$( [ -s "${STEPPATH}/config/ca.json" ] && echo "${STEPPATH}/config/ca.json" || echo /dev/null )" \
-        --rawfile defaults_json "$( [ -s "${STEPPATH}/config/defaults.json" ] && echo "${STEPPATH}/config/defaults.json" || echo /dev/null )" \
-        --rawfile ca_password "$( [ -s "${STEPPATH}/secrets/passwords/password" ] && echo "${STEPPATH}/secrets/passwords/password" || echo /dev/null )" \
-        --rawfile provisioner_password "$( [ -s "${STEPPATH}/secrets/certificate-issuer/password" ] && echo "${STEPPATH}/secrets/certificate-issuer/password" || echo /dev/null )" \
-        --rawfile root_key "$( [ -s "${STEPPATH}/secrets/root_ca_key" ] && echo "${STEPPATH}/secrets/root_ca_key" || echo /dev/null )" \
-        --rawfile intermediate_key "$( [ -s "${STEPPATH}/secrets/intermediate_ca_key" ] && echo "${STEPPATH}/secrets/intermediate_ca_key" || echo /dev/null )" \
+        --rawfile root "$root_ca" \
+        --rawfile intermediate "$intermediate_ca" \
+        --rawfile ca_json "${STEPPATH}/config/ca.json" \
+        --rawfile defaults_json "${STEPPATH}/config/defaults.json" \
+        --rawfile ca_password "${STEPPATH}/secrets/passwords/password" \
+        --rawfile provisioner_password "${STEPPATH}/secrets/certificate-issuer/password" \
+        --rawfile root_key "${STEPPATH}/secrets/root_ca_key" \
+        --rawfile intermediate_key "${STEPPATH}/secrets/intermediate_ca_key" \
         '{data: {
             "root_ca.crt": $root,
             "intermediate_ca.crt": $intermediate,
@@ -150,8 +176,7 @@ publish_ca () {
             "provisioner_password": $provisioner_password,
             "root_ca_key": $root_key,
             "intermediate_ca_key": $intermediate_key
-          }}
-         | .data |= with_entries(select(.value != ""))')" \
+          }}')" \
       "$OPENBAO_ADDR/v1/system/data/step-ca" >/dev/null; then
     echo "CA backup written to openbao KV at system/step-ca."
   else
@@ -161,6 +186,21 @@ publish_ca () {
   [ "$published" = true ] || echo "WARNING: openbao publication incomplete this run — see above; next re-run retries." >&2
 }
 publish_ca
+
+# Delete the objects the pre-openbao bootstrap Job maintained. They carry no
+# ownerRef, so on an upgraded cluster they would linger in etcd forever —
+# including Secret step-certificates-secrets, whose CA private keys this
+# change moved to openbao system/ precisely to keep out of etcd. DELETEs
+# are idempotent (404 = already gone). step-certificates-provisioner-
+# password is NOT here: the steps below still maintain it.
+for obj in step-certificates-config step-certificates-certs; do
+  k8s_api DELETE "/api/v1/namespaces/${STEPISSUER_NAMESPACE}/configmaps/${obj}" >/dev/null 2>&1 \
+    && echo "Deleted stale ConfigMap ${obj} (pre-openbao bootstrap artifact)." || true
+done
+for obj in step-certificates-ca-password step-certificates-secrets step-certificates-certificate-issuer-password; do
+  k8s_api DELETE "/api/v1/namespaces/${STEPISSUER_NAMESPACE}/secrets/${obj}" >/dev/null 2>&1 \
+    && echo "Deleted stale Secret ${obj} (pre-openbao bootstrap artifact)." || true
+done
 
 # Ensure the provisioner-password Secret (password + kid + caBundle for
 # step-issuer). If it exists WITH the kid/ca_bundle keys there is nothing to
@@ -188,9 +228,11 @@ for file in "$CA_CONFIG" "$ROOT_CA" "$PROVISIONER_PASSWORD_FILE"; do
 done
 
 # The JWK provisioner's kid is nested inside key.kid in ca.json; type may be
-# "JWK" (uppercase) or "jwk".
+# "JWK" (uppercase) or "jwk". `// empty` matters: bare jq -r prints the
+# literal string "null" for an absent kid, which would pass the -z guard
+# below and poison the Secret with kid="null".
 PROVISIONER_KID="$(jq -r --arg name "$PROVISIONER_NAME" \
-  '.authority.provisioners[] | select(.type=="JWK" or .type=="jwk") | select(.name==$name) | .key.kid' \
+  '.authority.provisioners[] | select(.type=="JWK" or .type=="jwk") | select(.name==$name) | .key.kid // empty' \
   "$CA_CONFIG")"
 if [ -z "$PROVISIONER_KID" ]; then
   echo "Error: Could not extract kid for provisioner '$PROVISIONER_NAME' from $CA_CONFIG"
@@ -207,9 +249,7 @@ secret_json="$(jq -n \
     stringData: {password: $password, kid: $kid, ca_bundle: $ca_bundle}}')"
 if [ -n "$existing" ]; then
   echo "Secret ${SECRET_NAME} lacks kid/ca_bundle (old bootstrap format); patching..."
-  curl -fsS --cacert "$SA/ca.crt" -H "Authorization: Bearer $(cat "$SA/token")" \
-    -H 'Content-Type: application/strategic-merge-patch+json' -X PATCH \
-    --data "$secret_json" "${K8S_API}${SECRET_API}" >/dev/null
+  k8s_api PATCH "$SECRET_API" "$secret_json" >/dev/null
   echo "Secret ${SECRET_NAME} patched."
 else
   echo "Creating Secret ${SECRET_NAME}..."
@@ -219,5 +259,6 @@ fi
 echo
 echo "Step CA resource bootstrap complete!"
 echo "Consumers:"
-echo "  - openbao KV apps/step-ca  (certs for ESO consumers + DR copy of keys/config/passwords)"
+echo "  - openbao KV apps/step-ca  (public certs for ESO consumer namespaces)"
+echo "  - openbao KV system/step-ca  (full CA backup: certs, keys, config, passwords)"
 echo "  - Secret ${SECRET_NAME} in ${STEPISSUER_NAMESPACE} (step-issuer StepClusterIssuer input)"

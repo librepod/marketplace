@@ -5,6 +5,11 @@
 # it from the openbao backup when possible, otherwise runs a fresh
 # `step ca init`.
 
+# Everything written below lands on the NFS-backed PVC and includes CA
+# private keys and passwords — owner-only from the start (fresh init and
+# restore alike) instead of chmod-ing after the fact.
+umask 077
+
 echo "Welcome to Step Certificates initialization (initContainer mode)."
 
 STEPPATH=/home/step
@@ -56,8 +61,10 @@ fi
 # with no recovery path for a non-technical owner.
 #
 # Fresh-init fallbacks:
-#   · openbao not deployed here (its Service DNS does not resolve) — virgin
-#     boot, no backup can exist. Zero added latency.
+#   · openbao not deployed here (its Service DNS has not resolved for 30s) —
+#     virgin boot, no backup can exist. The 30s grace is what tells a virgin
+#     boot from a rebuild racing CoreDNS; only the former may fall through
+#     to a fresh CA.
 #   · backup path empty (404) — no backup was ever written.
 #   · incomplete backup — the Job writes the payload atomically per KV
 #     version, so this means garbage; don't wait for it to heal.
@@ -72,12 +79,15 @@ SA=/var/run/secrets/kubernetes.io/serviceaccount
 OPENBAO_ADDR="${OPENBAO_ADDR:-http://openbao.openbao.svc.cluster.local:8200}"
 
 # kv_get BACKUP KEY — one field of the KV v2 read response, or "" if absent.
+# -j (raw, no trailing newline) keeps restored files byte-identical to what
+# the bootstrap Job PUT (jq -r would append a newline to every file).
 kv_get () {
-  printf '%s' "$1" | jq -r --arg k "$2" '.data.data[$k] // empty'
+  printf '%s' "$1" | jq -j --arg k "$2" '.data.data[$k] // empty'
 }
 
 restore_ca_from_backup () {
   local deadline=$((SECONDS + 300))
+  local dns_deadline=0
   local rc=0 login_json token body code backup
   while [ "$SECONDS" -lt "$deadline" ]; do
     login_json="$(curl -sS --connect-timeout 5 --max-time 15 -X POST \
@@ -85,6 +95,16 @@ restore_ca_from_backup () {
       -d "{\"role\":\"step-ca-restore\",\"jwt\":\"$(cat "$SA/token")\"}" \
       "$OPENBAO_ADDR/v1/auth/kubernetes/login" 2>/dev/null)" || rc=$?
     if [ "$rc" -eq 6 ]; then
+      # DNS for the openbao Service not resolving: either a virgin boot
+      # (openbao never deployed — nothing to restore) or CoreDNS still
+      # coming up on a rebuild (backup present; minting a fresh root CA
+      # here would orphan every device trust anchor). Indistinguishable
+      # for the first ~30s; only then conclude "not deployed".
+      [ "$dns_deadline" -eq 0 ] && dns_deadline=$((SECONDS + 30))
+      if [ "$SECONDS" -lt "$dns_deadline" ]; then
+        echo "openbao DNS not resolving yet (curl rc=6); retrying..."
+        rc=0; sleep 5; continue
+      fi
       echo "openbao is not deployed in this cluster (${OPENBAO_ADDR} does not resolve); no backup possible."
       return 1
     elif [ "$rc" -ne 0 ]; then
@@ -127,28 +147,39 @@ restore_ca_from_backup () {
     fi
     mkdir -p "$STEPPATH/certs" "$STEPPATH/config" \
              "$STEPPATH/secrets/passwords" "$STEPPATH/secrets/certificate-issuer"
-    mv "${stage}/root_ca.crt" "${stage}/intermediate_ca.crt" "$STEPPATH/certs/"
-    mv "${stage}/root_ca_key" "${stage}/intermediate_ca_key" "$STEPPATH/secrets/"
-    # Password files carry no trailing newline originally (echo -n at init);
-    # jq -r appends one — strip it or the decrypt password would change.
-    printf '%s' "$(cat "${stage}/ca_password")" > "$STEPPATH/secrets/passwords/password"
-    printf '%s' "$(cat "${stage}/provisioner_password")" > "$STEPPATH/secrets/certificate-issuer/password"
-    mv "${stage}/defaults.json" "$STEPPATH/config/"
-    mv "${stage}/ca.json" "$STEPPATH/config/"
-    # password stage copies were consumed via cat above, not moved
-    rm -rf "$stage"
-    echo -e "\e[1mStep CA RESTORED from the openbao backup (system/step-ca).\e[0m"
-    FINGERPRINT=$(step certificate fingerprint "$STEPPATH/certs/root_ca.crt")
-    echo "CA Fingerprint: ${FINGERPRINT}"
-    return 0
+    # Move the whole tree in one fail-fast chain: any failed step leaves
+    # ca.json unstaged (it moves last), so the PVC still looks uninitialized
+    # and the retried pod start re-attempts the restore.
+    if mv "${stage}/root_ca.crt" "${stage}/intermediate_ca.crt" "$STEPPATH/certs/" &&
+       mv "${stage}/root_ca_key" "${stage}/intermediate_ca_key" "$STEPPATH/secrets/" &&
+       mv "${stage}/ca_password" "$STEPPATH/secrets/passwords/password" &&
+       mv "${stage}/provisioner_password" "$STEPPATH/secrets/certificate-issuer/password" &&
+       mv "${stage}/defaults.json" "$STEPPATH/config/" &&
+       mv "${stage}/ca.json" "$STEPPATH/config/"; then
+      rm -rf "$stage"
+      echo -e "\e[1mStep CA RESTORED from the openbao backup (system/step-ca).\e[0m"
+      FINGERPRINT=$(step certificate fingerprint "$STEPPATH/certs/root_ca.crt")
+      echo "CA Fingerprint: ${FINGERPRINT}"
+      return 0
+    else
+      rm -rf "$stage"
+      echo "WARNING: restore failed while moving files into place; ca.json was not installed." >&2
+      # rc=2, not 1: the backup exists and is restorable — the caller must
+      # NOT fall through to a fresh init over it.
+      return 2
+    fi
   done
   echo "WARNING: restore deadline (5 min) exceeded; falling back to a FRESH CA — device trust anchors will change." >&2
   return 1
 }
 
-if restore_ca_from_backup; then
+restore_ca_from_backup; RESTORE_RC=$?
+if [ "$RESTORE_RC" -eq 0 ]; then
   echo "Using the restored CA; skipping fresh initialization."
   exit 0
+elif [ "$RESTORE_RC" -eq 2 ]; then
+  echo "Error: a restorable backup exists but the restore failed mid-way; refusing to mint a fresh CA (it would orphan every device trust anchor). Exiting so the pod restarts and retries." >&2
+  exit 1
 fi
 echo -e "\e[1mNo backup restored; initializing a new Step CA...\e[0m"
 

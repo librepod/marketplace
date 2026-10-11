@@ -58,7 +58,7 @@ spec:
                   spec:
                     initContainers:
                       - name: bootstrap-cluster-issuer
-                        image: cr.smallstep.com/smallstep/step-ca
+                        image: cr.smallstep.com/smallstep/step-ca:0.29.0
                         command: ["/bin/bash", "/scripts/step-ca-bootstrap-cluster-issuer.sh"]
                         envFrom:
                           - configMapRef:

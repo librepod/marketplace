@@ -1,7 +1,10 @@
-# The bootstrap Job creates exactly one Kubernetes object: the
+# The bootstrap Job manages exactly one Kubernetes object going forward: the
 # step-certificates-provisioner-password Secret (password + kid + caBundle)
 # consumed by step-issuer's StepClusterIssuer. Everything else it produces
-# goes to the openbao KV store.
+# goes to the openbao KV store. The delete verbs exist only to garbage-collect
+# the pre-openbao bootstrap artifacts (two ConfigMaps, three Secrets) on
+# upgraded clusters — those objects have no ownerRef and nothing else removes
+# them.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -9,4 +12,7 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get", "create", "patch"]
+    verbs: ["get", "create", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["delete"]
