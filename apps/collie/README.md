@@ -17,7 +17,7 @@ release; its tag is the collie version.
 - **Tailscale sidecar** (`components/tailscale`): joins the pod to your
   tailnet, giving the lead egress to the members and an address members join
   at.
-- **State**: the PVC `collie-lead-state` (crew trust store, device pairings,
+- **State**: the PVC `collie-data` (crew trust store, device pairings,
   push keys, the sidecar's state dir) and the Secret `collie-tailscale-state`
   (the lead's tailnet identity, created on first start). Uninstalling deletes
   the namespace and with it the Secret, so a reinstalled lead joins the
