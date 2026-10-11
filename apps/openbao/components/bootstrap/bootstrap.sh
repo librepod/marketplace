@@ -96,7 +96,14 @@ for hcl in /policies/*.hcl; do
   bao policy write "$(basename "$hcl" .hcl)" "$hcl"
 done
 
-# Roles
+# Roles. ttl=20m holds only for the consumer shapes provisioned below:
+# one-shot Jobs/initContainers that log in and use the token immediately
+# (every retry loop re-logins per attempt), and daemons that re-authenticate
+# on expiry (marketplace-ui's client tracks lease_duration and re-logins on
+# 403; ESO re-auths on lease expiry). A NEW long-lived consumer that caches
+# a single login will start getting 403s exactly 20 minutes after it boots
+# — with nothing else failing. Give such a consumer expiry handling or a
+# periodic token (token_period); don't just raise the TTL.
 bao write auth/kubernetes/role/external-secrets \
   bound_service_account_names=openbao-eso \
   bound_service_account_namespaces=openbao \
