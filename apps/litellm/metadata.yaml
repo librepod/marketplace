@@ -18,25 +18,25 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/litellm"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain (app will be at litellm.BASE_DOMAIN)"
-        type: string
-        example: "example.com"
-  secrets:
-    - name: LITELLM_SALT_KEY
-      description: "Salt key LiteLLM uses to encrypt credentials stored in its DB (e.g. provider API keys). Generated once per install."
-      required: true
-      generate:
-        type: random
-        length: 64
-    - name: DB_PASSWORD
-      description: "PostgreSQL password (A-Za-z0-9 only — no special chars, since it is URL-embedded in DATABASE_URL). Shared by the bundled postgres and litellm."
-      required: true
-      generate:
-        type: random
-        length: 40
+  # Closed settings (no allowCustom): litellm's config is file/salt-driven and
+  # env override semantics are unclear — only the two machine secrets flow here.
+  # Both are generate-only (never shown in the install dialog); on reinstall the
+  # stored values are reused, so DB credentials keep working against the
+  # NFS-surviving postgres data.
+  settings:
+    items:
+      - name: LITELLM_SALT_KEY
+        label: "Salt key"
+        description: "Salt key LiteLLM uses to encrypt credentials stored in its DB (e.g. provider API keys). Generated once per install."
+        sensitive: true
+        generate:
+          length: 64
+      - name: DB_PASSWORD
+        label: "Database password"
+        description: "PostgreSQL password (A-Za-z0-9 only — no special chars, since it is URL-embedded in DATABASE_URL). Shared by the bundled postgres and litellm."
+        sensitive: true
+        generate:
+          length: 40
 
   dependencies:
     required:
@@ -85,26 +85,9 @@ spec:
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
-          substituteFrom:
-            - kind: Secret
-              name: litellm-config
-    secret: |
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: litellm-config
-        namespace: flux-system
-        labels:
-          marketplace.io/managed: "true"
-          marketplace.io/app: "litellm"
-      type: Opaque
-      stringData:
-        LITELLM_SALT_KEY: "${LITELLM_SALT_KEY}"
-        DB_PASSWORD: "${DB_PASSWORD}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization
       resources:
         - source.yaml
         - release.yaml
-        - secret.yaml
