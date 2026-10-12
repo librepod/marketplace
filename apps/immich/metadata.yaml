@@ -22,20 +22,17 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/immich"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain (Immich will be at immich.BASE_DOMAIN)"
-        type: string
-        example: "example.com"
-
-  secrets:
-    - name: DB_PASSWORD
-      description: "PostgreSQL password (A-Za-z0-9 only — no special chars, per Immich/postgres). Shared by the bundled postgres and immich-server."
-      required: true
-      generate:
-        type: random
-        length: 40
+  # Generate-only settings (never shown in the install dialog): on reinstall the
+  # stored value is reused, so the DB credential keeps working against the
+  # NFS-surviving postgres data (converge-db-password re-heals any drift).
+  settings:
+    items:
+      - name: DB_PASSWORD
+        label: "Database password"
+        description: "PostgreSQL password (A-Za-z0-9 only — no special chars, per Immich/postgres). Shared by the bundled postgres and immich-server."
+        sensitive: true
+        generate:
+          length: 40
 
   dependencies:
     required:
@@ -87,25 +84,9 @@ spec:
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
-          substituteFrom:
-            - kind: Secret
-              name: immich-config
-    secret: |
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: immich-config
-        namespace: flux-system
-        labels:
-          marketplace.io/managed: "true"
-          marketplace.io/app: "immich"
-      type: Opaque
-      stringData:
-        DB_PASSWORD: "${DB_PASSWORD}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization
       resources:
         - source.yaml
         - release.yaml
-        - secret.yaml
