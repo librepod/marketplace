@@ -9,10 +9,10 @@ spec:
   category: "Infrastructure"
   website: "https://github.com/external-secrets/reloader"
 
-  # renovate: datasource=docker depName=ghcr.io/external-secrets/reloader
-  # (upstream tags are v-prefixed; strip the v when moving this pin — OCI tags
-  # here and in infrastructure/system-apps/external-secrets-reloader.yaml are
-  # bare versions)
+  # Upstream tags are v-prefixed; extractVersion strips the v so this pin and
+  # the OCI tags here and in infrastructure/system-apps/external-secrets-reloader.yaml
+  # stay bare versions.
+  # renovate: datasource=docker depName=ghcr.io/external-secrets/reloader extractVersion=^v(?<version>.*)$
   version: "0.3.0"
 
   source:

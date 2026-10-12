@@ -4,7 +4,7 @@ metadata:
   name: external-secrets
 spec:
   displayName: "External Secrets Operator"
-  description: "Synchronizes secrets from OpenBao into Kubernetes Secrets; bundles the Reloader, which rollout-restarts Deployments when their synced Secrets change"
+  description: "Kubernetes operator that synchronizes secrets from external secret stores (such as OpenBao) into native Kubernetes Secrets"
   icon: "https://raw.githubusercontent.com/external-secrets/external-secrets/main/assets/eso-logo-large.png"
   category: "Infrastructure"
   website: "https://external-secrets.io"
