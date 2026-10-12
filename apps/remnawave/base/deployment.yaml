@@ -21,6 +21,16 @@ spec:
           envFrom:
             - configMapRef:
                 name: remnawave-env
+            # Settings Secret synced by ESO from OpenBao (externalsecret.yaml):
+            # non-optional — the pod waits (CreateContainerConfigError) until it
+            # exists. LAST in envFrom so its values override the .env defaults.
+            # Supplies APP_SECRET (name matches) and DB_PASSWORD, which the
+            # DATABASE_URL env below expands via kubelet $(VAR) substitution.
+            - secretRef:
+                name: remnawave-settings
+          env:
+            - name: DATABASE_URL
+              value: postgresql://postgres:$(DB_PASSWORD)@remnawave-postgres:5432/remnawave
           ports:
             - name: http
               containerPort: 3000
