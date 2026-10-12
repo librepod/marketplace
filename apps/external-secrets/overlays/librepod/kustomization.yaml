@@ -6,6 +6,14 @@ namespace: external-secrets
 resources:
 - ../../base
 
+components:
+- ../../components/reloader
+
+images:
+# renovate: datasource=docker depName=ghcr.io/external-secrets/reloader
+- name: ghcr.io/external-secrets/reloader
+  newTag: v0.3.0
+
 patches:
 - path: ./patch-helmrelease.yaml
   target:
