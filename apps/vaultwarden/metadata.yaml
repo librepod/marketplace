@@ -20,17 +20,14 @@ spec:
 
   # vaultwarden is env-var-driven: the settings Secret is LAST in envFrom, so
   # custom environment variables override the .env defaults — power users win.
-  # ADMIN_TOKEN is machine-generated (never shown in the install dialog); the
-  # installer reuses the stored value on reinstall so /admin keeps its token.
   settings:
     allowCustom: true
     items:
       - name: ADMIN_TOKEN
-        label: "Admin token"
-        description: "Token for the /admin panel. Leave empty to auto-generate."
+        label: "Admin auth token"
+        description: "Admin token which enables  the Admin page at /admin. Read more here: https://github.com/dani-garcia/vaultwarden/wiki/Enabling-admin-page#secure-the-admin_token"
         sensitive: true
-        generate:
-          length: 64
+        required: false
 
   dependencies:
     required:
