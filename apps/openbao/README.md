@@ -107,7 +107,7 @@ metadata:
   name: demo
   namespace: anywhere
 spec:
-  refreshInterval: 1h
+  refreshInterval: 5m
   secretStoreRef:
     kind: ClusterSecretStore
     name: openbao

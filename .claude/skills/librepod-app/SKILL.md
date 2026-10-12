@@ -729,7 +729,7 @@ kind: ExternalSecret
 metadata:
   name: <app-name>-settings
 spec:
-  refreshInterval: 1h
+  refreshInterval: 5m
   secretStoreRef:
     kind: ClusterSecretStore
     name: openbao

@@ -214,7 +214,7 @@ kind: ExternalSecret
 metadata:
   name: step-certificates-certs
 spec:
-  refreshInterval: 10m
+  refreshInterval: 1h
   secretStoreRef:
     kind: ClusterSecretStore
     name: openbao
