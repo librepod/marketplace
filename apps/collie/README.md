@@ -18,7 +18,9 @@ release; its tag is the collie version.
   tailnet, giving the lead egress to the members and an address members join
   at. The node identity is `tailscaled.state` on the `collie-data` volume
   (containerboot runs with `TS_KUBE_SECRET=""`), so the lead keeps its tailnet
-  address across restarts, reinstalls and namespace churn.
+  address across restarts, reinstalls and namespace churn. The sidecar logs in
+  with `TS_AUTHKEY` only when that state can't (`TS_AUTH_ONCE=true`): Headscale
+  0.28 enrols a new node whenever a tags-only pre-auth key is presented again.
 - **State**: the PVC `collie-data` (crew trust store, device pairings,
   push keys, and the sidecar's `tailscaled.state`). Losing it means every
   member re-runs `collie crew join`, every phone re-pairs, and the lead joins
@@ -31,7 +33,7 @@ release; its tag is the collie version.
 | Setting | Purpose |
 |---|---|
 | `TS_AUTHKEY` | Pre-auth key that joins the lead to the tailnet on first start. |
-| `TS_EXTRA_ARGS` | Extra `tailscale up` flags, e.g. `--login-server=https://headscale.example.com` for a Headscale tailnet. |
+| `TS_EXTRA_ARGS` | Extra `tailscale up` flags, applied when the lead first joins, e.g. `--login-server=https://headscale.example.com` for a Headscale tailnet. |
 | `TS_HOSTNAME` | Optional: the lead's tailnet hostname (default `collie-lead`). Set only when the default name is already taken on the tailnet. |
 | `COLLIE_PUBLIC_URL` | The address crew members join at (`http://<lead tailnet name or IP>:8787`). |
 
