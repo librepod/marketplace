@@ -6,9 +6,11 @@ serverPort = ${FRP_SERVER_PORT}
 # Proxy name will be changed to {user}.{proxy}
 user = "${FRP_USER}"
 
+# frp renders this whole file as a Go template against the container env at
+# startup, so the token comes from the frpc-settings Secret (OpenBao) via
+# envFrom — it never lands in this ConfigMap.
 auth.method = "token"
-auth.tokenSource.type = "file"
-auth.tokenSource.file.path = "/etc/frp/auth/token"
+auth.token = "{{ .Envs.FRP_AUTH_TOKEN }}"
 
 webServer.addr = "0.0.0.0"
 webServer.port = 7400
