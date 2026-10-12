@@ -18,20 +18,19 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/vaultwarden"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain (app will be at vaultwarden.BASE_DOMAIN)"
-        type: string
-        example: "example.com"
-
-  secrets:
-    - name: ADMIN_TOKEN
-      description: "Admin panel access token (leave empty to disable admin panel)"
-      required: false
-      generate:
-        type: random
-        length: 64
+  # vaultwarden is env-var-driven: the settings Secret is LAST in envFrom, so
+  # custom environment variables override the .env defaults — power users win.
+  # ADMIN_TOKEN is machine-generated (never shown in the install dialog); the
+  # installer reuses the stored value on reinstall so /admin keeps its token.
+  settings:
+    allowCustom: true
+    items:
+      - name: ADMIN_TOKEN
+        label: "Admin token"
+        description: "Token for the /admin panel. Leave empty to auto-generate."
+        sensitive: true
+        generate:
+          length: 64
 
   dependencies:
     required:
@@ -80,25 +79,9 @@ spec:
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
-          substituteFrom:
-            - kind: Secret
-              name: vaultwarden-config
-    secret: |
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: vaultwarden-config
-        namespace: flux-system
-        labels:
-          marketplace.io/managed: "true"
-          marketplace.io/app: "vaultwarden"
-      type: Opaque
-      stringData:
-        ADMIN_TOKEN: "${ADMIN_TOKEN}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization
       resources:
         - source.yaml
         - release.yaml
-        - secret.yaml
