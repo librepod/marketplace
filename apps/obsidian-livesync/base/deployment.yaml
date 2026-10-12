@@ -14,22 +14,18 @@ spec:
         - name: couchdb
           image: couchdb
           imagePullPolicy: IfNotPresent
-          env:
-            - name: COUCHDB_USER
-              valueFrom:
-                configMapKeyRef:
-                  name: obsidian-livesync
-                  key: COUCHDB_USER
-            - name: COUCHDB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: obsidian-livesync-secret
-                  key: COUCHDB_PASSWORD
-            - name: COUCHDB_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: obsidian-livesync-secret
-                  key: COUCHDB_SECRET
+          envFrom:
+            - configMapRef:
+                name: obsidian-livesync
+            # Settings Secret synced by ESO from OpenBao (externalsecret.yaml):
+            # non-optional — the pod waits (CreateContainerConfigError) until it
+            # exists. LAST in envFrom so its values override .env defaults.
+            # Supplies COUCHDB_PASSWORD and COUCHDB_SECRET (names match), which
+            # the liveness/readiness probes below expand at runtime. Never
+            # rotate them: CouchDB persists the admin-password hash in its
+            # data PVC, so a changed value is a permanent lockout.
+            - secretRef:
+                name: obsidian-livesync-settings
           ports:
             - containerPort: 5984
               name: http
@@ -50,7 +46,7 @@ spec:
               command:
                 - sh
                 - -c
-                - curl -s -f -u "${COUCHDB_USER}:${COUCHDB_PASSWORD}" http://localhost:5984/_up
+                - curl -s -f -u "$COUCHDB_USER:$COUCHDB_PASSWORD" http://localhost:5984/_up
             initialDelaySeconds: 30
             periodSeconds: 10
           readinessProbe:
@@ -58,7 +54,7 @@ spec:
               command:
                 - sh
                 - -c
-                - curl -s -f -u "${COUCHDB_USER}:${COUCHDB_PASSWORD}" http://localhost:5984/_up
+                - curl -s -f -u "$COUCHDB_USER:$COUCHDB_PASSWORD" http://localhost:5984/_up
             initialDelaySeconds: 5
             periodSeconds: 5
       volumes:
