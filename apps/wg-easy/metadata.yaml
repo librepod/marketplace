@@ -18,6 +18,15 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/wg-easy"
     path: ./overlays/librepod
 
+  settings:
+    items:
+      - name: INIT_PASSWORD
+        label: "Admin password"
+        description: "Initial password for the built-in admin account (applied on first start only). SSO is the primary login; this is the fallback if the IdP is unavailable."
+        sensitive: true
+        required: true
+        default: "ChangeMeOnFirstLogin!"
+
   dependencies:
     required:
       - kind: IngressController

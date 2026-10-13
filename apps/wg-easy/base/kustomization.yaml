@@ -14,14 +14,10 @@ configMapGenerator:
   envs:
   - wg-easy.env
 
-secretGenerator:
-- name: wg-easy-admin
-  envs:
-  - wg-easy-secret.env
-
 resources:
 - namespace.yaml
 - pvc.yaml
 - service-http.yaml
 - service-wireguard.yaml
+- externalsecret.yaml
 - deployment.yaml
