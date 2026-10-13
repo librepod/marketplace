@@ -5,8 +5,8 @@
 #
 # Canonical LibrePod CA-trust pattern (same as litellm/headscale/vaultwarden):
 # an init container (alpine) fuses the system CA bundle with the LibrePod root
-# AND intermediate CA (from configMap/step-certificates-certs, Reflector-
-# replicated from step-ca), then the remnawave container mounts the merged
+# AND intermediate CA (from secret/step-certificates-certs, synced from
+# openbao apps/step-ca), then the remnawave container mounts the merged
 # bundle over the system bundle path. Trust env vars for a Node.js app:
 # SSL_CERT_FILE + NODE_EXTRA_CA_CERTS (Node's tls module ignores SSL_CERT_FILE)
 # — see docs/sso-app-author-guide.md §4.
@@ -59,8 +59,8 @@ spec:
               value: /etc/ssl/certs/ca-certificates.crt
       volumes:
         - name: root-ca-cert
-          configMap:
-            name: step-certificates-certs
+          secret:
+            secretName: step-certificates-certs
             items:
               - key: root_ca.crt
                 path: root_ca.crt

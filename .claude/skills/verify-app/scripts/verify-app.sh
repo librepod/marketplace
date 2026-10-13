@@ -6,7 +6,7 @@
 #
 # Usage:
 #   bash verify-app.sh --app whoami --namespace whoami
-#   bash verify-app.sh --app vaultwarden --kubeconfig ./librepod-dev.config
+#   bash verify-app.sh --app vaultwarden --kubeconfig ~/.kube/librepod-dev.config
 #   bash verify-app.sh --app wg-easy --no-http
 #
 # Exit codes:
@@ -17,7 +17,7 @@ set -uo pipefail
 
 APP_NAME=""
 NAMESPACE=""
-KUBECONFIG_PATH="./librepod-dev.config"
+KUBECONFIG_PATH="$HOME/.kube/librepod-dev.config"
 CHECK_HTTP="true"
 
 while [[ $# -gt 0 ]]; do

@@ -1,8 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ServiceUnavailableException } from '@nestjs/common';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { WgEasyService } from './wg-easy.service';
 import type { DeviceAdminStore } from './device-admin.store';
 
@@ -14,27 +11,15 @@ function ok(body: unknown, status = 200) {
   return new Response(typeof body === 'string' ? body : JSON.stringify(body), { status });
 }
 
-/** Real temp file standing in for the mounted factory-password Secret — the
- * node:fs namespace is frozen, so readFileSync cannot be spied. */
-function factoryFile(content = 'ChangeMeOnFirstLogin!\n'): string {
-  const dir = mkdtempSync(join(tmpdir(), 'wg-easy-factory-'));
-  const file = join(dir, 'INIT_PASSWORD');
-  writeFileSync(file, content);
-  return file;
-}
-
 describe('WgEasyService', () => {
-  let factoryPath: string;
-
   beforeEach(() => {
     process.env.WGEASY_BASE_URL = 'http://wg-easy.test';
-    factoryPath = factoryFile();
-    process.env.WGEASY_PASSWORD_FILE = factoryPath;
+    // The committed factory default, as the cluster ConfigMap carries it.
+    process.env.WGEASY_ADMIN_DEFAULT_PASSWORD = 'ChangeMeOnFirstLogin!';
   });
   afterEach(() => {
     vi.restoreAllMocks();
-    delete process.env.WGEASY_PASSWORD_FILE;
-    rmSync(join(factoryPath, '..'), { recursive: true, force: true });
+    delete process.env.WGEASY_ADMIN_DEFAULT_PASSWORD;
   });
 
   it('uses the persisted password when it still authenticates', async () => {

@@ -18,13 +18,6 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/step-certificates"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain for cluster (CA uses this for DNS SANs)"
-        type: string
-        example: "example.com"
-
   dependencies: []
 
   templates:

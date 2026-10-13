@@ -6,14 +6,14 @@
 #
 # Canonical LibrePod CA-trust pattern (same as vaultwarden/open-webui/seafile):
 # an init container (alpine) fuses the system CA bundle with the LibrePod root
-# CA (from configMap/step-certificates-certs, Reflector-replicated from step-ca),
+# CA (from secret/step-certificates-certs, synced from openbao),
 # then the headscale container mounts the merged bundle over the system bundle
 # and SSL_CERT_FILE points Go's crypto/tls at it. headscale performs OIDC
 # provider discovery at startup, so this trust is required to even boot.
 #
-# PLATFORM DEPENDENCY: configMap/step-certificates-certs must exist in THIS
-# namespace — see the Reflector stub in overlays/librepod/kustomization.yaml
-# (it reflects step-ca/step-certificates-certs). hostNetwork is unrelated.
+# PLATFORM DEPENDENCY: secret/step-certificates-certs must exist in THIS
+# namespace — see the ExternalSecret in overlays/librepod/kustomization.yaml
+# (it syncs openbao apps/step-ca). hostNetwork is unrelated.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -52,8 +52,8 @@ spec:
               value: /etc/ssl/certs/ca-certificates.crt
       volumes:
         - name: root-ca-cert
-          configMap:
-            name: step-certificates-certs
+          secret:
+            secretName: step-certificates-certs
             items:
               - key: root_ca.crt
                 path: root_ca.crt

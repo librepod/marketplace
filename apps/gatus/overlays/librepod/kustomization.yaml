@@ -7,6 +7,7 @@ resources:
 - ../../base
 - ingressroute.yaml
 - ssoclient.yaml
+- externalsecret-ca.yaml
 
 configMapGenerator:
 # Gatus application configuration (mounted at /config/config.yaml via the
@@ -32,15 +33,6 @@ configMapGenerator:
       kustomize.toolkit.fluxcd.io/substitute: disabled
   files:
   - config.yaml=config.yaml
-# Reflector stub: replicates the LibrePod root CA from namespace step-ca so the
-# CA-merge init container can fuse it into the pod trust bundle. Stays EMPTY
-# here — Reflector fills it from the source. disableNameSuffixHash is REQUIRED
-# (Reflector keys its replication off this exact object name).
-- name: step-certificates-certs
-  options:
-    disableNameSuffixHash: true
-    annotations:
-      reflector.v1.k8s.emberstack.com/reflects: "step-ca/step-certificates-certs"
 
 patches:
 - path: ./patch-helmrelease.yaml

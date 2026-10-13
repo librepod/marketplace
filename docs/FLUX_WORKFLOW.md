@@ -22,11 +22,13 @@ nix-shell shell.nix
 nix-shell shell.nix --run "flux version"
 ```
 
-**Cluster access**: the dev cluster kubeconfig lives at `./librepod-dev.config`
-(gitignored). Pass it explicitly to every `flux`, `kubectl`, and `helm` call:
+**Cluster access**: the dev cluster kubeconfig lives at `~/.kube/librepod-dev.config`
+(a symlink to the gitignored file in the `librepod-devices` repo — the sibling
+`librepod-*.config` symlinks there are production devices, never point at them).
+Pass it explicitly to every `flux`, `kubectl`, and `helm` call:
 
 ```bash
---kubeconfig ./librepod-dev.config
+--kubeconfig ~/.kube/librepod-dev.config
 ```
 
 **Key names** (already provisioned on the dev cluster):
@@ -60,7 +62,7 @@ helm install flux-operator oci://ghcr.io/controlplaneio-fluxcd/charts/flux-opera
   --namespace flux-system \
   --set installCRDs=true \
   --create-namespace \
-  --kubeconfig ./librepod-dev.config
+  --kubeconfig ~/.kube/librepod-dev.config
 ```
 
 This deploys the operator with default values. No custom configuration is
@@ -83,7 +85,7 @@ helm install flux-instance oci://ghcr.io/controlplaneio-fluxcd/charts/flux-insta
   --set instance.sync.path=./clusters/librepod-dev \
   --set instance.sync.ref=latest \
   --set instance.sync.url=oci://ghcr.io/librepod/marketplace/bootstrap \
-  --kubeconfig ./librepod-dev.config
+  --kubeconfig ~/.kube/librepod-dev.config
 ```
 
 ### 0d. Verify bootstrap
@@ -99,13 +101,13 @@ Check progress:
 
 ```bash
 # FluxInstance status — should show READY=True
-kubectl --kubeconfig ./librepod-dev.config get fluxinstance flux -n flux-system
+kubectl --kubeconfig ~/.kube/librepod-dev.config get fluxinstance flux -n flux-system
 
 # OCIRepository — should show the latest artifact pulled
-kubectl --kubeconfig ./librepod-dev.config get ocirepository marketplace-bootstrap -n flux-system
+kubectl --kubeconfig ~/.kube/librepod-dev.config get ocirepository marketplace-bootstrap -n flux-system
 
 # Kustomizations — system-apps and system-configs should appear and reconcile
-flux get kustomizations --kubeconfig ./librepod-dev.config -n flux-system
+flux get kustomizations --kubeconfig ~/.kube/librepod-dev.config -n flux-system
 ```
 
 The full deployment chain takes several minutes. The dependency order is:
@@ -130,14 +132,14 @@ all patches and variable substitutions exactly as FluxCD would.
 ```bash
 # Top-level infrastructure apps kustomization
 flux build kustomization system-apps \
-  --kubeconfig ./librepod-dev.config \
+  --kubeconfig ~/.kube/librepod-dev.config \
   --path ./infrastructure/system-apps \
   --kustomization-file ./clusters/librepod-dev/system-apps.yaml \
   --local-sources GitRepository/flux-system/librepod-apps=./
 
 # Individual app (substitute <app-name> and <kustomization-name>)
 flux build kustomization <kustomization-name> \
-  --kubeconfig ./librepod-dev.config \
+  --kubeconfig ~/.kube/librepod-dev.config \
   --path ./apps/<app-name>/overlays/librepod \
   --local-sources GitRepository/flux-system/librepod-apps=./
 ```
@@ -146,7 +148,7 @@ Validate the rendered output with `kubeconform` to catch schema errors early:
 
 ```bash
 flux build kustomization <kustomization-name> \
-  --kubeconfig ./librepod-dev.config \
+  --kubeconfig ~/.kube/librepod-dev.config \
   --path ./apps/<app-name>/overlays/librepod \
   --local-sources GitRepository/flux-system/librepod-apps=./ \
   | kubeconform \
@@ -166,14 +168,14 @@ local changes.
 ```bash
 # Diff infra-apps kustomization
 flux diff kustomization system-apps \
-  --kubeconfig ./librepod-dev.config \
+  --kubeconfig ~/.kube/librepod-dev.config \
   --path ./infrastructure/system-apps \
   --kustomization-file ./clusters/librepod-dev/system-apps.yaml \
   --local-sources GitRepository/flux-system/librepod-apps=./
 
 # Diff a specific app kustomization
 flux diff kustomization <kustomization-name> \
-  --kubeconfig ./librepod-dev.config \
+  --kubeconfig ~/.kube/librepod-dev.config \
   --path ./apps/<app-name>/overlays/librepod \
   --local-sources GitRepository/flux-system/librepod-apps=./
 ```
@@ -204,7 +206,7 @@ adds fields but doesn't remove existing ones, which can cause both `branch` and
 `name` fields to coexist unexpectedly:
 
 ```bash
-kubectl --kubeconfig ./librepod-dev.config \
+kubectl --kubeconfig ~/.kube/librepod-dev.config \
   patch gitrepository librepod-apps \
   -n flux-system \
   --type json \
@@ -219,28 +221,28 @@ kustomization:
 ```bash
 # Reconcile source + a top-level kustomization together
 flux reconcile kustomization system-apps \
-  --kubeconfig ./librepod-dev.config \
+  --kubeconfig ~/.kube/librepod-dev.config \
   --with-source
 
 # Or reconcile source first, then kustomization separately
 flux reconcile source git librepod-apps \
-  --kubeconfig ./librepod-dev.config
+  --kubeconfig ~/.kube/librepod-dev.config
 
 flux reconcile kustomization <kustomization-name> \
-  --kubeconfig ./librepod-dev.config
+  --kubeconfig ~/.kube/librepod-dev.config
 ```
 
 ### 3d. Restore the GitRepository to master when done
 
 ```bash
-kubectl --kubeconfig ./librepod-dev.config \
+kubectl --kubeconfig ~/.kube/librepod-dev.config \
   patch gitrepository librepod-apps \
   -n flux-system \
   --type json \
   -p '[{"op": "replace", "path": "/spec/ref", "value": {"branch": "master"}}]'
 
 flux reconcile kustomization system-apps \
-  --kubeconfig ./librepod-dev.config \
+  --kubeconfig ~/.kube/librepod-dev.config \
   --with-source
 ```
 
@@ -255,7 +257,7 @@ desired state.
 
 ```bash
 flux get kustomizations \
-  --kubeconfig ./librepod-dev.config \
+  --kubeconfig ~/.kube/librepod-dev.config \
   -n flux-system
 ```
 
@@ -266,14 +268,14 @@ matches the expected branch/commit.
 
 ```bash
 flux tree kustomization <kustomization-name> \
-  --kubeconfig ./librepod-dev.config
+  --kubeconfig ~/.kube/librepod-dev.config
 ```
 
 ### Tail reconciliation logs
 
 ```bash
 flux logs \
-  --kubeconfig ./librepod-dev.config \
+  --kubeconfig ~/.kube/librepod-dev.config \
   --kind=Kustomization \
   --name=<kustomization-name> \
   --namespace=flux-system \
@@ -283,7 +285,7 @@ flux logs \
 ### Check deployed pods (optional deep verification)
 
 ```bash
-kubectl --kubeconfig ./librepod-dev.config \
+kubectl --kubeconfig ~/.kube/librepod-dev.config \
   get pods -n <app-namespace>
 ```
 
@@ -299,13 +301,13 @@ recreate it fresh:
 
 ```bash
 # Check HelmRelease status
-kubectl --kubeconfig ./librepod-dev.config get helmrelease -n <namespace> <name>
+kubectl --kubeconfig ~/.kube/librepod-dev.config get helmrelease -n <namespace> <name>
 
 # Delete stuck HelmRelease (FluxCD will recreate from Kustomization)
-kubectl --kubeconfig ./librepod-dev.config delete helmrelease -n <namespace> <name>
+kubectl --kubeconfig ~/.kube/librepod-dev.config delete helmrelease -n <namespace> <name>
 
 # Trigger reconciliation
-flux reconcile kustomization <kustomization-name> --kubeconfig ./librepod-dev.config
+flux reconcile kustomization <kustomization-name> --kubeconfig ~/.kube/librepod-dev.config
 ```
 
 ### Service port vs targetPort confusion

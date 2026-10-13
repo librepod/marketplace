@@ -1,6 +1,6 @@
 ---
 name: casdoor-export
-description: Use when exporting Casdoor SSO configuration from the librepod Kubernetes cluster. Triggers on "casdoor export", "export casdoor config", "backup casdoor", "save casdoor init data".
+description: Use when exporting or backing up Casdoor SSO configuration from the librepod cluster into the repo's init_data.json (e.g. after making changes via the Casdoor UI).
 ---
 
 # Casdoor Export
@@ -10,7 +10,7 @@ Exports Casdoor SSO configuration from the running cluster to the repository's i
 ## Context
 
 - **Namespace**: `casdoor`
-- **Kubeconfig**: `./librepod-dev.config` (in repository root)
+- **Kubeconfig**: `~/.kube/librepod-dev.config` (symlink into the `librepod-devices` repo; sibling `librepod-*.config` links are production devices)
 - **Server binary**: `/server` inside the container
 - **Init data file**: `apps/casdoor/overlays/librepod/init_data.json` (repository path)
 
@@ -22,22 +22,22 @@ Use after making changes via the Casdoor web UI when you want to persist configu
 
 1. Find the casdoor pod:
    ```bash
-   kubectl --kubeconfig ./librepod-dev.config get pods -n casdoor -o name
+   kubectl --kubeconfig ~/.kube/librepod-dev.config get pods -n casdoor -o name
    ```
 
 2. Run the export command inside the pod:
    ```bash
-   kubectl --kubeconfig ./librepod-dev.config exec -n casdoor <pod-name> -- /server -export -exportPath /tmp/casdoor_export.json
+   kubectl --kubeconfig ~/.kube/librepod-dev.config exec -n casdoor <pod-name> -- /server -export -exportPath /tmp/casdoor_export.json
    ```
 
 3. Copy the exported file from the pod:
    ```bash
-   kubectl --kubeconfig ./librepod-dev.config cp casdoor/<pod-name>:/tmp/casdoor_export.json ./apps/casdoor/overlays/librepod/init_data.json
+   kubectl --kubeconfig ~/.kube/librepod-dev.config cp casdoor/<pod-name>:/tmp/casdoor_export.json ./apps/casdoor/overlays/librepod/init_data.json
    ```
 
 4. Clean up the temp file in the pod:
    ```bash
-   kubectl --kubeconfig ./librepod-dev.config exec -n casdoor <pod-name> -- rm /tmp/casdoor_export.json
+   kubectl --kubeconfig ~/.kube/librepod-dev.config exec -n casdoor <pod-name> -- rm /tmp/casdoor_export.json
    ```
 
 **Output:** The `apps/casdoor/overlays/librepod/init_data.json` file is updated with the current Casdoor configuration.
@@ -48,7 +48,7 @@ Use after making changes via the Casdoor web UI when you want to persist configu
 
 Since pod names include random suffixes, always retrieve the current pod name dynamically:
 ```bash
-POD=$(kubectl --kubeconfig ./librepod-dev.config get pods -n casdoor -o jsonpath='{.items[0].metadata.name}')
+POD=$(kubectl --kubeconfig ~/.kube/librepod-dev.config get pods -n casdoor -o jsonpath='{.items[0].metadata.name}')
 ```
 
 Then use `$POD` in subsequent commands.

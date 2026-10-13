@@ -125,6 +125,25 @@ describe('UserAppsRepoService reads', () => {
 
     expect(await svc.listInstalledApps()).toEqual(['baikal']); // re-cloned, not wedged
   });
+
+  it('readAppFile returns a file from the working copy', async () => {
+    const origin = await seedOrigin(root, {
+      'apps/baikal/secret.yaml': 'stringData:\n  A: "1"\n',
+    });
+    const svc = makeService(root, origin);
+
+    expect(await svc.readAppFile('baikal', 'secret.yaml')).toContain('stringData');
+  });
+
+  it('readAppFile returns null when the file (or the app, or the repo) is absent', async () => {
+    const svc = makeService(root, join(root, 'never-existed.git')); // cold start, no working copy
+    expect(await svc.readAppFile('baikal', 'secret.yaml')).toBeNull();
+
+    const origin = await seedOrigin(root, { 'apps/baikal/release.yaml': 'kind: K\n' });
+    const withRepo = makeService(root, origin);
+    expect(await withRepo.readAppFile('baikal', 'secret.yaml')).toBeNull(); // file absent
+    expect(await withRepo.readAppFile('ghost', 'release.yaml')).toBeNull(); // app absent
+  });
 });
 
 describe('UserAppsRepoService writes', () => {

@@ -18,30 +18,6 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/wg-easy"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain for cluster (WG Easy web UI will be at wg-easy.BASE_DOMAIN)"
-        type: string
-        example: "example.com"
-      - name: FRP_SERVER_ADDR
-        description: "FRP server public address (WireGuard clients connect to this host)"
-        type: string
-        example: "vla1.libreport.ru"
-    optional:
-      - name: TZ
-        description: "Timezone for the wg-easy server (IANA name, e.g. Europe/Moscow)"
-        type: string
-        default: "UTC"
-      - name: FRP_REMOTE_PORT
-        description: "Public port on the FRP relay. Default 51820. Set to 0 to let the relay auto-assign (discover the port in frpc logs / frps dashboard)."
-        type: string
-        default: "51820"
-      - name: WIREGUARD_PROXY_NAME
-        description: "FRP proxy name (the Upstream CR name). Must be unique per relay when devices share a relay. Default wg-easy-wireguard; set wg-easy-wireguard-<device> to share."
-        type: string
-        default: "wg-easy-wireguard"
-
   dependencies:
     required:
       - kind: IngressController

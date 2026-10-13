@@ -1,0 +1,25 @@
+# Reloader configuration (CRD is cluster-scoped: scope: Cluster; it carries no
+# namespace and none is stamped — the base kustomization deliberately has no
+# `namespace:` transformer since the vendored bundle already ships in this
+# app's namespace).
+apiVersion: reloader.external-secrets.io/v1alpha1
+kind: Config
+metadata:
+  name: reloader
+  labels:
+    app.kubernetes.io/name: external-secrets-reloader
+spec:
+  notificationSources:
+    - type: KubernetesSecret
+      kubernetesSecret:
+        # Only required field; auth defaults to the in-cluster ServiceAccount.
+        serverURL: https://kubernetes.default.svc
+  destinationsToWatch:
+    - type: Deployment
+      deployment:
+        labelSelectors:
+          # Empty selector = all Deployments cluster-wide (marketplace + system
+          # apps alike). Matching is by Secret reference (secretKeyRef name or
+          # envFrom.secretRef name) in the pod template, so a rollout fires only
+          # for Deployments actually consuming the changed Secret.
+          matchLabels: {}

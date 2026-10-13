@@ -18,15 +18,6 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/baikal"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain (app will be at baikal.BASE_DOMAIN)"
-        type: string
-        example: "example.com"
-
-  secrets: []
-
   dependencies:
     required:
       - kind: IngressController

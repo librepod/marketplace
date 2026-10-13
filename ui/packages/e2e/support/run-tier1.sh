@@ -11,7 +11,7 @@ COMPOSE="$UI_ROOT/packages/e2e/docker-compose.e2e.yml"
 E2E="$UI_ROOT/packages/e2e"
 
 cleanup() {
-  echo "==> Tearing down Gogs"
+  echo "==> Tearing down Gogs + OpenBao"
   docker compose -f "$COMPOSE" down -v >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -29,7 +29,7 @@ npm run build
 echo "==> Clearing the previous run's app-store working copy"
 rm -rf "$E2E/.tmp"
 
-echo "==> Starting Gogs (seeded runtime)"
+echo "==> Starting Gogs (seeded runtime) + OpenBao (dev mode)"
 # Detached, deliberately WITHOUT --wait: gogs-seed is a one-shot with no
 # healthcheck, and `up --wait` rejects healthcheck-less services on some docker
 # compose versions (CI's standard build, though not the local one). gogs-ready.mjs
@@ -40,6 +40,15 @@ docker compose -f "$COMPOSE" up -d
 echo "==> Verifying Gogs readiness"
 GOGS_URL="http://127.0.0.1:43000" GOGS_USERNAME="flux" GOGS_TOKEN="pass@w0rd" \
   node "$E2E/support/gogs-ready.mjs"
+
+echo "==> Verifying OpenBao readiness"
+# /v1/sys/health answers 200 once the dev server is initialised, unsealed and active.
+for _ in $(seq 1 60); do
+  curl -fsS http://127.0.0.1:48200/v1/sys/health >/dev/null 2>&1 && break
+  sleep 1
+done
+curl -fsS http://127.0.0.1:48200/v1/sys/health >/dev/null \
+  || { echo "OpenBao did not become ready on 127.0.0.1:48200" >&2; exit 1; }
 
 echo "==> Running Playwright (Tier 1)"
 npx playwright test --config "$E2E/projects/tier1.config.ts" "$@"

@@ -45,6 +45,14 @@ spec:
           envFrom:
             - configMapRef:
                 name: immich-env
+          env:
+            # Env name differs from the settings key (DB_PASSWORD), so it needs an
+            # explicit secretKeyRef instead of envFrom. Same secret as immich-server.
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: immich-settings
+                  key: DB_PASSWORD
           # 128 MiB shared memory, matching compose's `shm_size: 128mb`.
           volumeMounts:
             - name: data
@@ -74,6 +82,14 @@ spec:
           envFrom:
             - configMapRef:
                 name: immich-env
+          env:
+            # Same POSTGRES_PASSWORD as the postgres container — it ALTERs the
+            # stored password to this value on every boot.
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: immich-settings
+                  key: DB_PASSWORD
           command: ["/bin/sh", "-c"]
           args:
             - |

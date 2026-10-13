@@ -1,0 +1,21 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: external-secrets
+spec:
+  chart:
+    spec:
+      chart: external-secrets
+      # HTTP Helm repo: exact pin. external-secrets versions chart and app in
+      # lockstep (chart 2.11.x bakes image v2.11.x), so this pin IS the
+      # app-version pin; the datasource=helm annotation on metadata spec.version
+      # is correct for the same reason. No renovate manager covers this file —
+      # bump it manually in the same change as spec.version.
+      version: "2.11.0"
+      sourceRef:
+        kind: HelmRepository
+        name: external-secrets-helm-charts
+      interval: 12h
+  # No values block and no image.tag — omitting values entirely keeps the base
+  # values (installCRDs, replicaCount) intact; an image.tag override would be a
+  # second version anchor (see skill "Image versions").

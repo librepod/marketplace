@@ -4,16 +4,10 @@ metadata:
   name: immich
 spec:
   values:
-    # immich app version. The chart deliberately does not bump image.tag with
-    # every Immich release, so it must be set explicitly. Defined at the shared
-    # top-level controllers so it applies to every component (server; ML is off).
-    controllers:
-      main:
-        containers:
-          main:
-            image:
-              tag: v3.0.3
-
+    # No image.tag override: the chart's baked default (its values.yaml ships the
+    # current immich release) is the app-version source of truth. spec.version in
+    # metadata.yaml mirrors the chart's default tag — update both together when
+    # bumping the chart pin in base/ocirepository.yaml.
     immich:
       persistence:
         library:
@@ -66,9 +60,14 @@ spec:
           containers:
             main:
               # DB_* connection vars come from the immich-env ConfigMap.
+              # DB_PASSWORD itself comes from Secret/immich-settings (synced
+              # from OpenBao by ESO): envFrom works here because the env name
+              # matches the key. LAST so its values override .env defaults.
               envFrom:
                 - configMapRef:
                     name: immich-env
+                - secretRef:
+                    name: immich-settings
               env:
                 # Trust the merged CA bundle (system + LibrePod CAs) for the
                 # OIDC HTTPS calls. SSL_CERT_FILE covers OpenSSL-based tooling;
@@ -76,10 +75,11 @@ spec:
                 SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
                 NODE_EXTRA_CA_CERTS: /etc/ssl/certs/ca-certificates.crt
       persistence:
-        # LibrePod CA bundle (root + intermediate), mirrored from step-ca by
-        # Reflector (see kustomization.yaml). Mounted into the init container.
+        # LibrePod CA bundle (root + intermediate), synced from openbao
+        # (apps/step-ca) by the ExternalSecret in kustomization.yaml.
+        # Mounted into the init container.
         root-ca-cert:
-          type: configMap
+          type: secret
           name: step-certificates-certs
           advancedMounts:
             main:

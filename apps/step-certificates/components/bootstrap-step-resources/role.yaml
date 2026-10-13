@@ -1,24 +1,25 @@
+# The bootstrap Job manages exactly one Kubernetes object going forward: the
+# step-certificates-provisioner-password Secret (password + kid + caBundle)
+# consumed by step-issuer's StepClusterIssuer. Everything else it produces
+# goes to the openbao KV store. The delete verbs garbage-collect the
+# pre-openbao bootstrap artifacts (two ConfigMaps, three Secrets — no
+# ownerRef, nothing else removes them on upgraded clusters) and cover the
+# CA-rotation heal's wildcard re-issue (the TLS secret is issued into this
+# namespace). The deployments/patch grant is the other half of that heal: a
+# restartedAt merge-patch on the step-issuer Deployment so its bootstrap
+# initContainer reconciles the StepClusterIssuer to the healed Secret.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: step-ca-bootstrap-step-issuer
 rules:
-  # Allow creating and managing ConfigMaps
-  - apiGroups: [""]
-    resources: ["configmaps"]
-    verbs: ["get", "create", "update", "patch", "delete"]
-
-  # Allow creating and managing Secrets
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get", "create", "update", "patch", "delete"]
-
-  # Allow creating and managing StepIssuer resources (if needed in the future)
-  - apiGroups: ["certmanager.step.sm"]
-    resources: ["stepissuers"]
-    verbs: ["get", "create", "update", "delete", "list"]
-
-  # Allow checking StepIssuer status
-  - apiGroups: ["certmanager.step.sm"]
-    resources: ["stepissuers/status"]
-    verbs: ["get"]
+    verbs: ["get", "create", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["step-issuer"]
+    verbs: ["patch"]

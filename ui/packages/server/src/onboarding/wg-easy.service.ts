@@ -1,5 +1,4 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import { readFileSync } from 'node:fs';
 import type { WgPeer } from '@librepod/shared';
 import { DeviceAdminStore } from './device-admin.store';
 
@@ -9,7 +8,8 @@ import { DeviceAdminStore } from './device-admin.store';
  * re-verified against the live v15.4.0 source), so this is stateless.
  * wg-easy's local admin is one of the device-admin credential's targets:
  * at claim time `adoptPassword(chosen)` rotates the factory password
- * (INIT_PASSWORD from the reflected wg-easy-admin Secret) to the same
+ * (WGEASY_ADMIN_DEFAULT_PASSWORD — the committed INIT_PASSWORD default,
+ * same public-by-design value wg-easy's own Secret carries) to the same
  * password the user chose for Casdoor, persisting it first via
  * DeviceAdminStore. Order matters: persist BEFORE rotating, so a failed
  * persist never destroys the factory credential; a wg-easy outage during
@@ -80,14 +80,11 @@ export class WgEasyService {
   }
 
   private factoryPassword(): string | undefined {
-    // Read per call (not at module load) so tests can point the env var at a
-    // real temp file — the node:fs namespace is frozen and cannot be spied.
-    const file = process.env.WGEASY_PASSWORD_FILE ?? '/etc/wg-easy/INIT_PASSWORD';
-    try {
-      return readFileSync(file, 'utf8').trim() || undefined;
-    } catch {
-      return undefined;
-    }
+    // The committed factory default (INIT_PASSWORD), carried in the env like
+    // Casdoor's — public by design, rotated at claim. No live-secret
+    // mirroring: Reflector is retired and the wizard only ever needs this
+    // public value to authenticate the rotation call.
+    return process.env.WGEASY_ADMIN_DEFAULT_PASSWORD?.trim() || undefined;
   }
 
   private authHeaders(password: string): Record<string, string> {

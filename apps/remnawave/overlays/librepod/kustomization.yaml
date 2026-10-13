@@ -5,6 +5,7 @@ resources:
 - ../../base
 - ingressroute.yaml
 - ssoclient.yaml
+- externalsecret-ca.yaml
 
 components:
 - ../../components/postgres
@@ -17,19 +18,6 @@ components:
 # - ../../components/tailscale
 
 namespace: remnawave
-
-configMapGenerator:
-# Self-service the LibrePod private CA into this namespace. Reflector pulls
-# root_ca.crt + intermediate_ca.crt from the source (step-ca/step-certificates-certs,
-# which carries reflection-allowed: "true") into this stub. Mirrors litellm/
-# open-webui/headscale.
-# disableNameSuffixHash keeps the name stable so the Deployment volume mount in
-# deployment-ca-patch.yaml references the exact same object Reflector populates.
-- name: step-certificates-certs
-  options:
-    disableNameSuffixHash: true
-    annotations:
-      reflector.v1.k8s.emberstack.com/reflects: "step-ca/step-certificates-certs"
 
 images:
 - name: remnawave/backend

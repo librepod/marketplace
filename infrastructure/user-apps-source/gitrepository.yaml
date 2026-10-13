@@ -18,8 +18,8 @@ spec:
   #      known_hosts, since host keys are bound to the exact name given.
   #   3. ssh was adopted for "no baked-in credential", but the flux account's
   #      password is a committed literal (apps/gogs/components/bootstrap-admin/
-  #      secret.env) reflected into two namespaces — the keypair bought ceremony,
-  #      not secrecy.
+  #      secret.env) distributed to its consumers via openbao+ESO — the
+  #      keypair bought ceremony, not secrecy.
   # Trade-off accepted: basic auth crosses the pod network in plaintext. Revisit
   # when that credential is rotated. See issue #182 and docs/DECISIONS_LOG.md
   # row 7 (2026-08-22) for the full rationale and the probes behind it.

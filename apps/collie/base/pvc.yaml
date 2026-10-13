@@ -1,0 +1,13 @@
+# The lead's identity: crew trust store (pinned mTLS with every member),
+# device pairings, VAPID keys and the tailscale sidecar's state dir. Losing it
+# means every member re-runs `collie crew join` and every phone re-pairs.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: collie-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 512Mi

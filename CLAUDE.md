@@ -23,24 +23,24 @@ A development Kubernetes cluster is available for testing:
 
 - **Cluster name**: `librepod-dev`
 - **Access**: hostname `librepod-dev` (IP may change; the kubeconfig file always has the current address)
-- **Kubeconfig**: `./librepod-dev.config` (in repo root, gitignored)
+- **Kubeconfig**: `~/.kube/librepod-dev.config` (symlink to the `librepod-devices` repo, where the real file is gitignored; the sibling `librepod-*.config` symlinks are **production devices** — never point at them)
 
 Always use the kubeconfig flag when interacting with the cluster:
 
 ```bash
-kubectl --kubeconfig ./librepod-dev.config get pods -A
+kubectl --kubeconfig ~/.kube/librepod-dev.config get pods -A
 ```
 
 ## Common Development Commands
 
-### Root-level Commands (run from `/apps`)
+### Root-level Commands (run from the repo root)
 
 ```bash
 # Build kustomize manifests
 kustomize build ./apps/<app-name>/overlays/librepod
 
 # Apply to dev cluster
-kustomize build ./apps/<app-name>/overlays/librepod | kubectl --kubeconfig ./librepod-dev.config apply -f -
+kustomize build ./apps/<app-name>/overlays/librepod | kubectl --kubeconfig ~/.kube/librepod-dev.config apply -f -
 ```
 
 ## Architecture Patterns
@@ -65,8 +65,8 @@ folder) in order to pull its original state.
 
 ## Development Workflow
 
-1. **Create/Edit App**: Modify Kustomization code in `apps/<app-name>/base.yaml` or `overlay/librepod/` files
-2. **Test Build**: Run `kustomize build apps/<app-name>/overlay/librepod` to verify manifests
+1. **Create/Edit App**: Modify Kustomization code in `apps/<app-name>/base/` or `overlays/librepod/` files
+2. **Test Build**: Run `kustomize build apps/<app-name>/overlays/librepod` to verify manifests
 3. **Deploy to Dev**: Apply to `librepod-dev` cluster for testing
 4. **Commit**: Generated YAML in `<app-name>/` is committed to Git
 
@@ -84,9 +84,13 @@ reconciliation — see @docs/FLUX_WORKFLOW.md
   the result as a cosign-signed OCI artifact (`oci://ghcr.io/librepod/marketplace/catalog`).
   Clusters consume it via `infrastructure/system-apps/marketplace-catalog.yaml`, whose
   Kustomization renders the `marketplace-catalog` ConfigMap the marketplace-ui mounts.
-  When bumping an app version, edit only the source of truth (`metadata.yaml` `spec.version`,
-  plus the overlay image tag and the `ref.tag` in `infrastructure/system-apps/<app>.yaml`);
-  the catalog updates on all clusters within ~5 min of merge. For local UI development run
+  When bumping an app version, edit only the source of truth: `metadata.yaml` `spec.version`,
+  plus — for Kustomize-type apps / self-built images — the overlay `images[].newTag` and the
+  `ref.tag` in `infrastructure/system-apps/<app>.yaml`. For vendored Helm-chart apps the chart
+  pin (base `ocirepository.yaml` / `patch-helmrelease.yaml` `chart.spec.version`) drives the
+  app version; never override `image.tag` in values, and move `spec.version` to the new chart's
+  baked appVersion in the same change. See the librepod-app skill ("Image versions") for the
+  structural exceptions. The catalog updates on all clusters within ~5 min of merge. For local UI development run
   `bash ./scripts/generate-catalog.sh` — the root `catalog.yaml` it writes is gitignored.
 - **Commit, PR & public-doc hygiene**: never reference specific device or cluster hostnames (e.g. `librepod-dev`, `librepod-beelink`) in commit messages, PR titles/descriptions, or public-facing docs (READMEs). Use abstract environment pointers instead — `dev`, `prod`, `staging`. (Internal dev workflow docs like `docs/FLUX_WORKFLOW.md` may keep the operational cluster name.)
 - **Bootstrap versioning**: OCI streams for `marketplace/bootstrap` are

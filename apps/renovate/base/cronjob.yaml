@@ -33,7 +33,7 @@ spec:
                 - configMapRef:
                     name: renovate
                 - secretRef:
-                    name: renovate-env
+                    name: renovate-settings
               volumeMounts:
                 - name: config
                   mountPath: /opt/renovate

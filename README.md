@@ -272,7 +272,6 @@ spec:
 | 🐙 Gogs | Self-hosted Git service (private config repo) |
 | 🚪 Casdoor | SSO / identity provider |
 | 🛡️ oauth2-proxy | OAuth2 reverse proxy |
-| 🔄 reflector | Kubernetes resource replication across namespaces |
 | 📡 wg-easy | WireGuard VPN management UI |
 | 🔗 frpc | ~~System app~~ FRP client for remote access tunneling — *temporarily removed, pending LibrePort integration* |
 | 👤 whoami | Debug / test ingress service |

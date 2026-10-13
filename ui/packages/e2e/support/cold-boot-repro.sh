@@ -290,9 +290,8 @@ release_seed_and_wait_ready() {
   # Deleting Secret/user-apps-ssh-key is what turns the Job from a no-op back into a
   # real seeder (bootstrap-ssh-key.sh exits early while the Secret exists). It is
   # deleted here, not during the hold, precisely so the hold stays deterministic.
+  # (The Secret lives only in gogs — it is not reflected to other namespaces.)
   kubectl delete secret user-apps-ssh-key -n "$GOGS_NS" --ignore-not-found >/dev/null 2>&1 || true
-  kubectl delete secret user-apps-ssh-key -n "$FLUX_NS" --ignore-not-found >/dev/null 2>&1 || true
-  kubectl delete secret user-apps-ssh-key -n "$MUI_NS" --ignore-not-found >/dev/null 2>&1 || true
   kubectl delete job gogs-bootstrap-ssh-key -n "$GOGS_NS" --ignore-not-found >/dev/null 2>&1 || true
   flux reconcile kustomization user-apps-source -n "$FLUX_NS" --with-source >/dev/null 2>&1 || true
   # the parent Kustomization recreates the GitRepository object we deleted during the

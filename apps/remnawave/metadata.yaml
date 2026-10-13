@@ -18,49 +18,24 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/remnawave"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain (panel will be at remnawave.BASE_DOMAIN)"
-        type: string
-        example: "example.com"
-    optional:
-      - name: SUB_PUBLIC_DOMAIN
-        description: "Public domain of the subscription page when it runs on a separate server (bare domain, no scheme/path). Default: panel serves subscriptions at remnawave.BASE_DOMAIN/api/sub. To set after install, add the key to the remnawave-config Secret in the user-apps repo."
-        type: string
-        example: "subscription.example.com"
-      # The TS_* params apply only when the optional tailscale component
-      # (apps/remnawave/components/tailscale) is enabled: add
-      # ../../components/tailscale to spec.components of the install's
-      # release.yaml in the user-apps repo. Same interface as the standalone
-      # tailscale app. All are set by adding the key to the remnawave-config
-      # Secret in the same repo.
-      - name: TS_EXTRA_ARGS
-        description: "Raw flags for the tailscale sidecar — you provide everything, e.g. --login-server (required when the component is enabled; point it at your tailnet control server). Default: --accept-dns=false (cluster DNS must never be overwritten)."
-        type: string
-        example: "--login-server=https://headscale.example.com --accept-dns=false"
-      - name: TS_AUTHKEY
-        description: "Preauth key for the tailscale sidecar (reusable, long expiry, dedicated tag). Required when the tailscale component is enabled."
-        type: string
-        example: "tskey-auth-..."
-      - name: TS_HOSTNAME
-        description: "Node name the tailscale sidecar uses in the tailnet. Default: remnawave-panel."
-        type: string
-        example: "my-panel"
-
-  secrets:
-    - name: APP_SECRET
-      description: "Panel-wide secret — signs admin auth JWTs and API tokens"
-      required: true
-      generate:
-        type: random
-        length: 64
-    - name: DB_PASSWORD
-      description: "PostgreSQL password (A-Za-z0-9 only — no special chars, since it is URL-embedded in DATABASE_URL). Shared by the bundled postgres and the panel."
-      required: true
-      generate:
-        type: random
-        length: 40
+  # Generate-only settings (never shown in the install dialog): on reinstall the
+  # stored values are reused, so the DB credential keeps working against the
+  # NFS-surviving postgres data (converge-db-password re-heals any drift) and
+  # admin JWTs stay valid.
+  settings:
+    items:
+      - name: APP_SECRET
+        label: "App secret"
+        description: "Panel-wide secret — signs admin auth JWTs and API tokens. Generated once per install."
+        sensitive: true
+        generate:
+          length: 64
+      - name: DB_PASSWORD
+        label: "Database password"
+        description: "PostgreSQL password (A-Za-z0-9 only — no special chars, since it is URL-embedded in DATABASE_URL). Shared by the bundled postgres and the panel. Generated once per install."
+        sensitive: true
+        generate:
+          length: 40
 
   dependencies:
     required:
@@ -115,26 +90,9 @@ spec:
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
-          substituteFrom:
-            - kind: Secret
-              name: remnawave-config
-    secret: |
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: remnawave-config
-        namespace: flux-system
-        labels:
-          marketplace.io/managed: "true"
-          marketplace.io/app: "remnawave"
-      type: Opaque
-      stringData:
-        APP_SECRET: "${APP_SECRET}"
-        DB_PASSWORD: "${DB_PASSWORD}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization
       resources:
         - source.yaml
         - release.yaml
-        - secret.yaml

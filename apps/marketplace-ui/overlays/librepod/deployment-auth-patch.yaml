@@ -4,7 +4,7 @@
 # TLS verification (Node needs NODE_EXTRA_CA_CERTS; SSL_CERT_FILE is set for
 # parity per docs/sso-app-author-guide.md §4).
 #
-# Same Reflector + init-container pattern as vaultwarden / headscale / seafile.
+# Same ExternalSecret + init-container pattern as vaultwarden / headscale / seafile.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -43,12 +43,6 @@ spec:
             - name: root-ca-cert
               mountPath: /mnt/root-ca
               readOnly: true
-            # wg-easy's factory admin password (INIT_PASSWORD file), mirrored
-            # by Reflector from wg-easy/wg-easy-admin. The wizard rotates it
-            # to the device-admin password at claim time.
-            - name: wg-easy-credentials
-              mountPath: /etc/wg-easy
-              readOnly: true
           env:
             - name: CASDOOR_CLIENT_ID
               valueFrom:
@@ -75,18 +69,10 @@ spec:
               value: /mnt/root-ca/root_ca.crt
       volumes:
         - name: root-ca-cert
-          configMap:
-            name: step-certificates-certs
+          secret:
+            secretName: step-certificates-certs
             items:
               - key: root_ca.crt
                 path: root_ca.crt
         - name: merged-ca-bundle
           emptyDir: {}
-        # Reflected copy of wg-easy's factory admin password (INIT_PASSWORD).
-        # Optional for the same reason as user-apps-git-credentials in the
-        # base: an absent Secret must not block the pod during bootstrap
-        # windows (Reflector creates it within seconds of wg-easy deploying).
-        - name: wg-easy-credentials
-          secret:
-            secretName: wg-easy-admin
-            optional: true

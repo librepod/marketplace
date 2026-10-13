@@ -11,27 +11,23 @@ spec:
 
   # renovate: datasource=docker depName=vaultwarden/server
   # serge: notesRepo=dani-garcia/vaultwarden
-  version: "1.37.0"
+  version: "1.37.4"
 
   source:
     type: oci-kustomize
     url: "oci://ghcr.io/librepod/marketplace/apps/vaultwarden"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain (app will be at vaultwarden.BASE_DOMAIN)"
-        type: string
-        example: "example.com"
-
-  secrets:
-    - name: ADMIN_TOKEN
-      description: "Admin panel access token (leave empty to disable admin panel)"
-      required: false
-      generate:
-        type: random
-        length: 64
+  # vaultwarden is env-var-driven: the settings Secret is LAST in envFrom, so
+  # custom environment variables override the .env defaults — power users win.
+  settings:
+    allowCustom: true
+    items:
+      - name: ADMIN_TOKEN
+        label: "Admin auth token"
+        description: "Admin token which enables  the Admin page at /admin. Read more here: https://github.com/dani-garcia/vaultwarden/wiki/Enabling-admin-page#secure-the-admin_token"
+        sensitive: true
+        required: false
 
   dependencies:
     required:
@@ -80,25 +76,9 @@ spec:
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
-          substituteFrom:
-            - kind: Secret
-              name: vaultwarden-config
-    secret: |
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: vaultwarden-config
-        namespace: flux-system
-        labels:
-          marketplace.io/managed: "true"
-          marketplace.io/app: "vaultwarden"
-      type: Opaque
-      stringData:
-        ADMIN_TOKEN: "${ADMIN_TOKEN}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization
       resources:
         - source.yaml
         - release.yaml
-        - secret.yaml

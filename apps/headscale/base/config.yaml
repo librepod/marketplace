@@ -113,6 +113,14 @@ dns:
     split:
       ${BASE_DOMAIN:=libre.pod}:
         - 10.43.0.10
+      # Cluster-internal service FQDNs (<svc>.<ns>.svc.cluster.local), so tailnet
+      # clients reach non-HTTP apps by name (dolt MySQL :3306, rustdesk) — these
+      # names exist only in CoreDNS (short .svc forms are NXDOMAIN for clients
+      # without k8s search domains). cluster.local is the k3s cluster domain on
+      # every LibrePod device; if several tailnet-routed clusters ever coexist,
+      # their cluster.local zones collide (first-listed CoreDNS wins).
+      cluster.local:
+        - 10.43.0.10
 
 unix_socket: /var/run/headscale/headscale.sock
 

@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+namespace: gogs
+
+# Producer side of the Reflector -> openbao+ESO migration for the user-apps
+# source credential (#253): pushes the committed flux-account credential into
+# openbao KV apps/user-apps-source. The bootstrap-admin component's
+# secretGenerator stays the local source of truth (the gogs deployment's
+# postStart hook and the bootstrap-ssh-key Job read the Secret directly).
+resources:
+  - serviceaccount.yaml
+  - job.yaml
+
+configMapGenerator:
+  - name: cm-gogs-publish-source-auth
+    files:
+      - publish-source-auth.sh=job.sh
+    options:
+      annotations:
+        # shell variables in the script must not be interpreted by
+        # Flux postBuild.substitute (strict envsubst fails the whole
+        # Kustomization on any unmapped ${VAR})
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      # the Job mounts this ConfigMap; a name hash would rewrite the
+      # immutable Job spec on every content change and brick the apply
+      disableNameSuffixHash: true

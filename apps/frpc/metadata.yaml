@@ -18,26 +18,16 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/frpc"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: FRP_SERVER_ADDR
-        description: "FRP server address (IP or hostname)"
-        type: string
-        example: "203.0.113.10"
-    optional:
-      - name: FRP_SERVER_PORT
-        description: "FRP server port"
-        type: integer
-        default: "7000"
-      - name: FRP_SSH_REMOTE_PORT
-        description: "Remote port for SSH tunnel proxy"
-        type: integer
-        default: "6000"
-
-  secrets:
-    - name: FRP_AUTH_TOKEN
-      description: "Authentication token matching the FRP server configuration"
-      required: true
+  # No allowCustom: the only configurable value is the token, and it reaches frp
+  # through {{ .Envs.FRP_AUTH_TOKEN }} in frp.toml — custom env vars a toml never
+  # references can do nothing.
+  settings:
+    items:
+      - name: FRP_AUTH_TOKEN
+        label: "Auth token"
+        description: "Authentication token matching the FRP server configuration"
+        sensitive: true
+        required: true
 
   dependencies:
     required:
@@ -90,22 +80,9 @@ spec:
             FRP_SERVER_ADDR: "${FRP_SERVER_ADDR}"
             FRP_SERVER_PORT: "${FRP_SERVER_PORT}"
             FRP_SSH_REMOTE_PORT: "${FRP_SSH_REMOTE_PORT}"
-          substituteFrom:
-            - kind: Secret
-              name: frpc-config
-    secret: |
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: frpc-config
-        namespace: flux-system
-      type: Opaque
-      stringData:
-        FRP_AUTH_TOKEN: "${FRP_AUTH_TOKEN}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization
       resources:
         - source.yaml
         - release.yaml
-        - secret.yaml

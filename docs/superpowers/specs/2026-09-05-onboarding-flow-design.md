@@ -2,7 +2,7 @@
 
 Companion plan: `docs/superpowers/plans/2026-09-05-onboarding-flow.md`.
 Product record: `ui/PRODUCT.md`.
-Date: 2026-09-02 (shaped) · 2026-09-05 (amended, user-directed) · 2026-09-28 (amended: device-admin credential model after wg-easy SSO #204; Reflector #214 pattern) · Status: approved
+Date: 2026-09-02 (shaped) · 2026-09-05 (amended, user-directed) · 2026-09-28 (amended: device-admin credential model after wg-easy SSO #204; Reflector #214 pattern) · 2026-10-13 (amended: Reflector retired upstream — factory credential via env, see wg-easy bullet below) · Status: approved
 
 ## Problem
 
@@ -87,7 +87,13 @@ pod restarts resume for free; no wizard-local progress state.
   survived the 15.3→15.4 rewrite, the rename only affected the session login
   route). Persist-before-rotate ordering means a wg-easy outage during claim
   defers rotation (the lazy `ensurePassword()` completes it from the Secret)
-  rather than losing the credential.
+  rather than losing the credential. *(Amended 2026-10-13: the factory value
+  reaches the server via the `WGEASY_ADMIN_DEFAULT_PASSWORD` env in the
+  ConfigMap — the 2026-09-28 plan wired it as a Reflector-mirrored Secret
+  mount, but Reflector has since been retired cluster-wide in favor of
+  External Secrets; the wizard only ever needs this public committed default,
+  never a live secret, so plain env — exactly how the Casdoor factory `123`
+  already travels — replaces the whole cross-namespace mechanism.)*
 - **No rotation side effects in GET polls** — the status probe is write-free;
   rotation happens only in `claim` or lazily inside the wg API paths.
 

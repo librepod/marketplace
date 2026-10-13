@@ -25,21 +25,6 @@ extract_template_block() {
   ' "$file"
 }
 
-# Extract a spec-level YAML section (params, secrets) from metadata.yaml
-# Outputs the section with 4-space indent
-extract_spec_section() {
-  local file="$1"
-  local section="$2"
-  awk -v section="  ${section}:" '
-    $0 == section { found=1; next }
-    found && /^  [a-z]/ && !/^  [a-z]*:/ { next }
-    found && /^  [a-z][a-zA-Z]*:/ { exit }
-    found && /^  -/ { print "    " $0; next }
-    found && /^    / { print "    " $0; next }
-    found && NF == 0 { print "" }
-  ' "$file"
-}
-
 # Start catalog
 cat > "$CATALOG_FILE" <<'HEADER'
 apiVersion: marketplace/v1
@@ -122,13 +107,6 @@ ENTRY
     fi
   fi
 
-  # Extract params section
-  PARAMS_CONTENT=$(awk '/^  params:/ { found=1; next } found && /^  [a-z]/ { exit } found && NF > 0 { print }' "$metadata_file")
-  if [ -n "$PARAMS_CONTENT" ]; then
-    echo "      params:" >> "$CATALOG_FILE"
-    echo "$PARAMS_CONTENT" | sed 's/^/        /' >> "$CATALOG_FILE"
-  fi
-
   # Extract secrets section
   SECRETS_LINE=$(grep '^  secrets:' "$metadata_file" | head -1 | sed 's/.*secrets: *//')
   if [ "$SECRETS_LINE" = "[]" ]; then
@@ -139,6 +117,20 @@ ENTRY
       echo "      secrets:" >> "$CATALOG_FILE"
       echo "$SECRETS_CONTENT" | sed 's/^/        /' >> "$CATALOG_FILE"
     fi
+  fi
+
+  # Extract settings section (install questions + allowCustom) verbatim — the
+  # installer and the install dialog read it from catalog.yaml. Keeps whatever
+  # follows `settings:` on its own line (flow style: `settings: { allowCustom: true }`,
+  # minus a trailing comment) and blank lines inside the block (paragraph breaks in
+  # `description: |`); blank lines are emptied, not indented, so they never add
+  # spaces to a block scalar.
+  SETTINGS_INLINE=$(grep -m1 '^  settings:' "$metadata_file" | sed -e 's/^  settings:[[:space:]]*//' -e 's/^#.*//' || true)
+  SETTINGS_CONTENT=$(awk '/^  settings:/ { found=1; next } found && /^  [a-z]/ { exit } found { print }' "$metadata_file" \
+    | sed -e 's/^[[:space:]]*$//' -e '/./s/^/        /')
+  if [ -n "$SETTINGS_INLINE" ] || [ -n "$SETTINGS_CONTENT" ]; then
+    echo "      settings:${SETTINGS_INLINE:+ $SETTINGS_INLINE}" >> "$CATALOG_FILE"
+    if [ -n "$SETTINGS_CONTENT" ]; then echo "$SETTINGS_CONTENT" >> "$CATALOG_FILE"; fi
   fi
 done
 

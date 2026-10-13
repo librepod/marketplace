@@ -1,0 +1,12 @@
+# Dedicated PVC for the static-seal key. Kept separate from the data volume so
+# that resetting the data volume alone can never strand the seal key.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openbao-seal
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 128Mi

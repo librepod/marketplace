@@ -73,6 +73,17 @@ spec:
           path: /spec/dependsOn
           value:
             - name: traefik
+    # Same as gogs/casdoor above: without this, openbao blocks forever on the
+    # deleted storage Kustomization and nothing that reads OpenBao (ESO
+    # ExternalSecrets, user-apps-source auth) ever syncs on this tier.
+    - target:
+        name: openbao
+        kind: Kustomization
+      patch: |
+        - op: replace
+          path: /spec/dependsOn
+          value:
+            - name: traefik
 
     # Faster retries for dev cluster (production keeps 2m)
     - target:

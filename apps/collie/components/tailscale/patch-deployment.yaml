@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: collie
+spec:
+  template:
+    spec:
+      # No API token: the sidecar's node identity lives in tailscaled.state on
+      # the state PVC (TS_KUBE_SECRET=""), so containerboot never talks to the
+      # Kubernetes API. Base's automount off for the whole pod stands.
+      #
+      # serviceAccountName is set to default rather than omitted: installs
+      # from before this change run as the since-removed collie
+      # ServiceAccount, and on them the API server refills an omitted
+      # serviceAccountName from the deprecated serviceAccount alias (still
+      # collie) under both client- and server-side apply. The new pods would
+      # then reference the pruned ServiceAccount and never be created.
+      serviceAccountName: default
+      #
+      # MagicDNS first: it answers tailnet names and forwards the rest; CoreDNS
+      # second is consulted on SERVFAIL, or once MagicDNS has not answered
+      # within the timeout (tailscaled down or restarting), so a sidecar outage
+      # costs each lookup ~1s instead of the resolver's default 5s. The search
+      # domain is the MagicDNS base domain the headscale app configures
+      # (ts.<BASE_DOMAIN>). 10.43.0.10 (CoreDNS) below is k3s's default
+      # service-CIDR address.
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+          - 100.100.100.100
+          - 10.43.0.10
+        searches:
+          - ts.${BASE_DOMAIN:=libre.pod}
+        options:
+          - name: timeout
+            value: "1"
+          - name: attempts
+            value: "2"
+      containers:
+        - name: tailscale
+          image: tailscale/tailscale
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+            capabilities:
+              add: ["NET_ADMIN"]
+          envFrom:
+            - configMapRef:
+                name: collie-tailscale
+          env:
+            # Install setting (optional): the lead's tailnet hostname.
+            # Unset, the configMap default from tailscale.env (collie-lead)
+            # applies — an optional secretKeyRef to a missing key keeps the
+            # envFrom value (verified on k8s ≥1.27). Explicit so the node
+            # name never depends on a control-server collision suffix.
+            - name: TS_HOSTNAME
+              valueFrom:
+                secretKeyRef:
+                  name: collie-settings
+                  key: TS_HOSTNAME
+                  optional: true
+            - name: TS_AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: collie-settings
+                  key: TS_AUTHKEY
+            - name: TS_EXTRA_ARGS
+              valueFrom:
+                secretKeyRef:
+                  name: collie-settings
+                  key: TS_EXTRA_ARGS
+                  optional: true
+          # containerboot's /healthz answers 200 once the node holds a tailnet
+          # IP. A startup probe only: the pod stays unready (and the install
+          # fails visibly) until the lead first joins the tailnet, e.g. on a
+          # wrong auth key or login server, while a later tailnet blip leaves
+          # the PWA up.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 9002
+            periodSeconds: 10
+            failureThreshold: 30
+          volumeMounts:
+            - name: tun
+              mountPath: /dev/net/tun
+            # kubelet creates the subPath dir on first mount.
+            - name: state
+              mountPath: /var/lib/tailscale
+              subPath: tailscale
+      volumes:
+        - name: tun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice

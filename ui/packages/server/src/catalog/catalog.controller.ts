@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, NotFoundException, HttpCode } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, NotFoundException, HttpCode } from '@nestjs/common';
 import { CatalogService } from './catalog.service';
 import { InstalledService } from '../installed/installed.service';
 import { CatalogApp } from './catalog.types';
@@ -30,8 +30,10 @@ export class CatalogController {
 
   @Post(':name/install')
   @HttpCode(200)
-  async install(@Param('name') name: string): Promise<InstallResult> {
-    return this.installedService.install(name);
+  async install(@Param('name') name: string, @Body() body: unknown): Promise<InstallResult> {
+    // Optional { settings?, custom? }. Express 5 leaves req.body undefined when no
+    // JSON was sent; InstalledService treats that as "all defaults".
+    return this.installedService.install(name, body);
   }
 
   @Post(':name/uninstall')

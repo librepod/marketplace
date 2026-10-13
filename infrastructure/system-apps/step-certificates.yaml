@@ -21,7 +21,11 @@ metadata:
 spec:
   dependsOn:
     - name: storage
-  interval: 1h
+  # 10m: the completed Job is TTL-GC'd (ttlSecondsAfterFinished: 600) and the
+  # next reconcile recreates it — that re-run loop is what retries cold-boot
+  # CA publication into openbao and propagates CA rotation (~10-20m), rather
+  # than a full hour between attempts.
+  interval: 10m
   retryInterval: 2m
   # ≥ the bootstrap Job's activeDeadlineSeconds (1800s): with wait:true the
   # health check waits on that Job, and a shorter timeout reports spurious

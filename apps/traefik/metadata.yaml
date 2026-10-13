@@ -11,19 +11,12 @@ spec:
 
   # renovate: datasource=docker depName=traefik
   # serge: notesRepo=traefik/traefik
-  version: "v3.6.15"
+  version: "v3.7.13"
 
   source:
     type: oci-kustomize
     url: "oci://ghcr.io/librepod/marketplace/apps/traefik"
     path: ./overlays/librepod
-
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain for the cluster (Traefik ingress uses this)"
-        type: string
-        example: "example.com"
 
   dependencies:
     required:

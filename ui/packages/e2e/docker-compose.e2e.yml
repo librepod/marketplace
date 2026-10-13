@@ -63,5 +63,19 @@ services:
       disable: true
     restart: "no"
 
+  # Settings store for install questions. Dev mode: in-memory, unsealed, KV v2
+  # mounted at secret/ — what the installer writes to. The server authenticates
+  # with the OPENBAO_TOKEN test seam (= the root token below) instead of
+  # Kubernetes auth, since Tier 1 has no cluster. Fresh and empty on every run.
+  openbao:
+    image: openbao/openbao:2.7.1
+    command: ["server", "-dev"]
+    environment:
+      BAO_DEV_ROOT_TOKEN_ID: tier1-e2e-root-token
+    cap_add:
+      - IPC_LOCK
+    ports:
+      - "127.0.0.1:48200:8200"
+
 volumes:
   gogs-data:

@@ -11,7 +11,7 @@ warning.
 
 Renovate does NOT read release notes or reason about breaking changes — that
 is YOUR job. Using the release notes in the injected context (or the diff, if
-none were fetched), decide a verdict and ALWAYS post exactly this block as a
+none were fetched), decide a verdict and post exactly this block as a
 COMMENT:
 
 ```

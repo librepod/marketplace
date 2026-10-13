@@ -5,12 +5,15 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { Request, Response, NextFunction } from 'express';
 import { AppModule } from './app.module';
 import cookieParser from 'cookie-parser';
+import { JSON_BODY_LIMIT_BYTES } from './installed/install-settings';
 
 const CLIENT_DIST = join(__dirname, '..', '..', 'client', 'dist');
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.setGlobalPrefix('api');
+  // Above Nest's 100 KB default: install settings can legitimately be larger once JSON-escaped.
+  app.useBodyParser('json', { limit: JSON_BODY_LIMIT_BYTES });
   app.use(cookieParser());
   const allowedOrigins = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',').map((s) => s.trim())

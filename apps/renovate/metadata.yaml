@@ -17,21 +17,18 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/renovate"
     path: ./overlays/librepod
 
-  params:
-    optional:
-      - name: LOG_LEVEL
-        description: "Renovate log level (one of: trace, debug, info, warn, error, fatal)."
-        type: string
-        default: "info"
-        example: "debug"
-
-  secrets:
-    - name: RENOVATE_TOKEN
-      description: "Personal Access Token (or GitHub App installation token) for the target Git platform. Needs repo, pull-request, and issues scopes (issues = dependency dashboard)."
-      required: true
-    - name: RENOVATE_GITHUB_COM_TOKEN
-      description: "Optional PAT for github.com, used to fetch changelogs when the target platform is NOT github.com (e.g. GitLab/Gitea/GHE). Leave empty if targeting github.com — the main token is reused for changelogs."
-      required: false
+  settings:
+    allowCustom: true
+    items:
+      - name: RENOVATE_TOKEN
+        label: "Access token"
+        description: "Personal Access Token for your Git platform (repo, pull-request and issues scopes)."
+        sensitive: true
+        required: true
+      - name: RENOVATE_GITHUB_COM_TOKEN
+        label: "GitHub.com token"
+        description: "PAT for github.com to fetch changelogs when your platform is NOT github.com. Leave empty when targeting github.com."
+        sensitive: true
 
   dependencies:
     required:
@@ -75,25 +72,6 @@ spec:
         path: ./overlays/librepod
         prune: true
         wait: true
-        postBuild:
-          substitute:
-            LOG_LEVEL: "${LOG_LEVEL}"
-          substituteFrom:
-            - kind: Secret
-              name: renovate-config
-    secret: |
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: renovate-config
-        namespace: flux-system
-        labels:
-          marketplace.io/managed: "true"
-          marketplace.io/app: "renovate"
-      type: Opaque
-      stringData:
-        RENOVATE_TOKEN: "${RENOVATE_TOKEN}"
-        RENOVATE_GITHUB_COM_TOKEN: "${RENOVATE_GITHUB_COM_TOKEN}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization

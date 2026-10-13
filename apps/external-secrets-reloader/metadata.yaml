@@ -1,0 +1,68 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: external-secrets-reloader
+spec:
+  displayName: "External Secrets Reloader"
+  description: "Rolls out Deployments automatically when their ESO-synced Kubernetes Secrets change"
+  icon: "https://raw.githubusercontent.com/external-secrets/external-secrets/main/assets/eso-logo-large.png"
+  category: "Infrastructure"
+  website: "https://github.com/external-secrets/reloader"
+
+  # Upstream tags are v-prefixed; extractVersion strips the v so this pin and
+  # the OCI tags here and in infrastructure/system-apps/external-secrets-reloader.yaml
+  # stay bare versions.
+  # renovate: datasource=docker depName=ghcr.io/external-secrets/reloader extractVersion=^v(?<version>.*)$
+  version: "0.3.0"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/external-secrets-reloader"
+    path: ./overlays/librepod
+
+  dependencies:
+    required: []
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-external-secrets-reloader
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "external-secrets-reloader"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/external-secrets-reloader
+        ref:
+          tag: "__VERSION__"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-external-secrets-reloader
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "external-secrets-reloader"
+      spec:
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-external-secrets-reloader
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+        postBuild:
+          substitute:
+            BASE_DOMAIN: "${BASE_DOMAIN}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml

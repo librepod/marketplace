@@ -27,6 +27,18 @@ process.env.CATALOG_PATH = path.resolve(
 process.env.USER_APPS_GIT_URL = 'http://localhost:9999/flux/user-apps.git';
 process.env.USER_APPS_GIT_USERNAME = 'flux';
 process.env.USER_APPS_GIT_PASSWORD = 'test-password';
+// Pin KUBECONFIG to the closed-port fixture (same mechanism as Tier 1's
+// projects/tier1.config.ts): without it SystemAppsService/FluxStatusService
+// read the host's ~/.kube/config, so system classification — and with it the
+// /api/apps list — depends on whichever cluster the box happens to reach.
+process.env.KUBECONFIG = path.join(
+  __dirname,
+  '..',
+  '..',
+  'e2e',
+  'support',
+  'kubeconfig.closed.yaml',
+);
 // Hoisted so the afterAll teardown removes exactly this directory: resolving the
 // remote writes a 0600 `.git-credentials` holding the literal test password here.
 const WORK_DIR = path.join(os.tmpdir(), `marketplace-e2e-user-apps-${process.pid}`);
@@ -89,7 +101,11 @@ describe('Catalog API (e2e)', () => {
         .set('Cookie', authCookie)
         .expect(200);
 
-      // fixture has 6 apps, 3 infrastructure, so 3 user-facing
+      // this spec's fixture has 6 apps — vaultwarden, gogs, litellm + 3
+      // Infrastructure (traefik, cert-manager, nfs-provisioner) — so 3
+      // user-facing. Hermetic thanks to the pinned KUBECONFIG above: without
+      // it a developer's real cluster system-classifies gogs and the count
+      // silently drops.
       expect(response.body).toHaveLength(3);
     });
 

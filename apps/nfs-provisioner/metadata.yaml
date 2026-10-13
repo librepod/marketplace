@@ -18,9 +18,6 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/nfs-provisioner"
     path: ./overlays/librepod
 
-  params:
-    required: []
-
   dependencies: []
 
   templates:

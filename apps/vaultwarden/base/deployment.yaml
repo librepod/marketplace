@@ -15,6 +15,18 @@ spec:
           envFrom:
             - configMapRef:
                 name: vaultwarden
+            # Settings Secret — DELIBERATE DEVIATION from the non-optional
+            # convention: every vaultwarden settings item is optional, and an
+            # install that leaves them all empty writes an EMPTY OpenBao entry.
+            # ESO's dataFrom.extract maps an empty entry to "nothing to sync"
+            # and creates no Secret, so a non-optional ref would block the
+            # container forever (CreateContainerConfigError). Optional lets the
+            # pod boot on the .env defaults; with values set (ADMIN_TOKEN,
+            # custom vars) ESO creates the Secret and it still wins — it stays
+            # last in envFrom.
+            - secretRef:
+                name: vaultwarden-settings
+                optional: true
           env:
             - name: SSO_CLIENT_ID
               valueFrom:

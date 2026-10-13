@@ -1,0 +1,88 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: netronome
+spec:
+  displayName: "Netronome"
+  description: "Network speed tests and server monitoring dashboard"
+  icon: "https://raw.githubusercontent.com/autobrr/netronome/develop/web/public/pwa-512x512.png"
+  category: "Networking"
+  website: "https://github.com/autobrr/netronome"
+
+  version: "0.15.0"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/netronome"
+    path: ./overlays/librepod
+
+  # SESSION_SECRET is machine-generated (never shown in the install dialog);
+  # the installer reuses the stored value on reinstall so existing sessions
+  # and OIDC refresh tokens stay valid. Custom overrides ride the netronome-env
+  # Secret channel instead, so allowCustom stays off.
+  settings:
+    items:
+      - name: SESSION_SECRET
+        label: "Session secret"
+        description: "Signs session cookies and encrypts OIDC refresh tokens"
+        sensitive: true
+        generate:
+          length: 64
+
+  dependencies:
+    required:
+      - kind: IngressController
+        description: "Traefik (provided by traefik app)"
+      - kind: StorageClass
+        description: "nfs-client (provided by nfs-provisioner app)"
+      - kind: SSO
+        description: "Casdoor SSO (provided by casdoor-sso-controller app)"
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-netronome
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "netronome"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/netronome
+        ref:
+          tag: "0.15.0"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-netronome
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "netronome"
+      spec:
+        dependsOn:
+          - name: traefik
+          - name: storage
+          - name: casdoor-sso-controller
+        force: true
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-netronome
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+        postBuild:
+          substitute:
+            BASE_DOMAIN: "${BASE_DOMAIN}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml

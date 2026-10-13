@@ -71,14 +71,14 @@ spec:
         value: /etc/ssl/certs/ca-certificates.crt
 
     # Private CA trust: merge the LibrePod root CA into the system bundle
-    # (same Reflector pattern as open-webui / seafile / vaultwarden). oauth2-proxy
-    # is Go; SSL_CERT_FILE overrides the system roots, and the init container
-    # merges root_ca.crt INTO the system bundle first so the override file
-    # contains both.
+    # (same ExternalSecret pattern as open-webui / seafile / vaultwarden).
+    # oauth2-proxy is Go; SSL_CERT_FILE overrides the system roots, and the
+    # init container merges root_ca.crt INTO the system bundle first so the
+    # override file contains both.
     extraVolumes:
       - name: root-ca-cert
-        configMap:
-          name: step-certificates-certs
+        secret:
+          secretName: step-certificates-certs
           items:
             - key: root_ca.crt
               path: root_ca.crt

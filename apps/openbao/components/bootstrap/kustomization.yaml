@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Labels/namespace are hardcoded in the resources themselves: a component's
+# transformers merge into the overlay root and would label sibling resources
+# from the base. Site-specific policies are NOT here — the overlay provides
+# an openbao-policies ConfigMap the Job mounts at /policies (optional).
+resources:
+  - serviceaccount.yaml
+  - role.yaml
+  - rolebinding.yaml
+  - job.yaml
+
+configMapGenerator:
+  - name: openbao-bootstrap
+    files:
+      - bootstrap.sh=bootstrap.sh
+      - store.sh=store.sh
+    options:
+      annotations:
+        # shell parameter expansion in the script must not be interpreted by
+        # Flux postBuild.substitute
+        kustomize.toolkit.fluxcd.io/substitute: disabled
+      # the Job mounts this ConfigMap; a name hash would rewrite the
+      # immutable Job spec on every content change and brick the apply
+      disableNameSuffixHash: true

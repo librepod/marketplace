@@ -1,126 +1,44 @@
 #!/bin/bash
 
-# This script bootstraps the Step CA resources for cert-manager integration.
-# It creates ConfigMaps and Secrets from the Step CA PVC data.
+# Bootstraps the Step CA consumers once the CA server is healthy:
+#
+#   1. publish_ca — push the CA into the openbao KV store, two paths:
+#      apps/step-ca  — public root + intermediate certs (what consumer
+#                      namespaces sync via ExternalSecret,
+#                      docs/sso-app-author-guide.md §4)
+#      system/step-ca — full CA backup (certs, private keys, ca.json/
+#                      defaults.json, both passwords). The initContainer
+#                      restores from this copy when the PVC turns up empty,
+#                      so a wiped PVC does not silently rotate the device's
+#                      root CA. Separate engine from apps/: eso-read-apps
+#                      reads apps/* only, so regular apps cannot reach the
+#                      private keys.
+#
+#   2. ensure the step-certificates-provisioner-password Secret in this
+#      namespace, carrying the provisioner password plus the kid and
+#      caBundle that step-issuer's bootstrap needs. This must stay a plain
+#      local Secret (NOT an ExternalSecret): step-issuer readiness gates
+#      cert-manager -> the wildcard cert -> openbao's ingress, so sourcing
+#      it from openbao could deadlock a cold boot. Producer-push only.
+#      On CA rotation (kid/password no longer match the PVC) the whole
+#      issuance chain heals from here: Secret patch -> step-issuer restart
+#      -> StepClusterIssuer reconcile -> wildcard re-issue (see below).
+#
+#   3. delete the ConfigMaps/Secrets the pre-openbao bootstrap maintained
+#      (stale on upgraded clusters; see the cleanup loop below).
+#
+# All Kubernetes/openbao calls are plain curl with this Job's ServiceAccount
+# token: the step-ca image ships curl+jq but no kubectl, and downloading one
+# at runtime is ~60MB through the flaky egress this script avoids.
 
 set -e
 
 echo "Welcome to Step CA resource bootstrapper."
 
-# Download kubectl if not already available.
-#
-# Version comes from the cluster itself (/version gitVersion, e.g.
-# v1.34.3+k3s2 -> v1.34.3): dl.k8s.io channel files (stable.txt) are not
-# served by the mirror fallback below and live on the same flaky host.
-#
-# On some networks (seen on RU residential ISPs) DNS intermittently returns
-# AAAA-only for dl.k8s.io while the host has no IPv6 route, making curl hang
-# indefinitely. Every attempt is bounded (-4, --connect-timeout, --speed-limit
-# stall detection) and falls back to the Yandex mirror, which serves the same
-# binaries at /mirrors/dl.k8s.io/<ver>/... (no /release/ prefix). Upstream
-# stays primary so non-RU clusters are unaffected. NOTE: -4 hard-pins IPv4 —
-# deliberate (IPv4-baseline targets): --connect-timeout bounds connect-phase
-# hangs but not a blackholed post-connect handshake; the tradeoff is that
-# IPv6-only egress loses both hosts.
 SA=/var/run/secrets/kubernetes.io/serviceaccount
+K8S_API=https://kubernetes.default.svc
 
-# Cheap idempotency BEFORE any download, via the raw API: with
-# ttlSecondsAfterFinished (job.yaml), Flux recreates this Job after every TTL
-# GC — this check makes those re-runs ~free instead of re-fetching the ~60MB
-# kubectl through the same flaky egress (previously EVERY ~10m cycle!). To
-# re-provision (e.g. after a CA re-init): delete the Job AND these
-# ConfigMaps/Secrets, then reconcile.
-if curl -fsS --cacert "$SA/ca.crt" -H "Authorization: Bearer $(cat "$SA/token")" \
-  "https://kubernetes.default.svc/api/v1/namespaces/${STEPISSUER_NAMESPACE}/configmaps/step-certificates-certs" >/dev/null 2>&1; then
-  echo "ConfigMap step-certificates-certs already exists; nothing to do."
-  # Ensure the publication annotations on this source: Reflector owns the
-  # distribution of these public certs (auto-creates mirrors in every
-  # namespace), but only while auto-mirroring is enabled — sources created
-  # before that carry only reflection-allowed. Idempotent: a no-op PATCH when
-  # the annotations already match, a source UPDATE event (Reflector re-sweeps
-  # all mirrors) when they don't. Raw API via curl — deliberately no kubectl
-  # download on this path.
-  curl -fsS --cacert "$SA/ca.crt" -H "Authorization: Bearer $(cat "$SA/token")" \
-    -H "Content-Type: application/merge-patch+json" -X PATCH \
-    "https://kubernetes.default.svc/api/v1/namespaces/${STEPISSUER_NAMESPACE}/configmaps/step-certificates-certs" \
-    -d '{"metadata":{"annotations":{"reflector.v1.k8s.emberstack.com/reflection-allowed":"true","reflector.v1.k8s.emberstack.com/reflection-auto-enabled":"true"}}}' \
-    >/dev/null 2>&1 \
-    || echo "WARNING: could not ensure reflection annotations (will retry next run)" >&2
-  exit 0
-fi
-
-if ! command -v kubectl &> /dev/null; then
-  echo -e "\e[1mDownloading kubectl...\e[0m"
-  VER_JSON="$(curl -fsS --connect-timeout 5 --max-time 15 --cacert "$SA/ca.crt" \
-    -H "Authorization: Bearer $(cat "$SA/token")" \
-    https://kubernetes.default.svc/version)"
-  # Keep any prerelease suffix (v1.37.1-rc.0+k3s1 -> 1.37.1-rc.0): dl.k8s.io
-  # publishes rc binaries; the mirror does not (the ladder falls through to
-  # dl.k8s.io for those). Stripping to GA 404'd on prerelease channels whose
-  # X.Y.Z had no GA yet.
-  KUBECTL_VERSION="$(echo "$VER_JSON" | sed -n 's/.*"gitVersion": *"v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\(-[A-Za-z0-9.]*\)\?\).*/\1/p' | head -n1)"
-  if [ -z "$KUBECTL_VERSION" ]; then
-    echo "Error: could not parse server version from /version: ${VER_JSON}"
-    exit 1
-  fi
-  echo "Cluster is v${KUBECTL_VERSION}; downloading matching kubectl..."
-  cd /tmp
-  UP="https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
-  MI="https://mirror.yandex.ru/mirrors/dl.k8s.io/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
-  # Interleaved upstream/mirror ladder (the working mirror is reached on
-  # attempt 2 under the RU upstream failure). Stall detection instead of a
-  # total cap: the old --max-time 300 hard-failed the ~60MB binary on any
-  # link slower than ~200 KiB/s; --speed-limit/--speed-time aborts only
-  # transfers that stay under 10 KiB/s for 30s, so slow-but-alive links run
-  # until the Job's activeDeadlineSeconds bound.
-  n=0
-  DL_OK=0
-  for u in "$UP" "$MI" "$UP" "$MI"; do
-    n=$((n + 1))
-    if [ "$n" -gt 1 ]; then sleep $((n - 1)); fi
-    if ! curl -4 --fail --connect-timeout 10 --speed-limit 10240 --speed-time 30 -o kubectl "$u"; then
-      echo "Download from ${u} failed (attempt ${n}/4)"
-      continue
-    fi
-    if ! command -v sha256sum &> /dev/null; then
-      echo "WARNING: sha256sum not available in this image; accepting unverified kubectl from ${u}" >&2
-      DL_OK=1
-      break
-    fi
-    # Verify against the .sha256 published by the OTHER host — a checksum from
-    # the serving host cannot detect that host serving a corrupt binary.
-    # Same-host fallback covers rc tags (the mirror 404s those); if no
-    # checksum is reachable at all, warn and accept rather than hard-fail the
-    # bootstrap on a flaky checksum fetch.
-    case "$u" in
-      https://dl.k8s.io/*) S="${MI}" ;;
-      *) S="${UP}" ;;
-    esac
-    if curl -fsS --connect-timeout 10 --max-time 60 -o kubectl.sha256 "${S}.sha256" \
-      || curl -fsS --connect-timeout 10 --max-time 60 -o kubectl.sha256 "${u}.sha256"; then
-      SUM="$(set -- $(cat kubectl.sha256); echo "${1:-}")"
-      if [ -n "$SUM" ] && echo "${SUM}  kubectl" | sha256sum -c - >/dev/null 2>&1; then
-        DL_OK=1
-        break
-      fi
-      echo "checksum mismatch for ${u} (attempt ${n}/4)"
-    else
-      echo "WARNING: no .sha256 reachable for ${u}; accepting unverified kubectl" >&2
-      DL_OK=1
-      break
-    fi
-  done
-  if [ "$DL_OK" != 1 ]; then
-    echo "Error: failed to download kubectl from any mirror."
-    exit 1
-  fi
-  chmod +x kubectl
-  export PATH=/tmp:$PATH
-  cd -
-  echo "kubectl downloaded successfully."
-fi
-
-# assert_variable exists if the given variable is not set.
+# assert_variable exits if the given variable is not set.
 function assert_variable () {
   if [ -z "$1" ];
   then
@@ -129,29 +47,194 @@ function assert_variable () {
   fi
 }
 
-# check required variables
+# Check required variables up front: an unset one degrades to silent skips
+# in the steps below, not a loud exit.
 assert_variable "$STEPISSUER_NAMESPACE" "STEPISSUER_NAMESPACE"
 assert_variable "$STEPPATH" "STEPPATH"
+assert_variable "$OPENBAO_ADDR" "OPENBAO_ADDR"
+assert_variable "$PROVISIONER_NAME" "PROVISIONER_NAME"
+assert_variable "$WILDCARD_TLS_SECRET" "WILDCARD_TLS_SECRET"
 
-# Define paths
-CA_CONFIG_DIR="${STEPPATH}/config"
-CA_CERTS_DIR="${STEPPATH}/certs"
-CA_SECRETS_DIR="${STEPPATH}/secrets"
-CA_PASSWORD_FILE="${CA_SECRETS_DIR}/passwords/password"
-CA_PROVISIONER_PASSWORD_FILE="${CA_SECRETS_DIR}/certificate-issuer/password"
+if ! command -v jq &>/dev/null; then
+  echo "Error: jq is required but not found in the container image."
+  exit 1
+fi
 
-echo -e "\e[1mChecking CA initialization...\e[0m"
+# k8s_api METHOD PATH [JSON] — Kubernetes API call with the ServiceAccount
+# token; non-2xx fails the curl (--fail, caught by set -e or the caller's if).
+# PATCH uses merge-patch: the targets here are built-ins where merge-patch
+# and strategic-merge behave identically for our field shapes.
+k8s_api () {
+  local args=(
+    -fsS --cacert "$SA/ca.crt"
+    -H "Authorization: Bearer $(cat "$SA/token")"
+    -X "$1"
+  )
+  if [ "$1" = PATCH ]; then
+    args+=(-H 'Content-Type: application/merge-patch+json' --data "$3")
+  elif [ -n "${3:-}" ]; then
+    args+=(-H 'Content-Type: application/json' --data "$3")
+  fi
+  curl "${args[@]}" "$K8S_API$2"
+}
 
-# Verify the CA is initialized by checking for required files
-REQUIRED_FILES=(
-  "${CA_CONFIG_DIR}/ca.json"
-  "${CA_CONFIG_DIR}/defaults.json"
-  "${CA_CERTS_DIR}/root_ca.crt"
-  "${CA_CERTS_DIR}/intermediate_ca.crt"
-  "${CA_PASSWORD_FILE}"
-)
+# Publish the CA material into the openbao KV store at apps/step-ca.
+#
+# Deliberately non-fatal on every failure path: this Job gates
+# step-issuer -> casdoor -> openbao, so blocking on (or failing because of)
+# openbao would deadlock a cold boot. If publication cannot proceed, warn
+# and let the next re-run retry. Nothing alarms on a PERSISTENT failure —
+# the signal is consumer-side: CA ExternalSecrets that never sync, TLS
+# trust errors in consumer pods. When that shows up, grep this Job's log
+# for "skipping openbao publication".
+#
+# The Job is TTL-GC'd (ttlSecondsAfterFinished) and Flux recreates it on
+# every ~10m reconcile; that re-run loop is also the CA-rotation refresh
+# path — everything is read fresh from the PVC each time.
+publish_ca () {
+  local root_ca="${STEPPATH}/certs/root_ca.crt"
+  local intermediate_ca="${STEPPATH}/certs/intermediate_ca.crt"
+  # The rest of the full-backup file set — must stay in sync with the set
+  # the initContainer's restore requires. A partial backup is never PUT:
+  # the restore side would reject it and mint a fresh root CA, the exact
+  # disaster the backup exists to prevent, so verify loudly here instead.
+  local backup_files=(
+    "${STEPPATH}/config/ca.json"
+    "${STEPPATH}/config/defaults.json"
+    "${STEPPATH}/secrets/passwords/password"
+    "${STEPPATH}/secrets/certificate-issuer/password"
+    "${STEPPATH}/secrets/root_ca_key"
+    "${STEPPATH}/secrets/intermediate_ca_key"
+  )
+  if [ ! -s "$root_ca" ] || [ ! -s "$intermediate_ca" ]; then
+    echo "WARNING: CA certs missing/empty on the PVC; skipping openbao publication." >&2
+    return 0
+  fi
+  local f backup_ready=true
+  for f in "${backup_files[@]}"; do
+    if [ ! -s "$f" ]; then
+      echo "WARNING: CA backup incomplete — ${f} missing/empty on the PVC; skipping the system/step-ca backup PUT. The next Job re-run retries." >&2
+      backup_ready=false
+    fi
+  done
+  # sys/health answers with an HTTP status on ANY running openbao (sealed
+  # included); a transport failure (code 000) means it is not deployed yet —
+  # the normal state during a cold boot, when this Job runs long before
+  # openbao exists.
+  local health_code
+  health_code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 10 \
+    "$OPENBAO_ADDR/v1/sys/health" 2>/dev/null)" || health_code=000
+  if [ "$health_code" = "000" ]; then
+    echo "openbao not reachable at ${OPENBAO_ADDR} (not deployed yet); skipping CA publication — the next Job re-run retries."
+    return 0
+  fi
+  local login_json token
+  if ! login_json="$(curl -fsS --connect-timeout 5 --max-time 15 -X POST \
+      -H 'Content-Type: application/json' \
+      -d "{\"role\":\"step-certificates\",\"jwt\":\"$(cat "$SA/token")\"}" \
+      "$OPENBAO_ADDR/v1/auth/kubernetes/login")"; then
+    echo "WARNING: openbao kubernetes-auth login failed (sealed, or the step-certificates role is not provisioned yet); skipping CA publication — the next Job re-run retries." >&2
+    return 0
+  fi
+  token="$(printf '%s' "$login_json" | jq -r '.auth.client_token // empty')"
+  if [ -z "$token" ]; then
+    echo "WARNING: no client_token in the openbao login response; skipping CA publication." >&2
+    return 0
+  fi
+  local published=true
+  # Public certs for consumer namespaces.
+  if curl -fsS --connect-timeout 5 --max-time 30 -X PUT \
+      -H "X-Vault-Token: ${token}" -H 'Content-Type: application/json' \
+      --data "$(jq -n \
+        --rawfile root "$root_ca" \
+        --rawfile intermediate "$intermediate_ca" \
+        '{data: {"root_ca.crt": $root, "intermediate_ca.crt": $intermediate}}')" \
+      "$OPENBAO_ADDR/v1/apps/data/step-ca" >/dev/null; then
+    echo "Public CA published to openbao KV at apps/step-ca."
+  else
+    echo "WARNING: openbao KV put apps/step-ca failed; the next Job re-run retries." >&2
+    published=false
+  fi
+  # Full CA backup for restore-on-empty-PVC. The file set was verified
+  # complete above, so this always PUTs all eight keys — KV writes are
+  # atomic per version, and the restore side never sees a partial backup.
+  # ponytail: plaintext HTTP — openbao deliberately serves in-cluster HTTP
+  # only (apps/openbao has no TLS listener; every consumer — ESO, this Job —
+  # rides that pattern). Closing this hop means re-architecting openbao TLS
+  # cluster-wide, not just this PUT.
+  if [ "$backup_ready" = true ] && curl -fsS --connect-timeout 5 --max-time 30 -X PUT \
+      -H "X-Vault-Token: ${token}" -H 'Content-Type: application/json' \
+      --data "$(jq -n \
+        --rawfile root "$root_ca" \
+        --rawfile intermediate "$intermediate_ca" \
+        --rawfile ca_json "${STEPPATH}/config/ca.json" \
+        --rawfile defaults_json "${STEPPATH}/config/defaults.json" \
+        --rawfile ca_password "${STEPPATH}/secrets/passwords/password" \
+        --rawfile provisioner_password "${STEPPATH}/secrets/certificate-issuer/password" \
+        --rawfile root_key "${STEPPATH}/secrets/root_ca_key" \
+        --rawfile intermediate_key "${STEPPATH}/secrets/intermediate_ca_key" \
+        '{data: {
+            "root_ca.crt": $root,
+            "intermediate_ca.crt": $intermediate,
+            "ca.json": $ca_json,
+            "defaults.json": $defaults_json,
+            "ca_password": $ca_password,
+            "provisioner_password": $provisioner_password,
+            "root_ca_key": $root_key,
+            "intermediate_ca_key": $intermediate_key
+          }}')" \
+      "$OPENBAO_ADDR/v1/system/data/step-ca" >/dev/null; then
+    echo "CA backup written to openbao KV at system/step-ca."
+  else
+    echo "WARNING: openbao KV put system/step-ca failed; the next Job re-run retries." >&2
+    published=false
+  fi
+  [ "$published" = true ] || echo "WARNING: openbao publication incomplete this run — see above; next re-run retries." >&2
+}
+publish_ca
 
-for file in "${REQUIRED_FILES[@]}"; do
+# Delete the objects the pre-openbao bootstrap Job maintained. They carry no
+# ownerRef, so on an upgraded cluster they would linger in etcd forever —
+# including Secret step-certificates-secrets, whose CA private keys this
+# change moved to openbao system/ precisely to keep out of etcd. DELETEs
+# are idempotent (404 = already gone). step-certificates-provisioner-
+# password is NOT here: the steps below still maintain it.
+for obj in step-certificates-config step-certificates-certs; do
+  k8s_api DELETE "/api/v1/namespaces/${STEPISSUER_NAMESPACE}/configmaps/${obj}" >/dev/null 2>&1 \
+    && echo "Deleted stale ConfigMap ${obj} (pre-openbao bootstrap artifact)." || true
+done
+for obj in step-certificates-ca-password step-certificates-secrets step-certificates-certificate-issuer-password; do
+  k8s_api DELETE "/api/v1/namespaces/${STEPISSUER_NAMESPACE}/secrets/${obj}" >/dev/null 2>&1 \
+    && echo "Deleted stale Secret ${obj} (pre-openbao bootstrap artifact)." || true
+done
+
+# Ensure the provisioner-password Secret (password + kid + caBundle for
+# step-issuer) and, on CA rotation, converge the whole issuance chain.
+# All three values are fixed at CA init, so an EXISTING Secret is healthy
+# only while its kid and password still match the PVC. A mismatch means
+# the CA was re-initialized (e.g. the restore deadline fell back to a
+# fresh CA) and everything downstream of the old provisioner must heal:
+#   1. PATCH the Secret with the current password/kid/ca_bundle
+#   2. restart step-issuer — its bootstrap initContainer reconciles the
+#      StepClusterIssuer spec to the healed Secret (kid/caBundle live in
+#      the issuer SPEC; the controller never re-reads a changed one)
+#   3. delete the platform wildcard TLS secret — cert-manager keeps an
+#      old-CA-signed cert until expiry otherwise, and the new CA bundles
+#      consumers sync from apps/step-ca would reject it. The secret is
+#      issued into THIS namespace (traefik reads it from here via
+#      defaultTLSResourcesNamespace), so the delete is namespace-local;
+#      cert-manager re-issues within seconds through the healed issuer and
+#      traefik hot-reloads the secret in place.
+# Fully automatic: this Job's ~10m re-run loop performs the convergence;
+# there is deliberately no manual re-provisioning runbook.
+SECRET_NAME=step-certificates-provisioner-password
+SECRET_API="/api/v1/namespaces/${STEPISSUER_NAMESPACE}/secrets/${SECRET_NAME}"
+existing="$(k8s_api GET "$SECRET_API" 2>/dev/null || true)"
+
+CA_CONFIG="${STEPPATH}/config/ca.json"
+ROOT_CA="${STEPPATH}/certs/root_ca.crt"
+PROVISIONER_PASSWORD_FILE="${STEPPATH}/secrets/certificate-issuer/password"
+for file in "$CA_CONFIG" "$ROOT_CA" "$PROVISIONER_PASSWORD_FILE"; do
   if [ ! -f "$file" ]; then
     echo "Error: Required file not found at $file"
     echo "The Step CA must be initialized before bootstrapping resources."
@@ -159,115 +242,63 @@ for file in "${REQUIRED_FILES[@]}"; do
   fi
 done
 
-# Check for private keys
-if [ ! -f "${CA_SECRETS_DIR}/root_ca_key" ] && [ ! -f "${CA_SECRETS_DIR}/intermediate_ca_key" ]; then
-  echo "Warning: No CA private keys found in ${CA_SECRETS_DIR}"
+# The JWK provisioner's kid is nested inside key.kid in ca.json; type may be
+# "JWK" (uppercase) or "jwk". `// empty` matters: bare jq -r prints the
+# literal string "null" for an absent kid, which would pass the -z guard
+# below and poison the Secret with kid="null".
+PROVISIONER_KID="$(jq -r --arg name "$PROVISIONER_NAME" \
+  '.authority.provisioners[] | select(.type=="JWK" or .type=="jwk") | select(.name==$name) | .key.kid // empty' \
+  "$CA_CONFIG")"
+if [ -z "$PROVISIONER_KID" ]; then
+  echo "Error: Could not extract kid for provisioner '$PROVISIONER_NAME' from $CA_CONFIG"
+  exit 1
 fi
+PROVISIONER_PASSWORD="$(cat "$PROVISIONER_PASSWORD_FILE")"
 
-echo -e "\e[1mCreating ConfigMap: step-certificates-config...\e[0m"
+secret_json="$(jq -n \
+  --arg ns "$STEPISSUER_NAMESPACE" \
+  --arg password "$PROVISIONER_PASSWORD" \
+  --arg kid "$PROVISIONER_KID" \
+  --arg ca_bundle "$(base64 -w0 "$ROOT_CA")" \
+  '{apiVersion: "v1", kind: "Secret",
+    metadata: {name: "step-certificates-provisioner-password", namespace: $ns},
+    stringData: {password: $password, kid: $kid, ca_bundle: $ca_bundle}}')"
 
-# Create ConfigMap for config files (ca.json and defaults.json)
-kubectl create configmap step-certificates-config \
-  --from-file=ca.json="${CA_CONFIG_DIR}/ca.json" \
-  --from-file=defaults.json="${CA_CONFIG_DIR}/defaults.json" \
-  --namespace="$STEPISSUER_NAMESPACE" \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-echo "ConfigMap step-certificates-config created/updated."
-
-echo -e "\e[1mCreating ConfigMap: step-certificates-certs...\e[0m"
-
-# Create ConfigMap for certificates (root_ca.crt and intermediate_ca.crt).
-# Reflector owns the distribution of these public certs: reflection-allowed
-# + reflection-auto-enabled make it create and maintain same-named mirrors in
-# every namespace (consumer apps just mount step-certificates-certs; no stub
-# manifests, no hand-off events to lose). Data AND annotations go in a
-# SINGLE apply: with a create-then-annotate two-step, Reflector could observe
-# the CM mid-transition (empty or unannotated) and never re-sync, leaving
-# consumer pods FailedMount until the next full sweep. One atomic
-# annotated+filled creation means Reflector only ever sees the final state.
-# See https://github.com/emberstack/kubernetes-reflector
-kubectl create configmap step-certificates-certs \
-  --from-file=root_ca.crt="${CA_CERTS_DIR}/root_ca.crt" \
-  --from-file=intermediate_ca.crt="${CA_CERTS_DIR}/intermediate_ca.crt" \
-  --namespace="$STEPISSUER_NAMESPACE" \
-  --dry-run=client -o yaml \
-| kubectl patch --local --type merge -f - \
-    -p '{"metadata":{"annotations":{"reflector.v1.k8s.emberstack.com/reflection-allowed":"true","reflector.v1.k8s.emberstack.com/reflection-auto-enabled":"true"}}}' \
-    -o yaml \
-| kubectl apply -f -
-
-echo "ConfigMap step-certificates-certs created/updated."
-
-echo -e "\e[1mReading CA password...\e[0m"
-
-# Read the CA password
-CA_PASSWORD=$(cat "$CA_PASSWORD_FILE")
-
-echo -e "\e[1mCreating Secret: step-certificates-ca-password...\e[0m"
-
-# Create Secret for CA password
-kubectl create secret generic step-certificates-ca-password \
-  --from-literal=password="$CA_PASSWORD" \
-  --namespace="$STEPISSUER_NAMESPACE" \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-echo "Secret step-certificates-ca-password created/updated."
-
-echo -e "\e[1mCreating Secret: step-certificates-secrets...\e[0m"
-
-# Create Secret for private keys (if they exist)
-SECRET_ARGS=()
-if [ -f "${CA_SECRETS_DIR}/root_ca_key" ]; then
-  SECRET_ARGS+=("--from-file=root_ca_key=${CA_SECRETS_DIR}/root_ca_key")
-fi
-if [ -f "${CA_SECRETS_DIR}/intermediate_ca_key" ]; then
-  SECRET_ARGS+=("--from-file=intermediate_ca_key=${CA_SECRETS_DIR}/intermediate_ca_key")
-fi
-
-if [ ${#SECRET_ARGS[@]} -gt 0 ]; then
-  kubectl create secret generic step-certificates-secrets \
-    "${SECRET_ARGS[@]}" \
-    --namespace="$STEPISSUER_NAMESPACE" \
-    --dry-run=client -o yaml | kubectl apply -f -
-  echo "Secret step-certificates-secrets created/updated."
+rotation=false
+if [ -n "$existing" ]; then
+  old_kid="$(printf '%s' "$existing" | jq -r '.data.kid // "" | @base64d')"
+  old_password="$(printf '%s' "$existing" | jq -r '.data.password // "" | @base64d')"
+  if [ "$old_kid" = "$PROVISIONER_KID" ] && [ "$old_password" = "$PROVISIONER_PASSWORD" ]; then
+    echo "Secret ${SECRET_NAME} is up to date; nothing to do."
+    exit 0
+  fi
+  rotation=true
+  echo "CA rotation detected (provisioner kid/password no longer match the PVC); healing ${SECRET_NAME}..."
+  k8s_api PATCH "$SECRET_API" "$secret_json" >/dev/null
+  echo "Secret ${SECRET_NAME} patched."
 else
-  echo "Warning: No private keys found, skipping step-certificates-secrets creation."
+  echo "Creating Secret ${SECRET_NAME}..."
+  k8s_api POST "/api/v1/namespaces/${STEPISSUER_NAMESPACE}/secrets" "$secret_json" >/dev/null
+  echo "Secret ${SECRET_NAME} created."
 fi
 
-echo -e "\e[1mCreating Secret: step-certificates-certificate-issuer-password...\e[0m"
-
-# Create Secret for certificate-issuer password (same as CA password)
-kubectl create secret generic step-certificates-certificate-issuer-password \
-  --from-literal=password="$CA_PASSWORD" \
-  --namespace="$STEPISSUER_NAMESPACE" \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-echo "Secret step-certificates-certificate-issuer-password created/updated."
-
-echo -e "\e[1mReading provisioner password...\e[0m"
-
-# Read the provisioner password (JWK provisioner key is encrypted with this)
-CA_PROVISIONER_PASSWORD=$(cat "$CA_PROVISIONER_PASSWORD_FILE")
-
-echo -e "\e[1mCreating Secret: step-certificates-provisioner-password...\e[0m"
-
-# Create Secret for provisioner password
-kubectl create secret generic step-certificates-provisioner-password \
-  --from-literal=password="$CA_PROVISIONER_PASSWORD" \
-  --namespace="$STEPISSUER_NAMESPACE" \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-echo "Secret step-certificates-provisioner-password created/updated."
-
+if [ "$rotation" = true ]; then
+  # Restart step-issuer so its bootstrap initContainer reconciles the
+  # StepClusterIssuer to the healed Secret. Merge-patch of the standard
+  # restartedAt annotation is a rolling restart, not a disruption window.
+  k8s_api PATCH "/apis/apps/v1/namespaces/${STEPISSUER_NAMESPACE}/deployments/step-issuer" \
+    "$(jq -n --arg at "$(date -u +%FT%TZ)" \
+      '{spec: {template: {metadata: {annotations: {"kubectl.kubernetes.io/restartedAt": $at}}}}}')" >/dev/null
+  echo "step-issuer restarted to reconcile the StepClusterIssuer."
+  # Force the wildcard re-issue (see the comment block above). Same
+  # namespace as this Job — no cross-namespace RBAC involved.
+  k8s_api DELETE "/api/v1/namespaces/${STEPISSUER_NAMESPACE}/secrets/${WILDCARD_TLS_SECRET}" >/dev/null 2>&1 \
+    && echo "Deleted ${STEPISSUER_NAMESPACE}/${WILDCARD_TLS_SECRET} — cert-manager re-issues it with the current CA." \
+    || echo "${STEPISSUER_NAMESPACE}/${WILDCARD_TLS_SECRET} not present; nothing to re-issue."
+fi
 echo
-echo -e "\e[1mStep CA resource bootstrap complete!\e[0m"
-echo
-echo "Created resources in namespace: $STEPISSUER_NAMESPACE"
-echo "  - ConfigMap: step-certificates-config"
-echo "  - ConfigMap: step-certificates-certs"
-echo "  - Secret: step-certificates-ca-password"
-echo "  - Secret: step-certificates-secrets"
-echo "  - Secret: step-certificates-certificate-issuer-password"
-echo "  - Secret: step-certificates-provisioner-password"
-echo
+echo "Step CA resource bootstrap complete!"
+echo "Consumers:"
+echo "  - openbao KV apps/step-ca  (public certs for ESO consumer namespaces)"
+echo "  - openbao KV system/step-ca  (full CA backup: certs, keys, config, passwords)"
+echo "  - Secret ${SECRET_NAME} in ${STEPISSUER_NAMESPACE} (step-issuer StepClusterIssuer input)"

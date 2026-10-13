@@ -105,11 +105,11 @@ is included in the `system-configs` Kustomization.
 
 ### What Gets Verified
 
-All 13 OCIRepository resources in the cluster have verification enabled:
+All 12 OCIRepository resources in the cluster have verification enabled:
 
-- **12 marketplace app OCIRepositories** — defined in `infrastructure/system-apps/*.yaml`
+- **11 marketplace app OCIRepositories** — defined in `infrastructure/system-apps/*.yaml`
   (traefik, cert-manager, step-certificates, step-issuer, casdoor, oauth2-proxy,
-  gogs, nfs-provisioner, reflector, wg-easy, whoami, flux-operator-mcp)
+  gogs, nfs-provisioner, wg-easy, whoami, flux-operator-mcp)
 - **1 bootstrap OCIRepository** — `marketplace-bootstrap`, configured via a
   FluxInstance kustomize patch (not a static YAML file, since the bootstrap
   OCIRepository is managed by the FluxInstance operator)

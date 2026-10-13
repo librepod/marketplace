@@ -18,15 +18,12 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/open-webui"
     path: ./overlays/librepod
 
-  params:
-    required:
-      - name: BASE_DOMAIN
-        description: "Base domain (app will be at open-webui.BASE_DOMAIN)"
-        type: string
-        example: "example.com"
-    optional:
+  settings:
+    allowCustom: true
+    items:
       - name: OLLAMA_ENABLED
-        description: "Enable Ollama integration for local LLMs"
+        label: "Enable Ollama"
+        description: "Deploy a bundled Ollama server for local LLMs, connected automatically. Off by default."
         type: boolean
         default: false
 

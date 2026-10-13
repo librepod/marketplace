@@ -1,4 +1,12 @@
-import { Injectable, NotFoundException, ConflictException, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  InternalServerErrorException,
+  BadRequestException,
+  ServiceUnavailableException,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Mutex } from 'async-mutex';
 import * as crypto from 'node:crypto';
@@ -7,6 +15,9 @@ import { UserAppsRepoService } from './user-apps-repo.service';
 import { FluxStatusService } from './flux-status.service';
 import { SystemAppsService } from './system-apps.service';
 import { LaunchUrlService } from './launch-url.service';
+import { resolveSettings } from './install-settings';
+import { OpenBaoClient, OpenBaoMisconfiguredError, OpenBaoUnavailableError } from './openbao.client';
+import { LegacySecretMirror } from './legacy-secret-mirror';
 import type { CatalogApp, InstallResult } from '@librepod/shared';
 
 @Injectable()
@@ -21,6 +32,8 @@ export class InstalledService {
     private readonly configService: ConfigService,
     private readonly systemApps: SystemAppsService,
     private readonly launchUrl: LaunchUrlService,
+    private readonly openBao: OpenBaoClient,
+    private readonly legacyMirror: LegacySecretMirror,
   ) {}
 
   async enrich(apps: CatalogApp[]): Promise<CatalogApp[]> {
@@ -80,7 +93,26 @@ export class InstalledService {
     return crypto.randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);
   }
 
-  async install(appName: string): Promise<InstallResult> {
+  /**
+   * Maps a settings-store failure (from the read or the write below) to the one user-facing
+   * answer: 503 "try again" when the store may recover, 500 without it when it won't. One
+   * helper so the two call sites cannot drift apart.
+   */
+  private throwSettingsStoreError(err: unknown, appName: string): never {
+    if (err instanceof OpenBaoUnavailableError) {
+      this.logger.warn(`settings store unavailable while installing ${appName}: ${err.message}`);
+      throw new ServiceUnavailableException("Couldn't save the settings right now. Try again in a minute.");
+    }
+    if (err instanceof OpenBaoMisconfiguredError) {
+      this.logger.error(`settings store misconfigured, cannot install ${appName}: ${err.message}`);
+      throw new InternalServerErrorException(
+        "Couldn't save the settings: the settings store isn't set up correctly. Trying again won't help.",
+      );
+    }
+    throw err;
+  }
+
+  async install(appName: string, body?: unknown): Promise<InstallResult> {
     return this.mutex.runExclusive(async () => {
       // 1. Validate app exists in catalog
       const app = this.catalog.findOne(appName);
@@ -99,7 +131,31 @@ export class InstalledService {
       const installed = await this.repo.listInstalledApps();
       if (installed.includes(appName)) throw new ConflictException(`${app.displayName} is already installed`);
 
-      // 3. Build variable substitution map
+      // 3. Install questions + custom variables → OpenBao, BEFORE the Gogs commit, so
+      // the app's ExternalSecret finds its entry as soon as Flux applies the app.
+      // Values never enter the Gogs repo or ${VAR} substitution. Apps without
+      // `settings` skip this entirely (and ignore any body). The stored entry is
+      // read first so a reinstall regenerates nothing: generated questions reuse
+      // what the last install wrote (NFS volumes survive, so a DB password must too).
+      if (app.settings) {
+        let stored: Record<string, string> | null = null;
+        try {
+          stored = await this.openBao.readAppSettings(appName);
+        } catch (err) {
+          this.throwSettingsStoreError(err, appName);
+        }
+        const resolved = resolveSettings(app.settings, body, stored);
+        if (!resolved.ok) {
+          throw new BadRequestException({ message: 'Some settings need attention', errors: resolved.errors });
+        }
+        try {
+          await this.openBao.writeAppSettings(appName, resolved.values);
+        } catch (err) {
+          this.throwSettingsStoreError(err, appName);
+        }
+      }
+
+      // 4. Build variable substitution map
       const vars: Record<string, string> = {};
       vars.BASE_DOMAIN = this.configService.get<string>('BASE_DOMAIN', 'libre.pod');
 
@@ -112,7 +168,7 @@ export class InstalledService {
         }
       }
 
-      // 4. Render every file and write them as ONE commit. Ordering no longer
+      // 5. Render every file and write them as ONE commit. Ordering no longer
       // matters ("Pitfall 3" was about the root kustomization.yaml naming an
       // app dir before its files existed) — atomicity now comes from the commit,
       // and Flux auto-generates its kustomization from the tree.
@@ -144,6 +200,14 @@ export class InstalledService {
       // 2. Check is installed
       const installed = await this.repo.listInstalledApps();
       if (!installed.includes(appName)) throw new ConflictException(`${app.displayName} is not installed`);
+
+      // Snapshot legacy secret values into OpenBao BEFORE deleting the Gogs
+      // files: after removeApp the values exist nowhere (the flux-system
+      // Secret is pruned with the repo path), and a reinstall on surviving
+      // NFS data must reuse them. Best-effort: a failure logs and proceeds.
+      await this.legacyMirror.snapshotApp(appName).catch((err: unknown) =>
+        this.logger.warn(`legacy secret snapshot failed for ${appName}: ${(err as Error).message}`),
+      );
 
       // 3. Delete the app's whole directory — one commit. Unlike the old
       // root-kustomization edit this really removes the files, so a later

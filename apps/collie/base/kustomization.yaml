@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: collie
+
+labels:
+- includeSelectors: true
+  includeTemplates: true
+  pairs:
+    app.kubernetes.io/name: collie
+
+configMapGenerator:
+- name: collie
+  envs:
+  - collie.env
+
+resources:
+- namespace.yaml
+- pvc.yaml
+- externalsecret.yaml
+- service.yaml
+- deployment.yaml

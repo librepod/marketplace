@@ -84,6 +84,11 @@ Conventions and gotchas:
   `compose up → readiness check → playwright → compose down -v`, so each run starts from a
   clean seed. The catalog is `packages/e2e/fixtures/catalog.fixture.yaml` (3 user-facing apps
   + 3 Infrastructure; `vaultwarden`/`litellm` have install `templates`).
+- **Hermetic OpenBao:** the same compose runs a dev-mode `openbao/openbao` (in-memory,
+  unsealed, KV v2 at `secret/`) on `127.0.0.1:48200`; `tier1.config.ts` sets `OPENBAO_ADDR`
+  plus the `OPENBAO_TOKEN` test seam (no cluster ⇒ no Kubernetes auth). The `renovate` fixture
+  app has `settings`, and `install-settings.spec.ts` reads its entry back over the OpenBao
+  HTTP API and checks the token never reaches the Gogs repo.
 - **Tier 1 drives the real production credential path.** `tier1.config.ts` sets
   `USER_APPS_GIT_URL=http://127.0.0.1:43000/flux/user-apps.git` +
   `USER_APPS_GIT_USERNAME=flux` / `USER_APPS_GIT_PASSWORD=pass@w0rd` — the same `http`
@@ -161,18 +166,11 @@ Gotchas / deviations from the original plan:
 - **`confirmUninstall()` self-opens the dialog** (trigger `.first()` → confirm action `.nth(1)`);
   the reconcile spec must NOT pre-open before calling it, or the trigger toggle closes the dialog.
 
-✅ **Previously blocked, now FIXED:** the k3d bootstrap used to never reach `marketplace-ui`
-because flux-operator ≤0.48.0 couldn't assemble the Flux CRDs — `FluxInstance/flux` reported
-`build failed: …eventSources/items/properties/kind/enum/-`, an in-image operator/CRD patch skew,
-so no Flux controllers started. Bumping
-`clusters/librepod-k3d/bootstrap/{flux-operator,flux-instance}.yaml` to **0.57.0** fixes it
-(operator + instance move in lockstep as a matched pair). Verified by an isolated k3d boot: the
-CRD server-side-apply completes (all notification CRDs created, Flux `v2.9.3`) and all four
-controllers come up `Running`. The focused test never reached a literal `Ready=True` only because
-it deliberately omitted `cosign-pub`; the real `k3d-config.yaml` supplies it. Tracked in
-[#48](https://github.com/librepod/marketplace/issues/48). The Tier 2 suite itself is complete and
-statically validated (configs valid, orchestrator `bash -n` clean, Playwright lists all 4 tests,
-selectors verified against the client source).
+- **flux-operator and flux-instance must bump in lockstep** (currently **0.57.0** in
+  `clusters/librepod-k3d/bootstrap/`): an operator/CRD patch skew silently prevents Flux
+  controllers from starting. The Tier 2 suite is statically validated (configs valid, orchestrator
+  `bash -n` clean, Playwright lists all 4 tests, selectors checked against the client source).
+  Background: [#48](https://github.com/librepod/marketplace/issues/48).
 
 ## Architecture
 
@@ -204,16 +202,39 @@ Degradation is layered, and the distinction matters:
 - `GET /api/apps/:name` → same, single app.
 - `GET /api/installed` → enriched list filtered to non-`not_installed`.
 - `GET /api/system-apps` → `InstalledService.getSystemApps()` → enriched apps where `system === true` (the read-only Platform panel on `/`).
-- `POST /api/apps/:name/install` | `/uninstall` → `InstalledService` (mutex-serialized).
+- `POST /api/apps/:name/install` | `/uninstall` → `InstalledService` (mutex-serialized). Install
+  takes an optional JSON body `{ settings?, custom? }` (used only by apps with catalog `settings`).
 - `GET /api/health` → Terminus liveness (empty checks array).
 
 ### Install flow (`InstalledService.install`, behind an `async-mutex`)
 1. Validate app exists in catalog and has `templates`.
 2. Refuse if already in the installed set.
-3. Build a `vars` map: `BASE_DOMAIN` from config + one generated secret per
-   `secrets[].generate` (crypto hex).
-4. Render `apps/<name>/{source,release,secret,kustomization}.yaml` (via `${VAR}` regex
-   substitution) and write them all as **one commit** (`UserAppsRepoService.writeApp`).
+3. **Apps with `settings` only — read → resolve → write:** the stored entry is read from
+   OpenBao first, then `resolveSettings` (`install-settings.ts`) resolves it against the body
+   and validates → `400 { message, errors: [{ name, message }] }`. Per question: the answer →
+   the question's `default` → left unset. A **generated item** (`generate:`) is never asked —
+   the install dialog hides it and it resolves **server-side**: the stored value → the
+   default → a fresh random, so a reinstall regenerates nothing (NFS volumes survive, so a
+   DB password must too) and a catalog default never clobbers a value running data depends on.
+   The resolved map is written to OpenBao `apps/<name>` (`OpenBaoClient`, whole entry, a new
+   KV v2 version) **before** the Gogs commit → `503` if OpenBao is unset/unreachable/sealed/
+   refuses auth. Settings never enter the Gogs repo or `${VAR}` substitution; apps without
+   `settings` never call OpenBao.
+4. Build a `vars` map: `BASE_DOMAIN` from config + one generated value per legacy
+   `secrets[].generate` (crypto hex). **Legacy path** — no shipped app declares `secrets[]`
+   any more (settings replaced it); the renderer keeps it only so an old catalog template
+   still installs.
+5. Render `apps/<name>/{source,release,kustomization}.yaml` (via `${VAR}` regex substitution;
+   `secret.yaml` too when a legacy template declares one) and write them all as **one commit**
+   (`UserAppsRepoService.writeApp`).
+
+**Legacy secret mirror** (`LegacySecretMirror`, decision #12 in `../docs/DECISIONS_LOG.md`):
+apps installed before settings moved to OpenBao keep their real secret values only in the
+git-committed `apps/<name>/secret.yaml`, which a migrated app's ExternalSecret never reads.
+The mirror fills **absent** keys of the OpenBao entry from those files — existing OpenBao
+values always win — at three triggers: boot (fire-and-forget), hourly, and synchronously
+during uninstall BEFORE the Gogs directory is deleted (after that the values exist nowhere,
+and a reinstall on surviving NFS data must reuse them).
 
 **"Pitfall 3" is retired.** It was a write-ORDERING rule — app files before the root
 `kustomization.yaml`, so Flux never saw an entry naming a directory that did not exist yet.
@@ -330,9 +351,15 @@ Restart / Users) marked with `SoonTag`. All status dots read from the single
 | `USER_APPS_GIT_BRANCH` | `master` | only consulted alongside `USER_APPS_GIT_URL`; otherwise from `spec.ref.branch` |
 | `USER_APPS_GIT_USERNAME` | (empty) | overrides the `username` file in the credentials dir |
 | `USER_APPS_GIT_PASSWORD` | (empty) | overrides the `password` file in the credentials dir |
-| `USER_APPS_GIT_CREDENTIALS_DIR` | `/etc/user-apps-git` | mounted Secret with `username`/`password` files (Reflector-populated) |
+| `USER_APPS_GIT_CREDENTIALS_DIR` | `/etc/user-apps-git` | mounted Secret with `username`/`password` files (ESO-synced from openbao KV apps/user-apps-source) |
 | `USER_APPS_WORK_DIR` | `/var/lib/user-apps` | working copy (`repo/`) + the generated `0600 .git-credentials`; disposable emptyDir |
 | `BASE_DOMAIN` | `libre.pod` | `${BASE_DOMAIN}` substituted into templates |
+| `OPENBAO_ADDR` | (empty) | settings store for install questions. Unset ⇒ installing an app that has `settings` returns 503; other apps are unaffected |
+| `OPENBAO_AUTH_MOUNT` | `kubernetes` | OpenBao Kubernetes auth mount |
+| `OPENBAO_AUTH_ROLE` | `marketplace-ui` | role the pod's ServiceAccount logs in as |
+| `OPENBAO_KV_MOUNT` | `secret` | KV v2 mount holding one settings entry per app at `<name>` (cluster mount is `apps`, so `apps/<name>`) |
+| `OPENBAO_SA_TOKEN_PATH` | `/var/run/secrets/kubernetes.io/serviceaccount/token` | ServiceAccount JWT used for the login |
+| `OPENBAO_TOKEN` | (empty) | **test seam only** (Tier 1's dev-mode OpenBao): a static token that skips the Kubernetes login. Never set it in cluster manifests |
 | `KUBERNETES_SERVICE_HOST` | — | presence switches FluxStatusService to in-cluster config |
 
 The transport is **`http(s)` only** — an `ssh://` remote is rejected at resolution rather

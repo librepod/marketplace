@@ -199,6 +199,32 @@ describe('LaunchUrlService', () => {
     expect(res).toEqual({ launchable: false });
   });
 
+  it('does NOT cache a mid-install empty read — routes appearing inside the TTL un-suppress (CI race)', async () => {
+    // Install-time read: the app namespace isn't applied yet, so k8s answers
+    // 200 with zero items (not an error) → launchable:false for that instant.
+    mockListNamespacedCustomObject.mockResolvedValueOnce({ items: [] });
+    expect(await service.resolve('baikal')).toEqual({ launchable: false });
+
+    // Flux applies the IngressRoute moments later — well inside the 30s TTL.
+    // The next resolve must re-read instead of serving the cached false.
+    mockListNamespacedCustomObject.mockResolvedValueOnce({
+      items: [ingressRoute('baikal', 'baikal.example.com')],
+    });
+    expect(await service.resolve('baikal')).toEqual({});
+  });
+
+  it('still caches stable verdicts within the TTL (no redundant re-reads)', async () => {
+    mockListNamespacedCustomObject.mockResolvedValueOnce({
+      items: [ingressRoute('litellm', 'litellm.example.com', '/ui')],
+    });
+    await service.resolve('litellm');
+
+    // No further mock results queued: a second call within the TTL must be
+    // served from cache (mock would return undefined and throw otherwise).
+    expect(await service.resolve('litellm')).toEqual({ url: 'https://litellm.example.com/ui' });
+    expect(mockListNamespacedCustomObject).toHaveBeenCalledTimes(1);
+  });
+
   it('scopes the list to the app namespace and the traefik IngressRoute plural', async () => {
     mockListNamespacedCustomObject.mockResolvedValueOnce({ items: [] });
 
