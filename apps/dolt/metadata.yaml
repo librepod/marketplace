@@ -10,7 +10,7 @@ spec:
   website: "https://www.dolthub.com/"
 
   # renovate: datasource=docker depName=dolthub/dolt-sql-server
-  version: "2.4.2"
+  version: "2.2.0"
 
   source:
     type: oci-kustomize
