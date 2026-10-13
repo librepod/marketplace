@@ -56,8 +56,11 @@ spec:
         envFrom:
         - configMapRef:
             name: wg-easy
+          # Settings Secret (OpenBao via ESO) LAST so its values override the
+          # .env defaults. Non-optional on purpose: the pod waits until ESO has
+          # synced INIT_PASSWORD rather than booting without its admin account.
         - secretRef:
-            name: wg-easy-admin
+            name: wg-easy-settings
         # OIDC client credentials, written by casdoor-sso-controller from the
         # SSOClient CR in the overlay. Not optional on purpose: until the
         # controller writes the secret the pod stays in

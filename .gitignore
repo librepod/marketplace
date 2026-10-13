@@ -50,3 +50,10 @@ docs/superpowers/
 /.vite/vitest/results.json
 librepod-dev.config
 /catalog.yaml
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
+*.gate.lock*
