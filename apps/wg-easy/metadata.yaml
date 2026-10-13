@@ -25,7 +25,7 @@ spec:
         description: "Initial password for the built-in admin account (applied on first start only). SSO is the primary login; this is the fallback if the IdP is unavailable."
         sensitive: true
         required: true
-        default: "ChangeMeOnFirstLogin!"
+        default: "change-me"
 
   dependencies:
     required:
