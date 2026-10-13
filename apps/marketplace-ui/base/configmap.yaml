@@ -29,10 +29,8 @@ data:
   WGEASY_BASE_URL: "http://wg-easy.wg-easy.svc.cluster.local"
   # Factory admin passwords the wizard probes to tell onboarding mode from
   # claimed, and rotates to the user's chosen password at claim time. Both are
-  # committed defaults by design (public in this repo, same as wg-easy's
-  # INIT_PASSWORD env) — the claim itself closes the window. No Reflector
-  # mirroring of wg-easy's Secret: Reflector is retired (ESO era), and the
-  # wizard needs only this public value, never a live one.
+  # committed defaults by design (public in this repo — wg-easy's own env file
+  # carries the same INIT_PASSWORD value) — the claim itself closes the window.
   CASDOOR_ADMIN_DEFAULT_PASSWORD: "123"
   WGEASY_ADMIN_DEFAULT_PASSWORD: "ChangeMeOnFirstLogin!"
   # Settings store (install questions + generated secrets) — the OpenBao system

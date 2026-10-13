@@ -81,9 +81,7 @@ export class WgEasyService {
 
   private factoryPassword(): string | undefined {
     // The committed factory default (INIT_PASSWORD), carried in the env like
-    // Casdoor's — public by design, rotated at claim. No live-secret
-    // mirroring: Reflector is retired and the wizard only ever needs this
-    // public value to authenticate the rotation call.
+    // Casdoor's factory password — public by design, rotated at claim.
     return process.env.WGEASY_ADMIN_DEFAULT_PASSWORD?.trim() || undefined;
   }
 
