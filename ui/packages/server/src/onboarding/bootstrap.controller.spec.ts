@@ -163,9 +163,10 @@ describe('BootstrapController.claim', () => {
     const adoptPassword = vi.fn().mockResolvedValue(undefined);
     const { controller } = makeController({ probe: vi.fn().mockResolvedValue('ok'), claim, wg: { adoptPassword } });
     const res = fakeRes();
-    await controller.claim({ password: 'longenough1' }, res);
+    await controller.claim({ password: 'longenough1' }, reqWithHost('192.168.1.50'), res);
     expect(claim).toHaveBeenCalledWith({ password: 'longenough1' });
-    expect(adoptPassword).toHaveBeenCalledWith('longenough1');
+    // the device IP the user is browsing becomes wg-easy's endpoint host
+    expect(adoptPassword).toHaveBeenCalledWith('longenough1', '192.168.1.50');
     expect(res.cookie).toHaveBeenCalled();
   });
 
@@ -176,15 +177,16 @@ describe('BootstrapController.claim', () => {
       wg: { adoptPassword: vi.fn().mockRejectedValue(new Error('no k8s')) },
     });
     const res = fakeRes();
-    await expect(controller.claim({ password: 'longenough1' }, res)).resolves.toMatchObject({ ok: true });
+    await expect(controller.claim({ password: 'longenough1' }, reqWithHost('192.168.1.50'), res)).resolves.toMatchObject({ ok: true });
   });
 
   it('rejects weak input before touching casdoor', async () => {
     const { controller, casdoorAdmin } = makeController({});
-    await expect(controller.claim({ password: 'short' }, fakeRes())).rejects.toThrow(BadRequestException);
-    await expect(controller.claim({ password: 'has space1' }, fakeRes())).rejects.toThrow(BadRequestException);
+    const req = reqWithHost('192.168.1.50');
+    await expect(controller.claim({ password: 'short' }, req, fakeRes())).rejects.toThrow(BadRequestException);
+    await expect(controller.claim({ password: 'has space1' }, req, fakeRes())).rejects.toThrow(BadRequestException);
     // bodyless POST (no parser matched) must 400, not TypeError→500
-    await expect(controller.claim(undefined as never, fakeRes())).rejects.toThrow(BadRequestException);
+    await expect(controller.claim(undefined as never, req, fakeRes())).rejects.toThrow(BadRequestException);
     expect(casdoorAdmin.claim).not.toHaveBeenCalled();
   });
 });

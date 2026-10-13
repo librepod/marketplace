@@ -27,12 +27,12 @@ data:
   # yet) cannot reach either host. http, not https — cluster-internal traffic.
   CASDOOR_BASE_URL: "http://casdoor.casdoor.svc.cluster.local"
   WGEASY_BASE_URL: "http://wg-easy.wg-easy.svc.cluster.local"
-  # Factory admin passwords the wizard probes to tell onboarding mode from
-  # claimed, and rotates to the user's chosen password at claim time. Both are
-  # committed defaults by design (public in this repo — wg-easy's own env file
-  # carries the same INIT_PASSWORD value) — the claim itself closes the window.
+  # The Casdoor built-in admin's factory password (same value the
+  # casdoor-sso-controller env carries) — the wizard probes it to tell
+  # onboarding mode from claimed, and randomizes it at claim time. wg-easy has
+  # no committed default anymore (post-#272): its credential lives in OpenBao
+  # apps/wg-easy and is adopted via wg-easy's own first-boot setup API.
   CASDOOR_ADMIN_DEFAULT_PASSWORD: "123"
-  WGEASY_ADMIN_DEFAULT_PASSWORD: "ChangeMeOnFirstLogin!"
   # Settings store (install questions + generated secrets) — the OpenBao system
   # app. Unset OPENBAO_ADDR would make every settings install 503. The KV mount
   # is "apps" (NOT the client default "secret") — see the ClusterSecretStore.

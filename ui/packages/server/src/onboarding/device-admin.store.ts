@@ -10,7 +10,10 @@ const NAMESPACE = 'marketplace-ui';
  * marketplace-ui-session: not in Git, so Flux never prunes it; written at
  * runtime by the server, readable across pod restarts so lazy retries, a
  * future Users-panel re-sync, and install-time app provisioning all inherit
- * it. RBAC: Role in apps/marketplace-ui/base/serviceaccount.yaml.
+ * it. `wgHost` records the WireGuard endpoint host the wizard configured
+ * (the device IP at claim time) so the lazy wg-easy adoption can complete
+ * first-boot setup even after a claim-time wg-easy outage. RBAC: Role in
+ * apps/marketplace-ui/base/serviceaccount.yaml.
  */
 @Injectable()
 export class DeviceAdminStore {
@@ -30,22 +33,23 @@ export class DeviceAdminStore {
     }
   }
 
-  async load(): Promise<string | undefined> {
+  async load(): Promise<{ password?: string; wgHost?: string }> {
     const core = this.client();
-    if (!core) return undefined;
+    if (!core) return {};
     try {
       const secret: V1Secret = await core.readNamespacedSecret({
         name: SECRET_NAME,
         namespace: NAMESPACE,
       });
-      const encoded = secret.data?.['password'];
-      return encoded ? Buffer.from(encoded, 'base64').toString('utf8') : undefined;
+      const decode = (key: string) =>
+        secret.data?.[key] ? Buffer.from(secret.data[key], 'base64').toString('utf8') : undefined;
+      return { password: decode('password'), wgHost: decode('wgHost') };
     } catch {
-      return undefined; // absent or RBAC-denied — both mean "not provisioned yet"
+      return {}; // absent or RBAC-denied — both mean "not provisioned yet"
     }
   }
 
-  async save(password: string): Promise<void> {
+  async save(password: string, wgHost?: string): Promise<void> {
     const core = this.client();
     if (!core) throw new Error('k8s config unavailable');
     const secret: V1Secret = {
@@ -54,7 +58,7 @@ export class DeviceAdminStore {
         namespace: NAMESPACE,
         labels: { 'app.kubernetes.io/name': 'marketplace-ui' },
       },
-      stringData: { password },
+      stringData: wgHost ? { password, wgHost } : { password },
     };
     try {
       await core.replaceNamespacedSecret({ name: SECRET_NAME, namespace: NAMESPACE, body: secret });

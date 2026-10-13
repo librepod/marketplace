@@ -1,0 +1,57 @@
+# wg-easy as a system app: the tailnet is device infrastructure (the
+# onboarding wizard's Connect step creates the first peer, and tunnel-up is
+# what makes *.<domain> resolve), so it deploys with the cluster and cannot
+# be uninstalled from the app catalog. The app artifact is shared with the
+# catalog path — same apps/wg-easy overlay.
+#
+# The pod waits (non-optional secretRefs) on TWO Secrets before booting:
+#   - wg-easy-settings — OpenBao apps/wg-easy (INIT_PASSWORD) via ESO. The
+#     openbao bootstrap Job seeds that entry with a per-device random on a
+#     fresh cluster (no install dialog exists for a system app to ask) — a
+#     boot ticket only. The seeded value is never a live credential: with
+#     INIT_HOST empty (its default), first-boot setup stays incomplete until
+#     the onboarding wizard completes it through wg-easy's own setup API
+#     (admin = the user's chosen device-admin password, endpoint host = the
+#     device IP the user is browsing), then writes both back to the entry so
+#     a PVC wipe re-initializes unattended.
+#   - wg-easy-sso — written by casdoor-sso-controller from the overlay's
+#     SSOClient CR (SSO is the primary login; the local admin is fallback).
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: wg-easy
+  namespace: flux-system
+spec:
+  interval: 10m
+  url: oci://ghcr.io/librepod/marketplace/apps/wg-easy
+  ref:
+    tag: "15.4.0"
+  verify:
+    provider: cosign
+    secretRef:
+      name: cosign-pub
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: wg-easy
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: storage
+    - name: traefik
+    - name: frp-operator
+    - name: openbao
+    - name: casdoor-sso-controller
+  interval: 1h
+  retryInterval: 2m
+  timeout: 5m
+  sourceRef:
+    kind: OCIRepository
+    name: wg-easy
+  path: ./overlays/librepod
+  prune: true
+  wait: true
+  postBuild:
+    substitute:
+      BASE_DOMAIN: "${BASE_DOMAIN}"

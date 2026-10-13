@@ -8,22 +8,27 @@ describe('DeviceAdminStore', () => {
   // NB: the store's k8s client is stubbed via `client` (private) — no k8s
   // env is touched, so these run anywhere.
 
-  it('load returns the decoded password', async () => {
-    const read = vi.fn().mockResolvedValue({ data: { password: Buffer.from('pw1').toString('base64') } });
+  it('load returns the decoded password (+ wgHost companion key)', async () => {
+    const read = vi.fn().mockResolvedValue({
+      data: {
+        password: Buffer.from('pw1').toString('base64'),
+        wgHost: Buffer.from('192.168.1.50').toString('base64'),
+      },
+    });
     const store = new DeviceAdminStore();
     vi.spyOn(store as any, 'client').mockReturnValue({ readNamespacedSecret: read });
-    expect(await store.load()).toBe('pw1');
+    expect(await store.load()).toEqual({ password: 'pw1', wgHost: '192.168.1.50' });
     expect(read).toHaveBeenCalledWith({ name: 'marketplace-ui-admin-credential', namespace: 'marketplace-ui' });
   });
 
-  it('load swallows absence/RBAC denial as undefined', async () => {
+  it('load swallows absence/RBAC denial as empty', async () => {
     const store = new DeviceAdminStore();
     vi.spyOn(store as any, 'client').mockReturnValue({
       readNamespacedSecret: vi.fn().mockRejectedValue({ statusCode: 404 }),
     });
-    expect(await store.load()).toBeUndefined();
+    expect(await store.load()).toEqual({});
     vi.spyOn(store as any, 'client').mockReturnValue(undefined);
-    expect(await store.load()).toBeUndefined();
+    expect(await store.load()).toEqual({});
   });
 
   it('save replaces when the secret exists', async () => {
@@ -41,10 +46,10 @@ describe('DeviceAdminStore', () => {
     const create = vi.fn().mockResolvedValue({});
     const store = new DeviceAdminStore();
     vi.spyOn(store as any, 'client').mockReturnValue({ replaceNamespacedSecret: replace, createNamespacedSecret: create });
-    await store.save('pw3');
+    await store.save('pw3', '192.168.1.50');
     expect(create).toHaveBeenCalledWith({
       namespace: 'marketplace-ui',
-      body: expect.objectContaining({ stringData: { password: 'pw3' } }),
+      body: expect.objectContaining({ stringData: { password: 'pw3', wgHost: '192.168.1.50' } }),
     });
   });
 

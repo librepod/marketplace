@@ -2,7 +2,7 @@
 
 Companion plan: `docs/superpowers/plans/2026-09-05-onboarding-flow.md`.
 Product record: `ui/PRODUCT.md`.
-Date: 2026-09-02 (shaped) · 2026-09-05 (amended, user-directed) · 2026-09-28 (amended: device-admin credential model after wg-easy SSO #204; Reflector #214 pattern) · 2026-10-13 (amended: Reflector retired upstream — factory credential via env, see wg-easy bullet below) · Status: approved
+Date: 2026-09-02 (shaped) · 2026-09-05 (amended, user-directed) · 2026-09-28 (amended: device-admin credential model after wg-easy SSO #204) · 2026-10-13 (amended: Reflector retired; wg-easy a system app with the credential in OpenBao — see the wg-easy bullet) · Status: approved
 
 ## Problem
 
@@ -80,18 +80,35 @@ pod restarts resume for free; no wizard-local progress state.
   short-circuits the factory probe (a transient casdoor outage must not
   tell an authenticated user their device is "waking up"), and a degraded
   casdoor (5xx/HTML) reads as unreachable, never as "claimed".
-- **wg-easy default-password hole closed**: the factory password
-  (`ChangeMeOnFirstLogin!`, committed to a public repo) travels to the server
-  as the `WGEASY_ADMIN_DEFAULT_PASSWORD` ConfigMap env — the same channel as
-  Casdoor's factory `123`; the wizard never reads a live wg-easy secret
-  *(amended 2026-10-13: replaced the original Reflector-mirrored mount after
-  Reflector was retired cluster-wide)*. At claim it is rotated to the user's
-  chosen password (Basic-auth `POST /api/me/password` — re-verified against
-  the live wg-easy v15.4.0 source; Basic auth on `/api/*` survived the
-  15.3→15.4 rewrite, the rename only affected the session login route).
-  Persist-before-rotate ordering means a wg-easy outage during claim defers
-  rotation (the lazy `ensurePassword()` completes it from the Secret) rather
-  than losing the credential.
+- **wg-easy default-password hole closed** *(redesigned 2026-10-13 after #272
+  moved INIT_PASSWORD to OpenBao settings and wg-easy became a system app —
+  supersedes both earlier wirings, the committed-default env and the
+  Reflector-mirrored mount)*. wg-easy is deployed with the cluster
+  (infrastructure/system-apps) — the tailnet is device infrastructure, not a
+  user-installable app. Its admin credential now has no committed default at
+  all:
+  - **Fresh cluster**: the openbao bootstrap seeds `apps/wg-easy
+    INIT_PASSWORD=<per-device random>` only-if-absent — a *boot ticket* so
+    the non-optional settings Secret exists and the pod starts. With
+    `INIT_HOST` empty (its default — the endpoint host is runtime knowledge:
+    the device IP the user is browsing), wg-easy's unattended setup cannot
+    complete, so the instance waits in its own first-boot setup state. At
+    claim the wizard drives wg-easy's setup API (`POST /api/setup/2`
+    admin + chosen password, `POST /api/setup/4` host = device IP, port
+    51820) — unauthenticated while setup is incomplete, the same open
+    LAN claim window as Casdoor's factory credential, closed by completing
+    it. wg-easy writes its own database; we never touch it.
+  - **Migrated installs** (clusters that had user-installed wg-easy):
+    setup is already complete, so the wizard rotates through the API
+    (Basic-auth `POST /api/me/password`, re-verified against the live
+    v15.4.0 source), authenticating as the cached password or the OpenBao
+    entry's INIT_PASSWORD (what the instance originally booted with).
+  - Both shapes persist the chosen password to the marketplace-ui Secret
+    FIRST (a failed adoption never destroys the credential; the lazy
+    `ensurePassword()` retries — including completing setup — on the next
+    wg call), then write `{INIT_PASSWORD, INIT_HOST}` back into the OpenBao
+    entry (read-merge). With all four INIT_* then present, a PVC wipe
+    re-initializes wg-easy unattended with the same admin and endpoint.
 - **No rotation side effects in GET polls** — the status probe is write-free;
   rotation happens only in `claim` or lazily inside the wg API paths.
 

@@ -43,6 +43,6 @@ const customObjectsApiProvider = {
     OpenBaoClient,
     LegacySecretMirror,
   ],
-  exports: [InstalledService],
+  exports: [InstalledService, OpenBaoClient],
 })
 export class InstalledModule {}

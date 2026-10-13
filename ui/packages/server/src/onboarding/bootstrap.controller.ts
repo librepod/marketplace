@@ -19,11 +19,17 @@ import { ONBOARDING_COOKIE } from './onboarding.guard';
 
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
 
-function arrivalOf(req: Request): 'ip' | 'domain' {
+/** The bare host the user is browsing — the WireGuard endpoint host for a
+ * raw-IP first run (the device itself). */
+function hostOf(req: Request): string {
   const xfh = req.headers['x-forwarded-host'];
   const raw = (Array.isArray(xfh) ? xfh[0] : xfh) ?? req.headers.host ?? '';
   // "[2001:db8::1]:8080" → "2001:db8::1"; "192.168.1.1:80" → "192.168.1.1"
-  const host = raw.startsWith('[') ? raw.slice(1, raw.indexOf(']')) : raw.split(':')[0];
+  return raw.startsWith('[') ? raw.slice(1, raw.indexOf(']')) : raw.split(':')[0];
+}
+
+function arrivalOf(req: Request): 'ip' | 'domain' {
+  const host = hostOf(req);
   const ipv6 = host.includes(':') && /^[0-9a-fA-F:]+$/.test(host);
   return IPV4.test(host) || ipv6 ? 'ip' : 'domain';
 }
@@ -108,6 +114,7 @@ export class BootstrapController {
   @Post('claim')
   async claim(
     body: { password?: string },
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<{ ok: true }> {
     const password = body?.password ?? '';
@@ -117,10 +124,12 @@ export class BootstrapController {
     await this.casdoorAdmin.claim({ password });
     this.claimedCached = true;
     // The device-admin credential's second target: adopt the same password on
-    // wg-easy. Failure is non-fatal — adoptPassword persisted-first, so the
-    // lazy ensurePassword() retries on the next wg call.
+    // wg-easy — completing its first-boot setup with the device IP the user
+    // is browsing as the endpoint host (or rotating, on migrated installs).
+    // Failure is non-fatal — adoptPassword persisted-first, so the lazy
+    // ensurePassword() retries on the next wg call.
     try {
-      await this.wgEasy.adoptPassword(password);
+      await this.wgEasy.adoptPassword(password, hostOf(req));
     } catch (err) {
       this.logger.warn(`wg-easy password adoption deferred: ${String(err)}`);
     }
