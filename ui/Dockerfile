@@ -46,6 +46,10 @@ COPY --from=builder /app/packages/client/dist ./packages/client/dist
 # Copy shared package source (required at runtime -- @librepod/shared has "main": "src/types.ts")
 COPY --from=builder /app/packages/shared/src ./packages/shared/src
 
+# `kubectl -n marketplace-ui exec deploy/marketplace-ui -- reset-onboarding`: a new
+# setup code, first-run onboarding open again (runs dist/onboarding/reset-onboarding.cli.js).
+COPY --chmod=0755 packages/server/bin/reset-onboarding /usr/local/bin/reset-onboarding
+
 # Configure via env vars (D-13)
 ENV PORT=3000
 ENV NODE_ENV=production
