@@ -26,7 +26,7 @@ export class WgEasyService {
     const res = await this.request('/api/client');
     const raw = (await res.json()) as Array<Record<string, unknown>>;
     return raw.map((c) => ({
-      clientId: String(c.clientId),
+      clientId: String(c.id),
       name: String(c.name ?? ''),
       enabled: Boolean(c.enabled),
       latestHandshakeAt: (c.latestHandshakeAt as string | undefined) ?? null,

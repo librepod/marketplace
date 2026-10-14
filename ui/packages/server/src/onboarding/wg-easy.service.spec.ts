@@ -85,15 +85,17 @@ describe('WgEasyService', () => {
   });
 
   it('listClients maps peers, defaulting a missing handshake to null', async () => {
+    // wg-easy v15's GET /api/client spreads the DB row: the key is the integer
+    // `id` (only POST answers with `clientId`).
     vi.spyOn(global, 'fetch').mockResolvedValue(
       ok([
-        { clientId: 'a', name: 'phone', enabled: true, latestHandshakeAt: '2026-09-05T10:00:00Z' },
-        { clientId: 'b', name: 'laptop', enabled: false },
+        { id: 1, name: 'phone', enabled: true, latestHandshakeAt: '2026-09-05T10:00:00Z' },
+        { id: 2, name: 'laptop', enabled: false, latestHandshakeAt: null },
       ]),
     );
     const peers = await makeService().svc.listClients();
-    expect(peers[0]).toMatchObject({ clientId: 'a', latestHandshakeAt: '2026-09-05T10:00:00Z' });
-    expect(peers[1]).toMatchObject({ clientId: 'b', enabled: false, latestHandshakeAt: null });
+    expect(peers[0]).toMatchObject({ clientId: '1', latestHandshakeAt: '2026-09-05T10:00:00Z' });
+    expect(peers[1]).toMatchObject({ clientId: '2', enabled: false, latestHandshakeAt: null });
   });
 
   it('clientConfiguration / clientQrSvg pass the text through', async () => {
