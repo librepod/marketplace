@@ -14,7 +14,7 @@ namespace: litellm
 
 images:
 - name: litellm/litellm
-  newTag: v1.95.0
+  newTag: v1.105.1
 - name: postgres
   newTag: 16-alpine
 
