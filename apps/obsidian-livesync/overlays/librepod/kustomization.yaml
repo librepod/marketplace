@@ -10,4 +10,4 @@ resources:
 
 images:
 - name: couchdb
-  newTag: "3.5.2"
+  newTag: "3.5.3"
