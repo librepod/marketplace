@@ -22,7 +22,7 @@ namespace: wg-easy
 #
 # Prerequisites in the cluster:
 #   - frp-operator running with an FRP client registered (client: libreport)
-#   - ${FRP_SERVER_ADDR} set in the cluster's postBuild.substitute
+#   - ${FRP_SERVER_ADDR} from a future relay integration — catalog installs substitute only BASE_DOMAIN and DEVICE_IP, so without one this component stays inert
 #
 # Usage in an overlay kustomization.yaml:
 #   components:
