@@ -21,6 +21,25 @@ spec:
             - { name: merged-ca-bundle, mountPath: /mnt/merged-ca }
       containers:
         - name: netronome
+          # Netronome discovers OIDC endpoints ONCE at startup (10x5s budget,
+          # hardcoded upstream) and never retries — a failed discovery leaves
+          # the app serving fine but with SSO login dead until a restart. The
+          # app exposes exactly this state as a JSON field on the public
+          # /api/auth/status endpoint ("oidcReady": provider != nil) — but as
+          # HTTP 200 either way, so httpGet cannot see it (kubelet counts any
+          # 2xx/3xx as success). exec+grep can; kubelet then restarts the
+          # container until discovery succeeds. initialDelaySeconds clears the
+          # normal successful-discovery window (~5s).
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - wget -q -O - http://localhost:7575/api/auth/status | grep -q '"oidcReady":true'
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 5
           volumeMounts:
             - name: merged-ca-bundle
               mountPath: /etc/ssl/certs/ca-certificates.crt
