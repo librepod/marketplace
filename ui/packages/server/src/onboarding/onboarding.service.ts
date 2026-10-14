@@ -27,6 +27,9 @@ export function checkPassword(value: unknown): string {
 @Injectable()
 export class OnboardingService {
   private readonly logger = new Logger(OnboardingService.name);
+  /** "generation:username" of users this process created, so a retry after the
+   * record write failed keeps its own new user instead of calling it taken. */
+  private readonly created = new Set<string>();
 
   constructor(
     private readonly store: OnboardingStore,
@@ -67,8 +70,9 @@ export class OnboardingService {
     return record;
   }
 
-  /** Creates the personal user, or keeps an existing one (after a reset), setting a
-   * new password when one is given — the recovery for a forgotten personal password. */
+  /** Creates the personal user, or keeps the recorded one (after a reset), setting a
+   * new password when one is given — the recovery for a forgotten personal password.
+   * Any other existing user is someone else's: 409. */
   async account(input: { username: unknown; password?: unknown }): Promise<OnboardingRecord> {
     const username = typeof input.username === 'string' ? input.username : '';
     if (!USERNAME.test(username) || username === 'admin') {
@@ -81,9 +85,14 @@ export class OnboardingService {
 
     const session = await this.casdoor.signIn([await this.adminPassword()]);
     if (!session) throw new ConflictException(CHANGED_OUTSIDE);
+    const created = `${record.generation}:${username}`;
     if (!(await this.casdoor.getUser(session, username))) {
       if (!password) throw new BadRequestException('Choose a password for the new account');
       await this.casdoor.addUser(session, username, password);
+      this.created.add(created);
+    } else if (username !== record.account && !this.created.has(created)) {
+      // After a reset other people's users exist: never re-password one of them.
+      throw new ConflictException('That username is already taken — choose another');
     } else if (password) {
       await this.casdoor.setUserPassword(session, username, password);
     }

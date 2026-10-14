@@ -158,14 +158,45 @@ describe('OnboardingService', () => {
       expect(t.kv.get('system', RECORD)).toMatchObject({ account: 'alex', accountGeneration: 1 });
     });
 
-    it('an existing user is kept as is without a password, or re-passworded with one', async () => {
+    /** Set up as alex, then reset and re-claimed: the Account step offers "keep alex". */
+    async function afterReset() {
       const t = await claimed();
-      t.state.users.set('alex', 'forgotten-pass-12');
+      await t.service.account({ username: 'alex', password: 'forgotten-pass-12' });
+      const code = await t.store.reset();
+      await t.service.claim({ code, password: ADMIN }, '10.0.0.9');
+      vi.clearAllMocks();
+      return t;
+    }
+
+    it('after a reset, the kept account stays as is without a password, or is re-passworded with one', async () => {
+      const t = await afterReset();
       await t.service.account({ username: 'alex' });
       expect(t.casdoor.addUser).not.toHaveBeenCalled();
       expect(t.casdoor.setUserPassword).not.toHaveBeenCalled();
       await t.service.account({ username: 'alex', password: 'brand-new-pass-12' });
       expect(t.state.users.get('alex')).toBe('brand-new-pass-12');
+    });
+
+    it("after a reset, someone else's existing name is a 409 that leaves their password alone", async () => {
+      const t = await afterReset();
+      t.state.users.set('sam', 'sams-own-pass-12');
+      await expect(t.service.account({ username: 'sam', password: 'owner-typed-12' })).rejects.toThrow(
+        new ConflictException('That username is already taken — choose another'),
+      );
+      expect(t.state.users.get('sam')).toBe('sams-own-pass-12');
+      expect(t.kv.get('system', RECORD)).toMatchObject({ account: 'alex' });
+    });
+
+    it('a retry after the record write failed keeps the user it just created', async () => {
+      const t = await claimed();
+      vi.spyOn(t.store, 'save').mockRejectedValueOnce(new OpenBaoUnavailableError('sealed'));
+      await expect(t.service.account({ username: 'alex', password: 'personal-pass-12' })).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      expect(t.state.users.get('alex')).toBe('personal-pass-12');
+      await expect(t.service.account({ username: 'alex', password: 'personal-pass-12' })).resolves.toMatchObject({
+        account: 'alex',
+      });
     });
 
     it('a new user needs a password', async () => {
