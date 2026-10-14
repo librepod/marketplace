@@ -235,9 +235,18 @@ export function ConnectStep({ status, onConnected, onUseOwn, onSessionLost }: {
               Continue
             </Button>
             {!connected && (
-              <button className="ml-3 text-xs text-muted-foreground hover:text-foreground" onClick={onConnected}>
-                Skip — I’ll connect later
-              </button>
+              <>
+                <button className="ml-3 text-xs text-muted-foreground hover:text-foreground" onClick={onConnected}>
+                  Skip — I’ll connect later
+                </button>
+                {/* A running WireGuard that never hears a handshake is the blocked-UDP case. */}
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Can’t connect? Some networks block WireGuard’s UDP port 51820.{" "}
+                  <button className="underline hover:text-foreground" onClick={onUseOwn}>
+                    Use my own connectivity instead
+                  </button>
+                </p>
+              </>
             )}
           </div>
         </>

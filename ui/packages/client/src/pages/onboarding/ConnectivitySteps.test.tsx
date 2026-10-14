@@ -171,6 +171,17 @@ describe("ConnectStep", () => {
     expect(screen.getByRole("button", { name: /create connection key/i })).toBeVisible()
   })
 
+  it("running but no handshake (UDP blocked): my own connectivity is still on offer", async () => {
+    mockApi({
+      "/api/bootstrap/wireguard": jsonResponse(200, { peers: [{ clientId: "1", name: "phone", enabled: true, latestHandshakeAt: null }] }),
+    })
+    const onUseOwn = vi.fn()
+    render(<ConnectStep status={{ ...status, vpnStatus: "running", peerCount: 1 }} onConnected={noop} onUseOwn={onUseOwn} onSessionLost={noop} />)
+    expect(await screen.findByAltText(/QR for phone/i)).toBeVisible()
+    fireEvent.click(screen.getByRole("button", { name: /use my own connectivity instead/i }))
+    expect(onUseOwn).toHaveBeenCalled()
+  })
+
   it("a handshake enables Continue", () => {
     mockApi()
     const onConnected = vi.fn()
