@@ -109,10 +109,13 @@ bao write auth/kubernetes/role/external-secrets \
   bound_service_account_namespaces=openbao \
   policies=eso-read-apps ttl=20m
 
+# marketplace-ui: app settings under apps/ (marketplace-ui-write-apps) and
+# first-run onboarding state under system/ (marketplace-ui-system — the
+# onboarding record and the admin password).
 bao write auth/kubernetes/role/marketplace-ui \
   bound_service_account_names=marketplace-ui \
   bound_service_account_namespaces=marketplace-ui \
-  policies=marketplace-ui-write-apps ttl=20m
+  policies=marketplace-ui-write-apps,marketplace-ui-system ttl=20m
 
 # CA producer: the step-certificates bootstrap Job logs in with this role to
 # push the public root + intermediate CA into KV apps/step-ca (policy
