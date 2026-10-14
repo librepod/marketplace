@@ -195,6 +195,21 @@ describe('resolveSettings', () => {
       ]);
     });
 
+    it('reserves both platform variables', () => {
+      expect(
+        errorsOf(renovate, {
+          ...answered,
+          custom: [
+            { name: 'BASE_DOMAIN', value: 'x' },
+            { name: 'DEVICE_IP', value: 'x' },
+          ],
+        }),
+      ).toEqual([
+        { name: 'custom.0', message: 'This name is reserved by LibrePod' },
+        { name: 'custom.1', message: 'This name is reserved by LibrePod' },
+      ]);
+    });
+
     it('flags a repeated name even when its first use was rejected', () => {
       const big = 'x'.repeat(SETTINGS_LIMITS.valueMaxBytes + 1);
       expect(

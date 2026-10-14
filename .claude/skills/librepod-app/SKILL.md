@@ -531,7 +531,7 @@ spec:
   # Install questions + machine-generated secrets (full contract in the
   # [Settings](#settings-install-questions--generated-secrets) section below). Only questions the app actually asks
   # live here — LibrePod's tuned defaults stay in the app's `.env`
-  # (one owner per variable, never both). `BASE_DOMAIN` is reserved.
+  # (one owner per variable, never both). `BASE_DOMAIN` and `DEVICE_IP` are reserved.
   settings:
     # allowCustom: true             # Only when users may add free-form env vars (default: closed)
     items:
@@ -624,7 +624,7 @@ spec:
 
 **Key points about `metadata.yaml`:**
 - `templates.source` — the OCIRepository FluxCD creates to pull the app artifact
-- `templates.release` — the Kustomization FluxCD applies to install the app; `postBuild.substitute` injects `BASE_DOMAIN` (the only substituted variable) so placeholders like `${BASE_DOMAIN:=libre.pod}` in `ingressroute.yaml` and `.env` are resolved. Settings and secrets do NOT ride substitution — they reach the app via OpenBao + ESO (see [Settings](#settings-install-questions--generated-secrets))
+- `templates.release` — the Kustomization FluxCD applies to install the app; `postBuild.substitute` injects `BASE_DOMAIN` so placeholders like `${BASE_DOMAIN:=libre.pod}` in `ingressroute.yaml` and `.env` are resolved. The installer fills exactly two platform variables: `BASE_DOMAIN`, and `DEVICE_IP` — the device's LAN IP (the InternalIP of marketplace-ui's node), read only for apps whose templates reference `${DEVICE_IP}` (e.g. a VPN's endpoint host). List `DEVICE_IP` only when a manifest uses it, and consume it with a safe default (`${DEVICE_IP:=}`). Any other `${VAR}` in `substitute` stays literal text on a catalog install and breaks the apply. Settings and secrets do NOT ride substitution — they reach the app via OpenBao + ESO (see [Settings](#settings-install-questions--generated-secrets))
 - `templates.secret` + `spec.secrets` — **legacy** (see [Secrets](#secrets-legacy--no-new-apps)); never add them to a new app
 - `templates.kustomization` — wires source + release together
 - `dependsOn` in the release must list all apps from `dependencies.required`
@@ -713,7 +713,7 @@ settings:
 
 **Rules:**
 
-- **`BASE_DOMAIN` is reserved** — never a question, never a custom variable. It flows to the manifests via `postBuild.substitute`.
+- **`BASE_DOMAIN` and `DEVICE_IP` are reserved** — never a question, never a custom variable. They flow to the manifests via `postBuild.substitute`.
 - **One owner per variable.** A variable is either a `.env` default or a `settings` item, never both: the `.env` is the tuned default the app ships with, a settings item is a deliberate install question or machine secret. Listing both means the settings value silently shadows the `.env` (the settings Secret is last in `envFrom`).
 - Apps whose items are **all `generate:`** and that do not set `allowCustom` remain **one-click** — the install dialog never opens, since generated items are hidden and there is nothing to ask.
 

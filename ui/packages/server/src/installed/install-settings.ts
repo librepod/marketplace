@@ -18,7 +18,7 @@ export const SETTINGS_LIMITS = {
 export const JSON_BODY_LIMIT_BYTES = 6 * SETTINGS_LIMITS.totalMaxBytes + 64 * 1024;
 
 /** Platform-provided values: never an install question or a custom variable. */
-export const RESERVED_NAMES: ReadonlySet<string> = new Set(['BASE_DOMAIN']);
+export const RESERVED_NAMES: ReadonlySet<string> = new Set(['BASE_DOMAIN', 'DEVICE_IP']);
 
 const CUSTOM_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
