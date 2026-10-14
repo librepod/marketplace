@@ -12,10 +12,6 @@ images:
 - name: ghcr.io/wg-easy/wg-easy
   newTag: "15.4"
 
-components:
-  - ../../components/frp-upstreams
-  - ../../components/sing-box-router
-
 patches:
 - path: patch-pvc.yaml
 - path: deployment-ca-patch.yaml
