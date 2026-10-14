@@ -5,8 +5,11 @@ import { MeController } from './me.controller';
 import { AuthGuard } from './auth.guard';
 import { CasdoorService } from './casdoor.service';
 import { SessionService } from './session.service';
+import { OnboardingStoreModule } from '../onboarding/onboarding-store.module';
 
 @Module({
+  // The SSO callback finishes first-run onboarding (OnboardingStore).
+  imports: [OnboardingStoreModule],
   controllers: [AuthController, MeController],
   providers: [
     CasdoorService,
