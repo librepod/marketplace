@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: firefly-iii
+spec:
+  # Per-component selector: the shared app.kubernetes.io/name label alone would
+  # make all three Deployments' selectors (and every Service selector) match
+  # every pod in the namespace.
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: core
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: core
+    spec:
+      containers:
+        - name: firefly-iii
+          image: fireflyiii/core
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: firefly-iii
+            - secretRef:
+                name: firefly-iii-settings   # APP_KEY, DB_PASSWORD (generated)
+          volumeMounts:
+            - name: data
+              mountPath: /var/www/html/storage/upload
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: firefly-iii-data

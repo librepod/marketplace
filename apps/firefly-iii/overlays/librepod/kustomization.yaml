@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: firefly-iii
+
+resources:
+- ../../base
+- ingressroute.yaml
+
+# data-importer and postgres/curl tags are bumped by hand — spec.version in
+# metadata.yaml tracks only the core app version.
+images:
+- name: fireflyiii/core
+  newTag: version-6.7.9
+- name: fireflyiii/data-importer
+  newTag: version-2.3.5
+- name: postgres
+  newTag: 18.6-alpine3.24
+- name: curlimages/curl
+  newTag: 8.23.0
+
+# Multi-doc patch files must not carry `target:` (kustomize refuses); each
+# document matches its PVC by name.
+patches:
+- path: ./patch-storage-class.yaml
