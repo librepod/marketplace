@@ -101,13 +101,15 @@ describe('CasdoorAdminService', () => {
       expect(calls.map((c) => c.url)).toEqual(['/api/get-organization?id=admin/librepod']);
     });
 
-    it('creates it when missing', async () => {
+    it('creates it when missing, with a password type — an empty one fails every sign-in', async () => {
       const calls = recordFetch((url) =>
         url.includes('get-organization') ? jsonRes({ status: 'ok', data: null }) : jsonRes({ status: 'ok' }),
       );
       await new CasdoorAdminService().ensureOrganization(session);
       expect(calls[1].url).toBe('/api/add-organization');
-      expect(JSON.parse(calls[1].body!)).toMatchObject({ owner: 'admin', name: 'librepod' });
+      // Casdoor 3.106's add-organization leaves passwordType empty; its users then can't
+      // sign in ("unsupported password type"). bcrypt is Casdoor's own UI default.
+      expect(JSON.parse(calls[1].body!)).toMatchObject({ owner: 'admin', name: 'librepod', passwordType: 'bcrypt' });
     });
 
     it('an error answer is surfaced, not mistaken for "missing"', async () => {

@@ -75,11 +75,19 @@ export class CasdoorAdminService {
     await this.setPassword(session, 'built-in', 'admin', session.password, newPassword);
   }
 
-  /** The platform org. casdoor-sso-controller normally creates it; creating it here
-   * means a slow controller can never wedge a claim. Organizations belong to "admin". */
+  /** The platform org. Nothing else creates it on a fresh device (casdoor-sso-controller
+   * only adds applications to it), so this is its real creation. Organizations belong
+   * to "admin". add-organization leaves passwordType empty, and Casdoor then refuses
+   * every password sign-in in the org ("unsupported password type"); bcrypt is what
+   * Casdoor's own UI gives a new org. */
   async ensureOrganization(session: CasdoorSession): Promise<void> {
     if (await this.getJson(session, `/api/get-organization?id=admin/${encodeURIComponent(this.org)}`)) return;
-    await this.postJson(session, '/api/add-organization', { owner: 'admin', name: this.org, displayName: 'LibrePod' });
+    await this.postJson(session, '/api/add-organization', {
+      owner: 'admin',
+      name: this.org,
+      displayName: 'LibrePod',
+      passwordType: 'bcrypt',
+    });
   }
 
   async getUser(session: CasdoorSession, name: string): Promise<{ name: string } | null> {
