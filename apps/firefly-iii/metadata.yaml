@@ -4,13 +4,13 @@ metadata:
   name: firefly-iii
 spec:
   displayName: "Firefly III"
-  description: "Personal finance manager: accounts, budgets, transactions, recurring rules and bank imports (CSV, GoCardless)"
+  description: "Personal finance manager: accounts, budgets, transactions and recurring rules. Pair with the Firefly III Data Importer app for CSV and GoCardless bank imports"
   icon: "https://raw.githubusercontent.com/firefly-iii/firefly-iii/main/.github/assets/img/logo-small.png"
   category: "Finance"
   website: "https://firefly-iii.org/"
 
   # renovate: datasource=docker depName=fireflyiii/core extractVersion=^version-(?<version>.+)$
-  version: "6.7.9"   # tracks fireflyiii/core; importer/postgres/curl pins move by hand
+  version: "6.7.9"   # tracks fireflyiii/core; postgres/curl pins move by hand
 
   source:
     type: oci-kustomize

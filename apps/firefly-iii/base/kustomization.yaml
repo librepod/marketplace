@@ -13,17 +13,12 @@ configMapGenerator:
 - name: firefly-iii
   envs:
   - firefly-iii.env
-- name: firefly-iii-importer
-  envs:
-  - firefly-iii-importer.env
 
 resources:
 - namespace.yaml
 - pvc.yaml
 - service.yaml
 - deployment.yaml
-- importer-service.yaml
-- importer-deployment.yaml
 - cronjob.yaml
 - externalsecret.yaml
 
