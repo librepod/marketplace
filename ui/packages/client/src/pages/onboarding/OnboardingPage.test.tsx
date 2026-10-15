@@ -96,6 +96,19 @@ describe("OnboardingPage", () => {
     expect(screen.getByRole("list", { name: /before you sign in/i })).toBeVisible()
   })
 
+  it.each([
+    ["Claim", open],
+    ["Account", { ...claimed, account: null }],
+    ["Reach", claimed],
+    ["Trust", { ...claimed, vpnStatus: "running" as const, peerCount: 0 }],
+    ["Connect", { ...claimed, vpnStatus: "running" as const, peerCount: 1 }],
+  ])("%s has no Back: the device's state decides the step, and a reload is the way back", (_step, status) => {
+    localStorage.setItem("librepod-onboarding-welcome", "1")
+    mockApi()
+    page(status)
+    expect(screen.queryByRole("button", { name: /^back$/i })).toBeNull()
+  })
+
   it("a handshake leads to Graduate, the end of the road — no way back to make more keys", () => {
     mockApi()
     page({ ...claimed, vpnStatus: "running", peerCount: 1, lastHandshakeAt: "2026-10-14T10:00:00Z" })

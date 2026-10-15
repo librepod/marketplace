@@ -9,7 +9,9 @@ import { ConnectStep, GraduateStep, TrustStep, VpnStep, type ConnectivityPath } 
  * hero — the owner — and it ends with their first sign-in at the domain. The step
  * comes from the live status on every render (cluster truth), so reloads and pod
  * restarts resume for free. Page memory holds only the connectivity path ("bring
- * my own" — a reload asks again).
+ * my own" — a reload asks again) and a step the owner moved ahead to. There is no
+ * Back: a step the device has done can't be undone from here, and a reload returns
+ * to the first one it hasn't.
  */
 const STEPS = ["Welcome", "Claim", "Account", "Reach", "Trust", "Connect", "Graduate"] as const
 export const WELCOME = 0
@@ -71,11 +73,6 @@ export function OnboardingPage({ status, onRefresh }: { status: OnboardingStatus
           onUseOwn={() => { setPath("own"); go(GRADUATE) }} onSessionLost={onRefresh} />
       )}
       {step === GRADUATE && <GraduateStep status={status} path={path} />}
-      {step > WELCOME && step < GRADUATE && (
-        <button className="mt-6 text-xs text-muted-foreground hover:text-foreground" onClick={() => go(step - 1)}>
-          Back
-        </button>
-      )}
     </Frame>
   )
 }
