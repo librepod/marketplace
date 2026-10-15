@@ -66,6 +66,7 @@ export function parseRecord(data: Record<string, unknown>, version: number): Onb
 export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OnboardingStore.name);
   private cached?: { record: OnboardingRecord; at: number };
+  private finished = false;
   private retry?: NodeJS.Timeout;
 
   constructor(
@@ -108,6 +109,12 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
   async record(): Promise<OnboardingRecord> {
     if (this.cached && Date.now() - this.cached.at < CACHE_TTL_MS) return this.cached.record;
     return this.ensure();
+  }
+
+  /** Whether the last record this process read or saved was `finished`. Unlike the
+   * cache it doesn't expire: status answers with it while OpenBao can't. */
+  get knownFinished(): boolean {
+    return this.finished;
   }
 
   /** Check-and-set against the version the record was read at: a record read before
@@ -197,5 +204,6 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
 
   private remember(record: OnboardingRecord): void {
     this.cached = { record, at: Date.now() };
+    this.finished = record.state === 'finished';
   }
 }

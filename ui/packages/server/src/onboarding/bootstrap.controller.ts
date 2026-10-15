@@ -115,7 +115,10 @@ export class BootstrapController {
     try {
       record = await this.store.record();
     } catch {
-      return status; // waiting: OpenBao can't answer
+      // OpenBao can't answer: waiting — unless this process last saw the device finished.
+      // That answer only routes a visitor to the SSO sign-in, and only reset-onboarding
+      // leaves `finished`, writing through OpenBao, so it stays until OpenBao is back.
+      return this.store.knownFinished ? { ...status, state: 'finished' } : status;
     }
     if (record.state !== 'finished' && !(await this.casdoor.reachable())) return status;
     status.state = record.state;

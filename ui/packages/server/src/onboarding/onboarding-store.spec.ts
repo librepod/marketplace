@@ -76,6 +76,31 @@ describe('OnboardingStore', () => {
       await expect(makeStore(kv).store.record()).rejects.toThrow('sealed');
     });
 
+    it('knows a finished device past the cache: a later OpenBao outage keeps knownFinished', async () => {
+      vi.useFakeTimers({ now: new Date('2026-10-14T10:00:00Z') });
+      const kv = new FakeKv();
+      const { store } = makeStore(kv);
+      const open = await store.record();
+      expect(store.knownFinished).toBe(false);
+      await store.save({ ...open, state: 'finished', finishedAt: 'f' });
+      expect(store.knownFinished).toBe(true);
+      vi.advanceTimersByTime(5_001);
+      kv.failWith = new OpenBaoUnavailableError('sealed');
+      await expect(store.record()).rejects.toThrow('sealed');
+      expect(store.knownFinished).toBe(true);
+    });
+
+    it('forgets the finish once OpenBao answers otherwise: a reset from the CLI is seen', async () => {
+      vi.useFakeTimers({ now: new Date('2026-10-14T10:00:00Z') });
+      const kv = new FakeKv();
+      const { store } = makeStore(kv);
+      await store.save({ ...(await store.record()), state: 'finished', finishedAt: 'f' });
+      await makeStore(kv).store.reset();
+      vi.advanceTimersByTime(5_001);
+      expect((await store.record()).state).toBe('open');
+      expect(store.knownFinished).toBe(false);
+    });
+
     it('a malformed record is an error, never a guessed state', async () => {
       const kv = new FakeKv();
       await kv.writeEntry('system', RECORD, { state: 'bogus', code: 'X', generation: 1 });

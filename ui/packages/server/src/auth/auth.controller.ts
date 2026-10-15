@@ -53,9 +53,10 @@ export class AuthController {
     const token = this.session.sign(identity);
     res.cookie(this.session.cookieName, token, cookieOpts(this.session.ttlSeconds));
     // The first sign-in since the claim finishes onboarding (spec §8). It never
-    // blocks the sign-in: a failed write is retried by the next authenticated
+    // blocks the sign-in, not even while OpenBao is slow: the redirect doesn't wait
+    // for it, and a failed write is retried by the next authenticated
     // GET /api/bootstrap/status.
-    await this.onboarding
+    void this.onboarding
       .finishIfClaimed()
       .catch((err: Error) => this.logger.warn(`finishing onboarding failed: ${err.message}`));
     res.clearCookie(OAUTH_STATE_COOKIE);

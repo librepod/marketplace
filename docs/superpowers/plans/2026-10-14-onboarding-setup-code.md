@@ -748,6 +748,7 @@ git log --oneline -1
     - `start(delayMs?: number): Promise<void>`
     - `record(): Promise<OnboardingRecord>`: cached for at most 5 s; creates the record when missing; throws when OpenBao can't answer.
     - `save(record: OnboardingRecord): Promise<void>`: check-and-set against `record.version`, so a save based on a stale read can't undo a reset (revised after the PR #277 review; `reset()` stays unconditional).
+    - `knownFinished: boolean` (getter): whether the last record this process read or saved was `finished`; unlike the cache it doesn't expire (added after the PR #277 review).
     - `finishIfClaimed(signedInAtMs?: number): Promise<boolean>`
     - `reset(): Promise<string>`: returns the new code.
     - `adminPassword(): Promise<string | null>`
@@ -1780,7 +1781,7 @@ git log --oneline -1
     - 401 for a missing or invalid cookie, the wrong generation, or a state other than `claimed`.
     - 503 (`STORE_UNAVAILABLE`) when OpenBao can't answer.
   - `AuthGuard` exempts `/api/bootstrap/` and rejects `sub === 'onboarding'`.
-  - `AuthController.callback` calls `OnboardingStore.finishIfClaimed()` after a successful sign-in and never fails the sign-in because of it.
+  - `AuthController.callback` calls `OnboardingStore.finishIfClaimed()` after a successful sign-in and never fails the sign-in because of it. Revised after the PR #277 review: the redirect doesn't wait for it either, so a slow OpenBao delays no sign-in.
   - `AuthModule` imports `OnboardingStoreModule`.
 
 - [ ] **Step 1: Carry #215's AuthGuard change and its spec**

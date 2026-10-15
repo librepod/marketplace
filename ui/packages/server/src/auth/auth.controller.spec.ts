@@ -51,6 +51,17 @@ describe('AuthController.callback', () => {
     expect(res.redirect).toHaveBeenCalledWith(302, '/');
   });
 
+  it('the redirect never waits on the finish write: a slow OpenBao delays no sign-in', async () => {
+    let finish = (_done: boolean) => {};
+    const { controller, finishIfClaimed } = make(vi.fn(() => new Promise<boolean>((resolve) => (finish = resolve))));
+    const res = fakeRes();
+    const signIn = controller.callback(req, res, 'code-1', 'state-1');
+    await vi.waitFor(() => expect(res.redirect).toHaveBeenCalledWith(302, '/'));
+    expect(finishIfClaimed).toHaveBeenCalledOnce();
+    finish(true);
+    await signIn;
+  });
+
   it('a bad state is refused before anything is finished', async () => {
     const { controller, finishIfClaimed } = make();
     await expect(controller.callback(req, fakeRes(), 'code-1', 'other-state')).rejects.toThrow(BadRequestException);

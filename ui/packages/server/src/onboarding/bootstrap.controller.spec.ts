@@ -38,6 +38,7 @@ afterEach(() => {
 
 function make(o: {
   record?: OnboardingRecord | Error;
+  knownFinished?: boolean;
   reachable?: boolean;
   vpn?: string | Error;
   peers?: WgPeer[] | Error;
@@ -51,6 +52,7 @@ function make(o: {
   const store = {
     record: vi.fn(async () => value(o.record ?? claimed)),
     finishIfClaimed: vi.fn(async () => false),
+    knownFinished: o.knownFinished ?? false,
   };
   const onboarding = {
     claim: vi.fn(async () => claimed),
@@ -117,6 +119,13 @@ describe('BootstrapController.status', () => {
 
   it('waiting while OpenBao cannot answer', async () => {
     expect((await make({ record: new Error('sealed') }).controller.status(req('192.168.1.50'))).state).toBe('waiting');
+  });
+
+  it('a device last seen finished stays finished while OpenBao cannot answer: a signed-out visitor still gets the sign-in', async () => {
+    const { controller, casdoor } = make({ record: new Error('sealed'), knownFinished: true });
+    expect(await controller.status(req('libre.pod'))).toMatchObject({ state: 'finished', arrival: 'domain', session: false });
+    expect((await controller.status(req('192.168.1.50'))).state).toBe('finished');
+    expect(casdoor.reachable).not.toHaveBeenCalled();
   });
 
   it('waiting while Casdoor is down before onboarding finishes; finished needs no Casdoor', async () => {

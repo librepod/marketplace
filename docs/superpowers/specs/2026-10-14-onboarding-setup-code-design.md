@@ -77,7 +77,7 @@ four states:
 
 | State | Meaning |
 |---|---|
-| `waiting` | OpenBao is unreachable, or the state is `open`/`claimed` and Casdoor is unreachable |
+| `waiting` | OpenBao is unreachable (unless the server last saw the device `finished`), or the state is `open`/`claimed` and Casdoor is unreachable |
 | `open` | a setup code exists; nobody has claimed with it |
 | `claimed` | the admin password was set with the current code; no SSO sign-in yet |
 | `finished` | a user signed in with SSO once since the last claim |
@@ -234,8 +234,9 @@ step. Wrong → 403.
 
 **Finishing.** The SSO callback (`/api/auth/callback`), after a successful
 sign-in while the state is `claimed`, writes `state: finished`, `finishedAt`.
-Only the first user exists at that point. If the write fails, the sign-in
-still succeeds; the next authenticated `GET /api/bootstrap/status` retries it.
+Only the first user exists at that point. The redirect doesn't wait for the
+write, and if it fails the sign-in still succeeds; the next authenticated
+`GET /api/bootstrap/status` retries it.
 
 **Onboarding cookie** (`mp_onboarding`, kept from #215): HMAC-signed by
 SessionService with `sub: 'onboarding'` plus the record's `generation`; 8h
@@ -365,7 +366,10 @@ interface OnboardingStatus {
   cookie, and existing cookies are refused. Only a reset (cluster access)
   reopens onboarding.
 - **Fail closed.** OpenBao unreachable → `waiting`; every cookie-gated
-  endpoint is unavailable. A wizard already on screen stays, so a blip loses
+  endpoint is unavailable. One exception: a device the server last saw
+  `finished` stays `finished`, so a signed-out visitor still reaches the SSO
+  sign-in. That answer unlocks nothing, and only a reset (which needs OpenBao)
+  leaves `finished`. A wizard already on screen stays, so a blip loses
   nothing the owner typed, but its actions fail until the device answers.
 - **No writes in GET**, except the retried finish write for an authenticated
   status call (§8).

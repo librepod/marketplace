@@ -254,7 +254,9 @@ because the provider's contents API has no DELETE route.
 
 One OpenBao record, `system/marketplace-ui/onboarding` (`OnboardingStore`): `open` (a setup code
 exists) → `claimed` (admin password set with the code) → `finished` (first SSO sign-in since the
-claim). `waiting` is computed: OpenBao unreachable, or Casdoor unreachable before `finished`. The
+claim). `waiting` is computed: OpenBao unreachable, or Casdoor unreachable before `finished`; a device
+the server last saw `finished` (`OnboardingStore.knownFinished`, kept past the cache) stays `finished`
+while OpenBao is down, so signed-out visitors still reach SSO. The
 store creates the record on start (KV check-and-set, `cas: 0`) and logs `LibrePod setup code: …`
 while open/claimed; reads are cached ≤5 s so `reset-onboarding` (another process) lands without a
 restart. `save()` is check-and-set against the version the record was read at (`OnboardingRecord.version`,
@@ -268,7 +270,8 @@ wizard gets a 409 to reload. `reset()` alone writes unconditionally. The admin p
   `sub: 'onboarding'` + the record's `generation`, httpOnly, NOT Secure. `OnboardingGuard` admits it
   only while `claimed` with a matching generation; `AuthGuard` never admits it.
 - `POST /account`, `POST /install`, `/wireguard/*` (wg-easy proxy) — `OnboardingGuard`-gated.
-- The SSO callback calls `OnboardingStore.finishIfClaimed()`; a failure never blocks the sign-in.
+- The SSO callback calls `OnboardingStore.finishIfClaimed()` without awaiting it: neither a failure nor a
+  slow OpenBao blocks the sign-in.
 - `reset-onboarding` (`/usr/local/bin` in the image) runs `dist/onboarding/reset-onboarding.cli.js`:
   new code, `open`, generation + 1, account kept.
 - `BOOTSTRAP_MODE_OVERRIDE` forces the state (Tier 1: `finished`) and skips record creation.
