@@ -88,7 +88,7 @@ What each visitor sees:
 
 | State | At the raw IP | At the domain |
 |---|---|---|
-| `waiting` | WakingScreen ("your LibrePod is waking up") | WakingScreen |
+| `waiting` | WakingScreen ("your LibrePod is waking up"); a wizard already on screen stays, with a "reconnecting" notice | WakingScreen |
 | `open` | wizard: Welcome → Claim | "Not set up yet — open this device's IP address to start" |
 | `claimed`, browser holds the onboarding cookie | wizard continues (Account → VPN → …) | normal SSO sign-in, which finishes onboarding |
 | `claimed`, no cookie | ResumeScreen: "Enter the setup code to continue" | normal SSO sign-in |
@@ -364,8 +364,9 @@ interface OnboardingStatus {
 - **Closing for good.** After `finished`, no request can obtain an onboarding
   cookie, and existing cookies are refused. Only a reset (cluster access)
   reopens onboarding.
-- **Fail closed.** OpenBao unreachable → `waiting`; the wizard and every
-  cookie-gated endpoint are unavailable.
+- **Fail closed.** OpenBao unreachable → `waiting`; every cookie-gated
+  endpoint is unavailable. A wizard already on screen stays, so a blip loses
+  nothing the owner typed, but its actions fail until the device answers.
 - **No writes in GET**, except the retried finish write for an authenticated
   status call (§8).
 

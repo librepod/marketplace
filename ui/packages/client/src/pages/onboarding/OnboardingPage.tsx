@@ -36,13 +36,18 @@ export function deriveStep(s: OnboardingStatus): number {
   return GRADUATE
 }
 
-export function OnboardingPage({ status, onRefresh }: { status: OnboardingStatus; onRefresh: () => void }) {
+/** `reconnecting`: the device answered `waiting` mid-setup; `status` is the last good one. */
+export function OnboardingPage({ status, onRefresh, reconnecting = false }: {
+  status: OnboardingStatus
+  onRefresh: () => void
+  reconnecting?: boolean
+}) {
   // Hooks first — the early return below must never skip them.
   const [userStep, setUserStep] = useState<number | null>(null)
   const [path, setPath] = useState<ConnectivityPath>("wireguard")
 
   if (status.state === "claimed" && !status.session) {
-    return <Frame><ResumeScreen onResumed={onRefresh} /></Frame>
+    return <Frame reconnecting={reconnecting}><ResumeScreen onResumed={onRefresh} /></Frame>
   }
 
   const derived = deriveStep(status)
@@ -52,7 +57,7 @@ export function OnboardingPage({ status, onRefresh }: { status: OnboardingStatus
   const go = setUserStep
 
   return (
-    <Frame>
+    <Frame reconnecting={reconnecting}>
       <StepRail current={step} />
       <Separator className="my-6" />
       {step === WELCOME && <WelcomeStep onBegin={() => { localStorage.setItem(WELCOME_KEY, "1"); go(CLAIM) }} />}
@@ -77,10 +82,17 @@ export function OnboardingPage({ status, onRefresh }: { status: OnboardingStatus
   )
 }
 
-function Frame({ children }: { children: ReactNode }) {
+function Frame({ children, reconnecting }: { children: ReactNode; reconnecting: boolean }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
-      <div className="w-full max-w-lg">{children}</div>
+      <div className="w-full max-w-lg">
+        {reconnecting && (
+          <p role="status" className="mb-6 rounded-md border border-border px-3 py-2 text-xs text-muted-foreground">
+            Your LibrePod is busy for a moment — reconnecting. What you've entered here is kept.
+          </p>
+        )}
+        {children}
+      </div>
     </div>
   )
 }

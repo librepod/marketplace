@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { render, screen, fireEvent } from "@testing-library/react"
 import { MemoryRouter, Routes, Route } from "react-router-dom"
 import type { OnboardingStatus } from "@librepod/shared"
 import { RootGate } from "@/components/RootGate"
@@ -12,19 +12,21 @@ const base: OnboardingStatus = {
   vpnStatus: null, peerCount: null, lastHandshakeAt: null, endpointSuggestion: null,
 }
 
+const tree = () => (
+  <MemoryRouter initialEntries={["/catalog"]}>
+    <Routes>
+      <Route element={<RootGate />}>
+        <Route path="*" element={<p>APP-MARKER</p>} />
+      </Route>
+    </Routes>
+  </MemoryRouter>
+)
+
 function gateWith(status: OnboardingStatus | undefined, isPending = false) {
   vi.mocked(useBootstrapStatus).mockReturnValue({ data: status, isPending, refetch: vi.fn() } as unknown as ReturnType<
     typeof useBootstrapStatus
   >)
-  return render(
-    <MemoryRouter initialEntries={["/catalog"]}>
-      <Routes>
-        <Route element={<RootGate />}>
-          <Route path="*" element={<p>APP-MARKER</p>} />
-        </Route>
-      </Routes>
-    </MemoryRouter>,
-  )
+  return render(tree())
 }
 
 describe("RootGate — state × arrival", () => {
@@ -81,5 +83,37 @@ describe("RootGate — state × arrival", () => {
     gateWith({ ...base, state: "finished" })
     expect(screen.getByRole("heading", { name: "libre.pod" })).toBeVisible()
     expect(screen.queryByText(/welcome to your librepod/i)).toBeNull()
+  })
+})
+
+describe("RootGate — a waiting blip mid-wizard", () => {
+  beforeEach(() => localStorage.clear())
+
+  const account = { ...base, state: "claimed" as const, session: true }
+  const reconnecting = () => screen.queryByRole("status")
+
+  it("keeps the wizard on screen with what the owner typed, and says it is reconnecting", () => {
+    const { rerender } = gateWith(account)
+    fireEvent.change(screen.getByLabelText("Username"), { target: { value: "alex" } })
+
+    vi.mocked(useBootstrapStatus).mockReturnValue({ data: base, isPending: false, refetch: vi.fn() } as never)
+    rerender(tree())
+    expect(screen.getByLabelText("Username")).toHaveValue("alex")
+    expect(reconnecting()).toHaveTextContent(/reconnecting/i)
+    expect(screen.queryByRole("heading", { name: /waking up/i })).toBeNull()
+
+    vi.mocked(useBootstrapStatus).mockReturnValue({ data: account, isPending: false, refetch: vi.fn() } as never)
+    rerender(tree())
+    expect(screen.getByLabelText("Username")).toHaveValue("alex")
+    expect(reconnecting()).toBeNull()
+  })
+
+  it("only the wizard is kept: after a finished answer, waiting is WakingScreen again", () => {
+    const { rerender } = gateWith(account)
+    vi.mocked(useBootstrapStatus).mockReturnValue({ data: { ...base, state: "finished" }, isPending: false, refetch: vi.fn() } as never)
+    rerender(tree())
+    vi.mocked(useBootstrapStatus).mockReturnValue({ data: base, isPending: false, refetch: vi.fn() } as never)
+    rerender(tree())
+    expect(screen.getByRole("heading", { name: /waking up/i })).toBeVisible()
   })
 })

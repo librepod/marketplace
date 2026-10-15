@@ -5149,7 +5149,7 @@ git log --oneline -1
 - Produces:
   - `useBootstrapStatus()`: TanStack query `["bootstrapStatus"]` that polls every 4 s until `state === "finished"`.
   - `WakingScreen()`, `NotSetUpScreen()`, `UseDomainScreen({ status })`.
-  - `RootGate()`: the router's root element. AuthGate and AppShell sit under its `<Outlet />`.
+  - `RootGate()`: the router's root element. AuthGate and AppShell sit under its `<Outlet />`. Revised after the PR #277 review: a `waiting` answer after the wizard has shown keeps `OnboardingPage` mounted on the last good status with a `reconnecting` notice, instead of swapping in WakingScreen and losing what the owner typed.
 
 - [ ] **Step 1: Write the failing tests**
 
