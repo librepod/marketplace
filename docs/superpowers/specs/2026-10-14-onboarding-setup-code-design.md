@@ -155,7 +155,9 @@ the server does (Kubernetes auth), writes a new code with `state: open`,
 `generation + 1`, clears `claimedAt`/`finishedAt`, keeps `account`, and
 prints the new code. It exits non-zero if OpenBao is unreachable. The server
 caches the record for at most 5 seconds, so the reset takes effect without a
-restart.
+restart. The server's own writes to the record are check-and-set against the
+version they read, so a wizard request working from the cached copy can't undo
+the reset: it gets a 409 that asks to reload the page.
 
 The reset leaves the admin password, users, installed apps, their data and VPN
 peers alone. It is the recovery for: a lost personal password (§8 Account), a

@@ -199,6 +199,16 @@ describe('OnboardingService', () => {
       });
     });
 
+    it('a reset since the record was read is a 409 to reload, and the reset stands', async () => {
+      const t = await claimed();
+      const cli = new OnboardingStore(t.kv as unknown as OpenBaoClient, new ConfigService({}));
+      const code = await cli.reset();
+      await expect(t.service.account({ username: 'alex', password: 'personal-pass-12' })).rejects.toThrow(
+        new ConflictException('The setup changed while you were on this step — reload the page'),
+      );
+      expect(t.kv.get('system', RECORD)).toMatchObject({ state: 'open', code, generation: 2, account: null });
+    });
+
     it('a new user needs a password', async () => {
       const t = await claimed();
       await expect(t.service.account({ username: 'alex' })).rejects.toThrow(

@@ -7,6 +7,7 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { OpenBaoCasMismatchError } from '../installed/openbao.client';
 import { CasdoorAdminService } from './casdoor-admin.service';
 import { OnboardingStore, STORE_UNAVAILABLE, type OnboardingRecord } from './onboarding-store';
 import { setupCodeMatches } from './setup-code';
@@ -15,6 +16,7 @@ import { setupCodeMatches } from './setup-code';
 export const MIN_PASSWORD_LENGTH = 12;
 const USERNAME = /^[a-z0-9.-]{1,39}$/;
 const CHANGED_OUTSIDE = "Casdoor's admin password was changed outside LibrePod";
+const RECORD_CHANGED = 'The setup changed while you were on this step — reload the page';
 
 export function checkPassword(value: unknown): string {
   if (typeof value !== 'string' || value.length < MIN_PASSWORD_LENGTH || /\s/.test(value)) {
@@ -116,12 +118,15 @@ export class OnboardingService {
     throw new ForbiddenException("That setup code isn't right");
   }
 
-  /** OpenBao trouble is a retryable 503 for the wizard; HTTP errors pass through. */
+  /** OpenBao trouble is a retryable 503 for the wizard; HTTP errors pass through. A
+   * record that changed since it was read (a reset, most likely) is a 409: retrying
+   * the same request can't help, reloading the wizard can. */
   private async stored<T>(op: Promise<T>): Promise<T> {
     try {
       return await op;
     } catch (err) {
       if (err instanceof HttpException) throw err;
+      if (err instanceof OpenBaoCasMismatchError) throw new ConflictException(RECORD_CHANGED);
       this.logger.warn(`onboarding store: ${(err as Error).message}`);
       throw new ServiceUnavailableException(STORE_UNAVAILABLE);
     }

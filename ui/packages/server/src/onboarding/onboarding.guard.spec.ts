@@ -6,7 +6,7 @@ import type { OnboardingRecord, OnboardingStore } from './onboarding-store';
 
 const claimed: OnboardingRecord = {
   state: 'claimed', code: '7KQMX3RT9VHC', generation: 3, account: null, accountGeneration: null,
-  createdAt: 't', claimedAt: 'c', finishedAt: null,
+  createdAt: 't', claimedAt: 'c', finishedAt: null, version: 4,
 };
 
 let session: SessionService;

@@ -3,7 +3,7 @@ import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OnboardingStore } from './onboarding-store';
 import { SETUP_CODE_ALPHABET, formatSetupCode } from './setup-code';
-import { OpenBaoUnavailableError, type OpenBaoClient } from '../installed/openbao.client';
+import { OpenBaoCasMismatchError, OpenBaoUnavailableError, type OpenBaoClient } from '../installed/openbao.client';
 import { FakeKv } from '../../test/fixtures/fake-kv';
 
 const RECORD = 'marketplace-ui/onboarding';
@@ -179,6 +179,19 @@ describe('OnboardingStore', () => {
       const { store } = makeStore(kv);
       await store.reset();
       expect(kv.get('system', RECORD)).toMatchObject({ state: 'open', generation: 1, account: null });
+    });
+
+    it('save() never undoes a write since the record was read: a reset by the CLI stands', async () => {
+      const kv = new FakeKv();
+      const { store } = makeStore(kv);
+      const cached = await store.record();
+      const code = await makeStore(kv).store.reset(); // the CLI: another process, the same entry
+      await expect(store.save({ ...cached, state: 'claimed', claimedAt: 'c' })).rejects.toThrow(
+        OpenBaoCasMismatchError,
+      );
+      expect(kv.get('system', RECORD)).toMatchObject({ state: 'open', code, generation: 2 });
+      // and the next read is fresh, not the cached record for up to 5 s more
+      expect((await store.record()).generation).toBe(2);
     });
   });
 

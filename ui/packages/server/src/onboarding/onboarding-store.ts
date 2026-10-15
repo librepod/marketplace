@@ -17,7 +17,11 @@ export interface OnboardingRecord {
   createdAt: string;
   claimedAt: string | null;
   finishedAt: string | null;
+  /** The KV version this record was read at — save()'s check-and-set. Not stored. */
+  version: number;
 }
+
+type StoredRecord = Omit<OnboardingRecord, 'version'>;
 
 export const STORE_UNAVAILABLE = "LibrePod's secret store isn't reachable right now — try again in a minute.";
 
@@ -32,7 +36,7 @@ const STATES: readonly StoredState[] = ['open', 'claimed', 'finished'];
 const text = (value: unknown): string | null => (typeof value === 'string' ? value : null);
 const count = (value: unknown): number | null => (typeof value === 'number' ? value : null);
 
-export function parseRecord(data: Record<string, unknown>): OnboardingRecord {
+export function parseRecord(data: Record<string, unknown>, version: number): OnboardingRecord {
   const state = data.state as StoredState;
   const code = text(data.code);
   const generation = count(data.generation);
@@ -48,6 +52,7 @@ export function parseRecord(data: Record<string, unknown>): OnboardingRecord {
     createdAt: text(data.createdAt) ?? '',
     claimedAt: text(data.claimedAt),
     finishedAt: text(data.finishedAt),
+    version,
   };
 }
 
@@ -105,9 +110,13 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
     return this.ensure();
   }
 
+  /** Check-and-set against the version the record was read at: a record read before
+   * someone else's write (a reset by the CLI, a concurrent request) fails with
+   * OpenBaoCasMismatchError instead of undoing that write. */
   async save(record: OnboardingRecord): Promise<void> {
-    await this.bao.writeEntry(this.mount, RECORD_PATH, { ...record });
-    this.remember(record);
+    const { version, ...data } = record;
+    await this.write(data, version);
+    this.remember({ ...record, version: version + 1 });
   }
 
   /** The SSO callback's hook (spec §8): the first sign-in since the claim finishes
@@ -123,10 +132,11 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
   }
 
   /** `reset-onboarding` (spec §6): a new code, state open, generation + 1. Keeps the
-   * account; clears claimedAt/finishedAt. Also repairs a missing or malformed record. */
+   * account; clears claimedAt/finishedAt. Also repairs a missing or malformed record.
+   * The operator's command wins whatever the record holds: no check-and-set. */
   async reset(): Promise<string> {
     const old = (await this.bao.readEntry(this.mount, RECORD_PATH))?.data ?? {};
-    const record: OnboardingRecord = {
+    const record: StoredRecord = {
       state: 'open',
       code: generateSetupCode(),
       generation: (count(old.generation) ?? 0) + 1,
@@ -136,7 +146,7 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
       claimedAt: null,
       finishedAt: null,
     };
-    await this.save(record);
+    await this.write(record);
     return record.code;
   }
 
@@ -157,26 +167,32 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
     const now = new Date().toISOString();
     const fresh: OnboardingRecord = {
       state: 'open', code: generateSetupCode(), generation: 1, account: null, accountGeneration: null,
-      createdAt: now, claimedAt: null, finishedAt: null,
+      createdAt: now, claimedAt: null, finishedAt: null, version: 0,
     };
     try {
-      await this.bao.writeEntry(this.mount, RECORD_PATH, { ...fresh }, { cas: 0 });
+      await this.save(fresh);
     } catch (err) {
       if (!(err instanceof OpenBaoCasMismatchError)) throw err;
       const winner = await this.read();
       if (!winner) throw err;
       return winner;
     }
-    this.remember(fresh);
-    return fresh;
+    return { ...fresh, version: 1 };
   }
 
   private async read(): Promise<OnboardingRecord | null> {
     const entry = await this.bao.readEntry(this.mount, RECORD_PATH);
     if (!entry) return null;
-    const record = parseRecord(entry.data);
+    const record = parseRecord(entry.data, entry.version);
     this.remember(record);
     return record;
+  }
+
+  /** Drops the cache first: whatever the outcome — a failed write may still have
+   * landed — the next read is fresh unless save() caches what it wrote. */
+  private async write(data: StoredRecord, cas?: number): Promise<void> {
+    this.cached = undefined;
+    await this.bao.writeEntry(this.mount, RECORD_PATH, { ...data }, cas === undefined ? {} : { cas });
   }
 
   private remember(record: OnboardingRecord): void {

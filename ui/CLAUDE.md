@@ -257,7 +257,10 @@ exists) → `claimed` (admin password set with the code) → `finished` (first S
 claim). `waiting` is computed: OpenBao unreachable, or Casdoor unreachable before `finished`. The
 store creates the record on start (KV check-and-set, `cas: 0`) and logs `LibrePod setup code: …`
 while open/claimed; reads are cached ≤5 s so `reset-onboarding` (another process) lands without a
-restart. The admin password lives readable in `system/admin`.
+restart. `save()` is check-and-set against the version the record was read at (`OnboardingRecord.version`,
+not stored), so a request holding a cached record can't undo a reset: it fails, the cache drops, and the
+wizard gets a 409 to reload. `reset()` alone writes unconditionally. The admin password lives readable in
+`system/admin`.
 - `GET /status` — public, read-only, never sets a cookie. A valid SSO session short-circuits to
   `finished` (and retries the finish write). Telemetry (account, VPN status, peers, endpoint
   suggestion) only with a valid onboarding cookie.

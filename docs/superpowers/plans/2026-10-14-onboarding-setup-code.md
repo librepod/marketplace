@@ -741,13 +741,13 @@ git log --oneline -1
 - Consumes: `OpenBaoClient.readEntry`/`writeEntry`, `OpenBaoCasMismatchError`, `KvEntry` (Task 3); `generateSetupCode`, `formatSetupCode` (Task 4); `InstalledModule` exporting `OpenBaoClient` (Task 1).
 - Produces:
   - `type StoredState = 'open' | 'claimed' | 'finished'`.
-  - `interface OnboardingRecord { state: StoredState; code: string; generation: number; account: string | null; accountGeneration: number | null; createdAt: string; claimedAt: string | null; finishedAt: string | null }`.
-  - `parseRecord(data: Record<string, unknown>): OnboardingRecord`: throws `/malformed/` on a bad record.
+  - `interface OnboardingRecord { state: StoredState; code: string; generation: number; account: string | null; accountGeneration: number | null; createdAt: string; claimedAt: string | null; finishedAt: string | null; version: number }`. `version` is the KV version the record was read at and is not stored (added after the PR #277 review).
+  - `parseRecord(data: Record<string, unknown>, version: number): OnboardingRecord`: throws `/malformed/` on a bad record.
   - `const STORE_UNAVAILABLE = "LibrePod's secret store isn't reachable right now — try again in a minute."`
   - `class OnboardingStore` (`@Injectable`, `OnModuleInit`, `OnModuleDestroy`), with these methods:
     - `start(delayMs?: number): Promise<void>`
     - `record(): Promise<OnboardingRecord>`: cached for at most 5 s; creates the record when missing; throws when OpenBao can't answer.
-    - `save(record: OnboardingRecord): Promise<void>`
+    - `save(record: OnboardingRecord): Promise<void>`: check-and-set against `record.version`, so a save based on a stale read can't undo a reset (revised after the PR #277 review; `reset()` stays unconditional).
     - `finishIfClaimed(signedInAtMs?: number): Promise<boolean>`
     - `reset(): Promise<string>`: returns the new code.
     - `adminPassword(): Promise<string | null>`

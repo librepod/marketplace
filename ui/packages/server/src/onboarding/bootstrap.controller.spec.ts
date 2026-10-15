@@ -22,7 +22,7 @@ import type { NodeAddressService } from '../installed/node-address.service';
 
 const claimed: OnboardingRecord = {
   state: 'claimed', code: '7KQMX3RT9VHC', generation: 3, account: null, accountGeneration: null,
-  createdAt: '2026-10-14T09:00:00.000Z', claimedAt: '2026-10-14T10:00:00.000Z', finishedAt: null,
+  createdAt: '2026-10-14T09:00:00.000Z', claimedAt: '2026-10-14T10:00:00.000Z', finishedAt: null, version: 4,
 };
 
 let session: SessionService;
