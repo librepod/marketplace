@@ -18,3 +18,5 @@ spec:
           envFrom:
             - configMapRef:
                 name: firefly-iii-data-importer
+            - secretRef:
+                name: firefly-iii-data-importer-settings
