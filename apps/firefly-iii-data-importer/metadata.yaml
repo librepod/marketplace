@@ -4,7 +4,7 @@ metadata:
   name: firefly-iii-data-importer
 spec:
   displayName: "Firefly III Data Importer"
-  description: "Companion app for Firefly III: import transactions from CSV files or bank APIs (GoCardless, Salt Edge, Nordigen). Requires a running Firefly III install; paste its URL and a personal access token on first use"
+  description: "Companion app for Firefly III: import transactions from CSV files or bank APIs (GoCardless, Salt Edge, Nordigen). Requires a running Firefly III install and a Personal Access Token (create one in Firefly III under Profile → OAuth) — install and log into Firefly III first"
   icon: "https://raw.githubusercontent.com/firefly-iii/firefly-iii/main/.github/assets/img/logo-small.png"
   category: "Finance"
   website: "https://data-importer.firefly-iii.org/"
@@ -17,9 +17,18 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/firefly-iii-data-importer"
     path: ./overlays/librepod
 
-  # No settings: the importer takes no credentials at install — the Firefly III
-  # PAT can only be created after first core login, so its web UI prompts for it
-  # on first use. Stays one-click.
+  # The PAT is a required install question: the importer v2 web UI only offers
+  # the OAuth client-ID flow, which 500s under LibrePod's header SSO (Passport's
+  # authorize endpoint needs a stateful guard; remote_user_guard isn't one), so
+  # the PAT must arrive via FIREFLY_III_ACCESS_TOKEN env — deliverable only at
+  # install through settings. See firefly-iii app's AUTHENTICATION_GUARD.
+  settings:
+    items:
+      - name: FIREFLY_III_ACCESS_TOKEN
+        label: "Firefly III Personal Access Token"
+        description: "Create it in Firefly III → Profile → OAuth → Personal Access Tokens → Create new token. Copy the long token (starts with eyJ...) and paste it here."
+        required: true
+        sensitive: true
   dependencies:
     required:
       - kind: IngressController
