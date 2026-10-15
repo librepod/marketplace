@@ -112,8 +112,13 @@ jobs:
       - name: Get app version
         id: version
         run: |
-          VERSION=$(grep 'version:' apps/${{ matrix.app }}/metadata.yaml \
-            | head -1 | sed 's/.*version: *//' | tr -d '"')
+          # Anchor to the spec field (not any "version:" substring) and strip a
+          # trailing comment: the output is interpolated verbatim into the push
+          # script below, where a stray '#' comments out the line-continuation
+          # backslash and splits the flux push command ("--source is required"
+          # + an orphaned "--path=..." line).
+          VERSION=$(grep '^  version:' apps/${{ matrix.app }}/metadata.yaml \
+            | head -1 | sed -e 's/.*version: *//' -e 's/[[:space:]]*#.*//' | tr -d '"')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Guard — self-built app pin must reference an existing image
