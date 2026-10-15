@@ -179,6 +179,11 @@ kubectl describe pod <pod-name> -n <namespace> | grep -A20 "Events"
 
 **Common causes**:
 - Missing ConfigMap/Secret referenced as environment variable
+- Missing OpenBao settings entry: apps whose settings live in OpenBao render a
+  `CreateContainerConfigError` (not CrashLoop) when the `apps/<app-name>` KV
+  entry doesn't exist — the ExternalSecret's target Secret is never created.
+  Check `kubectl get externalsecret -n <namespace>` (SecretStore conditions),
+  then seed the entry (see Stage 1 of SKILL.md)
 - App fails on startup due to invalid configuration
 - Missing PVC mount (volume not bound)
 - Permission issues writing to mounted volumes

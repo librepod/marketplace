@@ -1,0 +1,100 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: firefly-iii
+spec:
+  displayName: "Firefly III"
+  description: "Personal finance manager: accounts, budgets, transactions and recurring rules. Pair with the Firefly III Data Importer app for CSV and GoCardless bank imports"
+  icon: "https://raw.githubusercontent.com/firefly-iii/firefly-iii/main/.github/assets/img/logo-small.png"
+  category: "Finance"
+  website: "https://firefly-iii.org/"
+
+  # renovate: datasource=docker depName=fireflyiii/core extractVersion=^version-(?<version>.+)$
+  version: "6.7.9"   # tracks fireflyiii/core; postgres/curl pins move by hand
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/firefly-iii"
+    path: ./overlays/librepod
+
+  # All items are machine-generated: the install dialog never opens (one-click).
+  # APP_KEY and STATIC_CRON_TOKEN must be exactly 32 chars — the generator
+  # emits `length` hex chars.
+  settings:
+    items:
+      - name: APP_KEY
+        label: "Application key"
+        description: "Laravel encryption key for sessions and encrypted data"
+        sensitive: true
+        generate:
+          length: 32
+      - name: DB_PASSWORD
+        label: "Database password"
+        description: "Password of the bundled PostgreSQL instance"
+        sensitive: true
+        generate:
+          length: 32
+      - name: STATIC_CRON_TOKEN
+        label: "Cron token"
+        description: "Secret token for the recurring-transactions cron endpoint"
+        sensitive: true
+        generate:
+          length: 32
+
+  dependencies:
+    required:
+      - kind: IngressController
+        description: "Traefik (provided by traefik app)"
+      - kind: StorageClass
+        description: "nfs-client (provided by nfs-provisioner app)"
+      - kind: AuthProxy
+        description: "oauth2-proxy (provided by oauth2-proxy app)"
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-firefly-iii
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "firefly-iii"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/firefly-iii
+        ref:
+          tag: "__VERSION__"   # sentinel: catalog generation fills it from spec.version
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-firefly-iii
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "firefly-iii"
+      spec:
+        dependsOn:
+          - name: traefik
+          - name: storage
+          - name: oauth2-proxy
+        force: true
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-firefly-iii
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+        postBuild:
+          substitute:
+            BASE_DOMAIN: "${BASE_DOMAIN}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml

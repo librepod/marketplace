@@ -1,0 +1,79 @@
+# Labels are hardcoded here: the including base's `labels:` transformer does not
+# reach resources contributed by a component.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: firefly-iii-postgres
+  labels:
+    app.kubernetes.io/name: firefly-iii
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: firefly-iii
+      app.kubernetes.io/component: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: firefly-iii
+        app.kubernetes.io/component: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+          envFrom:
+            - configMapRef:
+                name: firefly-iii-postgres
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: firefly-iii-settings
+                  key: DB_PASSWORD
+          volumeMounts:
+            # postgres >= 18 hard-errors on the legacy /var/lib/postgresql/data
+            # path (versioned subdirs) — mount the parent, matching upstream compose.
+            - name: data
+              mountPath: /var/lib/postgresql
+            - name: shm
+              mountPath: /dev/shm
+        # Converges the stored DB_PASSWORD onto a rebound NFS volume: the
+        # official image consumes POSTGRES_PASSWORD only at initdb, so a
+        # reinstall with a different generated password would otherwise
+        # CrashLoop forever. Loopback TCP is trusted by pg_hba.conf and both
+        # containers share the pod network namespace.
+        - name: converge-db-password
+          image: postgres
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: firefly-iii-postgres
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: firefly-iii-settings
+                  key: DB_PASSWORD
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              until psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c '\q' 2>/dev/null; do
+                sleep 1
+              done
+              printf "ALTER USER %s PASSWORD :'pw';\n" "$POSTGRES_USER" | \
+                psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+                  -v on_error_stop=1 -v pw="$POSTGRES_PASSWORD"
+              while sleep 3600; do :; done
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: firefly-iii-postgres-data
+        - name: shm
+          emptyDir:
+            medium: Memory

@@ -180,6 +180,12 @@ kubectl --kubeconfig ~/.kube/librepod-dev.config \
 - ✅ "Starting server on port X" (normal startup)
 - ✅ Connection attempts during init (transient)
 - ✅ Debug/info level noise
+- ✅ Auth-guard rejections caused by the probe itself: `verify-app.sh` curls the
+  Service directly (port-forward), bypassing the ingress and oauth2-proxy — on
+  apps behind `oauth2-forwardauth` the request always arrives unauthenticated,
+  so lines like `No user in header "..."`, `user not logged in`, or logged 401s
+  are the guard working correctly. Confirm every ERROR line is a guard rejection
+  before passing; anything else (stack traces, DB connect failures) is real.
 - ❌ Repeated connection failures after startup
 - ❌ Out-of-memory errors (`OOMKilled`)
 - ❌ Stack traces / panics

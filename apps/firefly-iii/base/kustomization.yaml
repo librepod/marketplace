@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: firefly-iii
+
+labels:
+- includeSelectors: true
+  includeTemplates: true
+  pairs:
+    app.kubernetes.io/name: firefly-iii
+
+configMapGenerator:
+- name: firefly-iii
+  envs:
+  - firefly-iii.env
+
+resources:
+- namespace.yaml
+- pvc.yaml
+- service.yaml
+- deployment.yaml
+- cronjob.yaml
+- externalsecret.yaml
+
+components:
+- ../components/postgres

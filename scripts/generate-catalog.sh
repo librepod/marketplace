@@ -56,7 +56,9 @@ for metadata_file in "$REPO_ROOT"/apps/*/metadata.yaml; do
 
   # Extract fields using grep/sed (no yq dependency)
   NAME=$(grep '^  name:' "$metadata_file" | head -1 | sed 's/.*name: *//')
-  VERSION=$(grep '^  version:' "$metadata_file" | head -1 | sed 's/.*version: *//' | tr -d '"')
+  # Strip a trailing comment too: VERSION feeds a sed replacement below, where
+  # a stray '/' (e.g. "depName=firefly-iii/data-importer") is a syntax error.
+  VERSION=$(grep '^  version:' "$metadata_file" | head -1 | sed -e 's/.*version: *//' -e 's/[[:space:]]*#.*//' | tr -d '"')
   if [ -z "$VERSION" ]; then
     echo "ERROR: $app_name has empty spec.version" >&2; exit 1
   fi

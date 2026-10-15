@@ -1,0 +1,30 @@
+# Fires due recurring transactions and bill reminders. Braceless $STATIC_CRON_TOKEN:
+# Flux postBuild.substitute rewrites ${VAR} patterns in all manifest content —
+# the shell resolves this one from env at runtime.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: firefly-iii-cron
+spec:
+  schedule: "17 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: cron
+              image: curlimages/curl
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: STATIC_CRON_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: firefly-iii-settings
+                      key: STATIC_CRON_TOKEN
+              command: ["sh", "-c"]
+              args:
+                - curl -fsS "http://firefly-iii/api/v1/cron/$STATIC_CRON_TOKEN"

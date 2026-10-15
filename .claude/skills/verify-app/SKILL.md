@@ -108,7 +108,21 @@ Determine the app name and OCI artifact tag.
 3. Set `BASE_DOMAIN`: default `librepod.dev` for the dev cluster
 4. Verify cluster dependencies are met (check that system apps like traefik,
    nfs-provisioner are deployed)
-5. For PR artifacts, verify the OCI artifact exists on GHCR:
+5. **Settings-backed apps**: if the app tree has an `ExternalSecret` referring to
+   the `openbao` ClusterSecretStore (settings like API keys / DB passwords live in
+   OpenBao, not in Git), verify the KV entry exists and seed it if not — otherwise
+   pods land in `CreateContainerConfigError` and Stage 5 times out:
+   ```bash
+   TOKEN=$(kubectl --kubeconfig "$KUBECONFIG" get secret openbao-credentials \
+     -n openbao -o jsonpath='{.data.root-token}' | base64 -d)
+   kubectl --kubeconfig "$KUBECONFIG" exec -n openbao openbao-0 -- \
+     env BAO_TOKEN="$TOKEN" BAO_ADDR=http://127.0.0.1:8200 \
+     bao kv get apps/<app-name>  # 400/404 → seed with `bao kv put apps/<app-name> KEY=...`
+   ```
+   Values must match what `spec.settings.items` documents (e.g. exact key lengths).
+   Reuse an existing entry — its values must stay stable across reinstalls (a
+   rebound NFS volume keeps the old DB password).
+6. For PR artifacts, verify the OCI artifact exists on GHCR:
    ```bash
    docker manifest inspect ghcr.io/librepod/marketplace/apps/<app-name>:<tag>
    ```
@@ -168,9 +182,10 @@ from the whole tree, so the directory's presence IS the installation (#182).
 
 Push the rendered manifests to the Gogs `user-apps` repo via port-forward.
 
-**4a. Port-forward to Gogs** (if not already running):
+**4a. Port-forward to Gogs** (if not already running). Use a high port —
+`localhost:3000` may already be forwarded to something else:
 ```bash
-kubectl --kubeconfig "$KUBECONFIG" port-forward svc/gogs -n gogs 3000:80 &
+kubectl --kubeconfig "$KUBECONFIG" port-forward svc/gogs -n gogs 3999:80 &
 GOGS_PF_PID=$!
 sleep 2
 ```
@@ -178,7 +193,7 @@ sleep 2
 **4b. Clone the user-apps repo**:
 ```bash
 # Password "pass@w0rd" contains '@' — URL-encode as '%40'
-git clone http://flux:pass%40w0rd@localhost:3000/flux/user-apps.git /tmp/verify-app/user-apps
+git clone http://flux:pass%40w0rd@localhost:3999/flux/user-apps.git /tmp/verify-app/user-apps
 ```
 
 **4c. Add the app manifests**:
@@ -214,13 +229,15 @@ flux reconcile kustomization user-apps \
 Wait for the app's Kustomization to appear and become READY:
 ```bash
 for i in $(seq 1 30); do
-  status=$(flux get kustomization "marketplace-<app-name>" \
+  ks_state=$(flux get kustomization "marketplace-<app-name>" \
     --kubeconfig "$KUBECONFIG" 2>/dev/null | tail -1)
-  echo "$status" | grep -q "True" && echo "READY" && break
+  echo "$ks_state" | grep -q "True" && echo "READY" && break
   echo "Waiting... ($i/30)"
   sleep 10
 done
 ```
+
+(Do not name the variable `status` — it is read-only in zsh.)
 
 Timeout is 5 minutes (30 × 10s). If the Kustomization fails:
 1. Check reconciliation logs:
@@ -277,6 +294,23 @@ For failures, include: the failing check, relevant output (error messages, pod
 status, log snippets), and troubleshooting suggestions from
 `references/troubleshooting.md`.
 
+**Auth-gated apps** (metadata depends on `AuthProxy`, or the IngressRoute uses
+`oauth2-forwardauth`): the script probes the Service directly via port-forward,
+so the request arrives **without** the SSO header/cookie. Auth-guard ERROR log
+lines caused by the probe itself (e.g. `No user in header`) are expected —
+classify Log Inspection as PASS-with-note after confirming every ERROR line is
+a guard rejection. To verify the SSO acceptance path, simulate the proxy by
+sending the injected header yourself (check the app's
+`AUTHENTICATION_GUARD_HEADER` env for the spelling):
+```bash
+kubectl port-forward svc/<app> -n <namespace> 4123:80 &
+curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' \
+  -H 'X-Auth-Request-Email: probe@example.com' http://localhost:4123/
+# expect a login/redirect target that differs from the no-header response
+```
+Caution: this can create a real user in the app's DB — clean it up (and any
+ownership-role side effects) per the app's schema before finishing.
+
 ### Failure Escalation
 
 When verification fails, follow this escalation path:
@@ -292,7 +326,18 @@ Ask the user whether to clean up after the test. Default to cleaning up to avoid
 leaving test resources on the cluster.
 
 If yes:
-1. Delete the app directory from the Gogs repo using `git -C` to avoid CWD drift.
+1. **Capture PV NFS paths FIRST** — PVs disappear when Flux prunes, and deleting
+   the namespace does NOT delete the NFS folders (a reinstall would rebind to
+   old data):
+   ```bash
+   kubectl --kubeconfig "$KUBECONFIG" get pv -o json | python3 -c '
+   import json,sys
+   for pv in json.load(sys.stdin)["items"]:
+       cr = pv["spec"].get("claimRef",{})
+       if cr.get("namespace") == "<app-namespace>":
+           print(cr.get("name"), pv["spec"]["nfs"]["path"])'
+   ```
+2. Delete the app directory from the Gogs repo using `git -C` to avoid CWD drift.
    Deleting the directory is the whole uninstall — there is no root
    `kustomization.yaml` entry to remove:
    ```bash
@@ -300,17 +345,39 @@ If yes:
    git -C /tmp/verify-app/user-apps commit -m "test: remove <app-name>"
    git -C /tmp/verify-app/user-apps push origin master
    ```
-2. Trigger Flux reconciliation to prune resources:
+3. Trigger Flux reconciliation to prune resources:
    ```bash
    flux reconcile kustomization user-apps --kubeconfig "$KUBECONFIG" --with-source
    ```
-3. Wait for pruning to complete, then verify resources are gone:
+4. Wait for pruning to complete, then verify resources are gone:
    ```bash
    kubectl --kubeconfig "$KUBECONFIG" get all -n <app-namespace>
    ```
-4. If namespace is stuck in `Terminating`, see `references/troubleshooting.md`
+5. If namespace is stuck in `Terminating`, see `references/troubleshooting.md`
    for the stuck namespace remediation.
-5. Clean up port-forward and temp files:
+6. **Wipe the captured NFS folders** for a true clean slate (one-off privileged
+   pod on the NFS-exporting node; adjust the hostPath to the export root):
+   ```bash
+   cat <<'EOF' | kubectl --kubeconfig "$KUBECONFIG" apply -f -
+   apiVersion: v1
+   kind: Pod
+   metadata:
+     name: <app-name>-nfs-wipe
+   spec:
+     restartPolicy: Never
+     tolerations: [{key: node-role.kubernetes.io/control-plane, effect: NoSchedule}]
+     containers:
+       - name: wipe
+         image: alpine:3
+         command: ["sh", "-c", "rm -rf /exports/<app-name> && echo WIPED"]
+         volumeMounts: [{name: e, mountPath: /exports}]
+     volumes:
+       - name: e
+         hostPath: {path: /exports, type: Directory}
+   EOF
+   kubectl --kubeconfig "$KUBECONFIG" logs <app-name>-nfs-wipe  # then delete the pod
+   ```
+7. Clean up port-forward and temp files:
    ```bash
    kill $GOGS_PF_PID 2>/dev/null
    rm -rf /tmp/verify-app
