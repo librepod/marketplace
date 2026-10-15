@@ -96,13 +96,10 @@ describe("OnboardingPage", () => {
     expect(screen.getByRole("list", { name: /before you sign in/i })).toBeVisible()
   })
 
-  it("a handshake leads to Graduate, which can go back to Connect for another device", () => {
+  it("a handshake leads to Graduate, the end of the road — no way back to make more keys", () => {
     mockApi()
     page({ ...claimed, vpnStatus: "running", peerCount: 1, lastHandshakeAt: "2026-10-14T10:00:00Z" })
     expect(screen.getByRole("link", { name: /open libre\.pod/i })).toHaveAttribute("href", "https://libre.pod")
-    fireEvent.click(screen.getByRole("button", { name: /connect another device/i }))
-    expect(screen.getByRole("heading", { name: /connect your first device/i })).toBeVisible()
-    fireEvent.click(screen.getByRole("button", { name: /^continue$/i }))
-    expect(screen.getByRole("link", { name: /open libre\.pod/i })).toBeVisible()
+    expect(screen.queryByRole("button")).toBeNull()
   })
 })

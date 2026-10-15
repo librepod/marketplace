@@ -63,7 +63,7 @@
 - **R3 — `get-organization` takes `id=admin/<org>`.** Casdoor ids are `owner/name`, and organizations belong to `admin`. #215's bare `id=librepod` would error. An error response is surfaced, never treated as "missing".
 - **R4 — Bootstrap POSTs return 200** (`@HttpCode(200)` on claim, resume, account and install).
 - **R5 — No `/onboarding` route.** RootGate renders the wizard at any path for a raw-IP arrival in `open`/`claimed`. UseDomainScreen drops #215's "Show my connection keys" link, because after `finished` there is no wizard.
-- **R6 — Graduate offers "Connect another device".** It opens Connect even after a handshake. Without it, §6's "a lost VPN key: the reopened wizard can create a new one" has no path, because the derived step would be Graduate.
+- **R6 — Graduate has no way back to Connect.** The wizard makes the owner's one key and waits for its handshake. Further devices, and the replacement for a lost key, are added on wg-easy's own page, so the owner never comes to treat the wizard as the place to add devices. This was revised after the PR #277 review. The first build offered "Connect another device" with a key picker, to give §6's lost-VPN-key recovery a path through the wizard; that recovery was dropped from the spec along with it.
 - **R7 — Store bootstrapping.**
   - `OPENBAO_SYSTEM_MOUNT` is configurable (default `system`).
   - `OnboardingStore` skips record creation when `BOOTSTRAP_MODE_OVERRIDE` is set, because Tier 1's dev-mode OpenBao has no `system/` mount.

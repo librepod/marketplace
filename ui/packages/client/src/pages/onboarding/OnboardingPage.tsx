@@ -9,7 +9,7 @@ import { ConnectStep, GraduateStep, TrustStep, VpnStep, type ConnectivityPath } 
  * hero — the owner — and it ends with their first sign-in at the domain. The step
  * comes from the live status on every render (cluster truth), so reloads and pod
  * restarts resume for free. Page memory holds only the connectivity path ("bring
- * my own" — a reload asks again) and a revisit of Connect from Graduate.
+ * my own" — a reload asks again).
  */
 const STEPS = ["Welcome", "Claim", "Account", "Reach", "Trust", "Connect", "Graduate"] as const
 export const WELCOME = 0
@@ -38,7 +38,6 @@ export function OnboardingPage({ status, onRefresh }: { status: OnboardingStatus
   // Hooks first — the early return below must never skip them.
   const [userStep, setUserStep] = useState<number | null>(null)
   const [path, setPath] = useState<ConnectivityPath>("wireguard")
-  const [revisit, setRevisit] = useState<number | null>(null)
 
   if (status.state === "claimed" && !status.session) {
     return <Frame><ResumeScreen onResumed={onRefresh} /></Frame>
@@ -47,11 +46,8 @@ export function OnboardingPage({ status, onRefresh }: { status: OnboardingStatus
   const derived = deriveStep(status)
   const seenWelcome = localStorage.getItem(WELCOME_KEY) === "1"
   const floor = derived === CLAIM && !seenWelcome ? WELCOME : derived
-  const step = revisit ?? Math.max(floor, userStep ?? 0)
-  const go = (next: number) => {
-    setRevisit(null)
-    setUserStep(next)
-  }
+  const step = Math.max(floor, userStep ?? 0)
+  const go = setUserStep
 
   return (
     <Frame>
@@ -74,7 +70,7 @@ export function OnboardingPage({ status, onRefresh }: { status: OnboardingStatus
         <ConnectStep status={status} onConnected={() => go(GRADUATE)}
           onUseOwn={() => { setPath("own"); go(GRADUATE) }} onSessionLost={onRefresh} />
       )}
-      {step === GRADUATE && <GraduateStep status={status} path={path} onAnotherDevice={() => setRevisit(CONNECT)} />}
+      {step === GRADUATE && <GraduateStep status={status} path={path} />}
       {step > WELCOME && step < GRADUATE && (
         <button className="mt-6 text-xs text-muted-foreground hover:text-foreground" onClick={() => go(step - 1)}>
           Back

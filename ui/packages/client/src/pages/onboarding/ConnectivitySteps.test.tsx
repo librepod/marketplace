@@ -161,14 +161,26 @@ describe("ConnectStep", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/rejected its admin password/i)
   })
 
-  it("with peers: the QR, plus a way to add another device", async () => {
+  it("a key already exists (a reload): shows the newest one — no form, no picker", async () => {
     mockApi({
-      "/api/bootstrap/wireguard": jsonResponse(200, { peers: [{ clientId: "c1", name: "phone", enabled: true, latestHandshakeAt: null }] }),
+      "/api/bootstrap/wireguard": jsonResponse(200, { peers: [
+        { clientId: "10", name: "laptop", enabled: true, latestHandshakeAt: null },
+        { clientId: "9", name: "phone", enabled: true, latestHandshakeAt: null },
+      ] }),
     })
+    render(<ConnectStep status={{ ...status, vpnStatus: "running", peerCount: 2 }} onConnected={noop} onUseOwn={noop} onSessionLost={noop} />)
+    // wg-easy ids are ascending integers: "10" is newer than "9", whatever the list order
+    expect(await screen.findByAltText(/QR for laptop/i)).toHaveAttribute("src", "/api/bootstrap/wireguard/clients/10/qrcode.svg")
+    expect(screen.queryByRole("combobox")).toBeNull()
+    expect(screen.queryByRole("button", { name: /create connection key/i })).toBeNull()
+    expect(screen.queryByRole("button", { name: /another device/i })).toBeNull()
+  })
+
+  it("no create form until the key list has answered — a quick click must not duplicate a key", async () => {
+    vi.spyOn(global, "fetch").mockImplementation(() => new Promise<Response>(() => {}))
     render(<ConnectStep status={{ ...status, vpnStatus: "running", peerCount: 1 }} onConnected={noop} onUseOwn={noop} onSessionLost={noop} />)
-    expect(await screen.findByAltText(/QR for phone/i)).toBeVisible()
-    fireEvent.click(screen.getByRole("button", { name: /add another device/i }))
-    expect(screen.getByRole("button", { name: /create connection key/i })).toBeVisible()
+    expect(screen.queryByRole("button", { name: /create connection key/i })).toBeNull()
+    expect(screen.getByText(/looking for your connection key/i)).toBeVisible()
   })
 
   it("running but no handshake (UDP blocked): my own connectivity is still on offer", async () => {
@@ -193,16 +205,16 @@ describe("ConnectStep", () => {
 
 describe("GraduateStep", () => {
   it("WireGuard path: open the domain and sign in with the personal account", () => {
-    const onAnotherDevice = vi.fn()
-    render(<GraduateStep status={status} path="wireguard" onAnotherDevice={onAnotherDevice} />)
+    render(<GraduateStep status={status} path="wireguard" />)
     expect(screen.getByRole("link", { name: /open libre\.pod/i })).toHaveAttribute("href", "https://libre.pod")
     expect(screen.getByText("alex@libre.pod")).toBeVisible()
-    fireEvent.click(screen.getByRole("button", { name: /connect another device/i }))
-    expect(onAnotherDevice).toHaveBeenCalled()
+    // the wizard connects one device; every other device is WireGuard's own job
+    expect(screen.getByText(/wg-easy\.libre\.pod/)).toBeVisible()
+    expect(screen.queryByRole("button")).toBeNull()
   })
 
   it("bring-my-own path: the checklist", () => {
-    render(<GraduateStep status={status} path="own" onAnotherDevice={noop} />)
+    render(<GraduateStep status={status} path="own" />)
     const list = screen.getByRole("list", { name: /before you sign in/i })
     expect(list).toHaveTextContent("*.libre.pod")
     expect(list).toHaveTextContent(/root certificate/i)

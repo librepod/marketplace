@@ -40,8 +40,9 @@ SSO sign-in at `https://<base-domain>` — where:
   bring their own connectivity (Headscale/Tailscale, cloudflared, their own
   DNS);
 - onboarding state is **durable** and survives restarts of any app;
-- a lost password, a lost VPN key or an abandoned setup is recoverable with
-  one command.
+- a lost password or an abandoned setup is recoverable with one command.
+  VPN keys, including the replacement for a lost one, are managed on
+  wg-easy's own page.
 
 ## 3. Environments
 
@@ -158,8 +159,10 @@ restart.
 
 The reset leaves the admin password, users, installed apps, their data and VPN
 peers alone. It is the recovery for: a lost personal password (§8 Account), a
-lost admin password (§8 Claim sets a new one), a lost VPN key (the reopened
-wizard can create a new one), and an abandoned setup.
+lost admin password (§8 Claim sets a new one), and an abandoned setup. It does
+not recover a lost VPN key: the wizard only makes the first key. A replacement
+key is made on wg-easy's page, `wg-easy.<base-domain>`, from any device that
+can still reach the domain.
 
 ## 7. Identities and credentials
 
@@ -267,6 +270,10 @@ status telemetry.
   offers "Use my own connectivity instead" (→ the other path's Graduate).
   wg-easy stays installed; the owner can uninstall it from the catalog.
 - **Graduate.** "Open `https://<base-domain>` and sign in as `alex@libre.pod`."
+  The wizard connects one device and stops there; Graduate has no way back
+  to Connect. Further devices are added on wg-easy's own page,
+  `wg-easy.<base-domain>`, after sign-in, so the owner learns one place for
+  devices instead of reopening the wizard.
 
 The handshake only drives the Connect screen. It no longer decides anything
 about access.

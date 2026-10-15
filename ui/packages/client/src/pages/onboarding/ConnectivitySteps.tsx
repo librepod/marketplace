@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import type { InstallValidationErrorBody, OnboardingStatus, WgPeer } from "@librepod/shared"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -147,6 +147,8 @@ function useStuck(vpnStatus: OnboardingStatus["vpnStatus"]): boolean {
   return vpnStatus === "error" || (installing && now - since >= STUCK_AFTER_MS)
 }
 
+/** Connect makes and shows ONE key — the owner's device — and waits for it to say
+ *  hello. Every other device is added on WireGuard's own page once signed in. */
 export function ConnectStep({ status, onConnected, onUseOwn, onSessionLost }: {
   status: OnboardingStatus
   onConnected: () => void
@@ -154,14 +156,14 @@ export function ConnectStep({ status, onConnected, onUseOwn, onSessionLost }: {
   onSessionLost: () => void
 }) {
   const [name, setName] = useState("")
-  const [adding, setAdding] = useState(false)
+  const [created, setCreated] = useState<Pick<WgPeer, "clientId" | "name"> | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const stuck = useStuck(status.vpnStatus)
   // Flux is still rolling wg-easy out (or retrying a failed rollout): nothing to create yet.
   const settingUp = status.vpnStatus === "installing" || status.vpnStatus === "error"
-  const { peers, refresh } = usePeers(!settingUp)
-  const list = peers ?? []
+  const peers = usePeers(!settingUp)
+  const shown = created ?? (peers ? newest(peers) : null)
   const connected = !!status.lastHandshakeAt
 
   async function createPeer() {
@@ -173,9 +175,8 @@ export function ConnectStep({ status, onConnected, onUseOwn, onSessionLost }: {
         return
       }
       if (!res.ok) throw new Error(res.message ?? `creating the key failed (${res.status})`)
-      setName("")
-      setAdding(false)
-      await refresh() // swap the form for the QR at once — waiting for the 5s tick invites duplicate peers
+      const body = res.body as Pick<WgPeer, "clientId" | "name">
+      setCreated({ clientId: body.clientId, name: body.name })
     } catch (err) {
       setError(errorText(err))
     } finally {
@@ -209,20 +210,21 @@ export function ConnectStep({ status, onConnected, onUseOwn, onSessionLost }: {
         </div>
       ) : (
         <>
-          {list.length === 0 || adding ? (
+          {shown ? (
+            <KeyPanel peer={shown} />
+          ) : !peers ? (
+            // Until the list answers, a create form would invite a duplicate key.
+            <p className="mt-6 flex items-center gap-2 text-sm text-muted-foreground">
+              <span aria-hidden className="inline-block size-2 animate-pulse rounded-full bg-muted-foreground/40" />
+              Looking for your connection key…
+            </p>
+          ) : (
             <div className="mt-6 space-y-3">
               <label htmlFor="peer-name" className="text-sm font-medium">Name this device (e.g. “phone”)</label>
               <Input id="peer-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="phone" />
               <Button onClick={createPeer} disabled={busy}>{busy ? "Creating…" : "Create connection key"}</Button>
               {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
             </div>
-          ) : (
-            <>
-              <PeerPanel peers={list} />
-              <button className="mt-3 text-xs text-muted-foreground hover:text-foreground" onClick={() => setAdding(true)}>
-                Add another device
-              </button>
-            </>
           )}
           <div className="mt-6 rounded-lg border border-border p-4">
             <p className="flex items-center gap-2 text-sm">
@@ -255,16 +257,15 @@ export function ConnectStep({ status, onConnected, onUseOwn, onSessionLost }: {
   )
 }
 
-/** Polls the peer list only while Connect can show it (`enabled`). `refresh` lets a
- *  successful create swap the form for the QR without waiting for the 5s tick. */
-function usePeers(enabled: boolean): { peers: WgPeer[] | undefined; refresh: () => Promise<void> } {
+/** wg-easy ids are ascending integers, so the highest is the newest key. */
+function newest(peers: WgPeer[]): WgPeer | null {
+  return peers.reduce<WgPeer | null>((a, p) => (!a || Number(p.clientId) > Number(a.clientId) ? p : a), null)
+}
+
+/** The peer list — so a reload shows the key already made instead of the create
+ *  form — polled only while Connect can show it (`enabled`). */
+function usePeers(enabled: boolean): WgPeer[] | undefined {
   const [peers, setPeers] = useState<WgPeer[] | undefined>(undefined)
-  const refresh = useCallback(async () => {
-    try {
-      const res = await fetch("/api/bootstrap/wireguard")
-      if (res.ok) setPeers(((await res.json()) as { peers: WgPeer[] }).peers)
-    } catch { /* transient — the interval retries */ }
-  }, [])
   useEffect(() => {
     if (!enabled) return
     let alive = true
@@ -278,46 +279,31 @@ function usePeers(enabled: boolean): { peers: WgPeer[] | undefined; refresh: () 
     const t = setInterval(tick, 5000)
     return () => { alive = false; clearInterval(t) }
   }, [enabled])
-  return { peers, refresh }
+  return peers
 }
 
-function PeerPanel({ peers }: { peers: WgPeer[] }) {
-  const [selected, setSelected] = useState(peers[0]?.clientId ?? "")
-  const peer = peers.find((p) => p.clientId === selected) ?? peers[0]
-  if (!peer) return null
+function KeyPanel({ peer }: { peer: Pick<WgPeer, "clientId" | "name"> }) {
   return (
-    <div className="mt-6">
-      {peers.length > 1 && (
-        <select aria-label="connection key" className="mb-3 w-full rounded-md border border-input bg-transparent p-2 text-sm"
-          value={peer.clientId} onChange={(e) => setSelected(e.target.value)}>
-          {peers.map((p) => <option key={p.clientId} value={p.clientId}>{p.name || p.clientId}</option>)}
-        </select>
-      )}
-      <div className="flex flex-col items-center gap-3 rounded-lg border border-border p-4">
-        <img
-          src={`/api/bootstrap/wireguard/clients/${encodeURIComponent(peer.clientId)}/qrcode.svg`}
-          alt={`WireGuard configuration QR for ${peer.name}`}
-          className="size-56 rounded bg-white p-2"
-        />
-        <a className="text-sm underline underline-offset-4"
-          href={`/api/bootstrap/wireguard/clients/${encodeURIComponent(peer.clientId)}/configuration`} download>
-          Download configuration file
-        </a>
-        <p className="text-xs text-muted-foreground">
-          Install the WireGuard app, scan this code (or import the file), and switch the tunnel on.
-        </p>
-      </div>
+    <div className="mt-6 flex flex-col items-center gap-3 rounded-lg border border-border p-4">
+      <img
+        src={`/api/bootstrap/wireguard/clients/${encodeURIComponent(peer.clientId)}/qrcode.svg`}
+        alt={`WireGuard configuration QR for ${peer.name}`}
+        className="size-56 rounded bg-white p-2"
+      />
+      <a className="text-sm underline underline-offset-4"
+        href={`/api/bootstrap/wireguard/clients/${encodeURIComponent(peer.clientId)}/configuration`} download>
+        Download configuration file
+      </a>
+      <p className="text-xs text-muted-foreground">
+        Install the WireGuard app, scan this code (or import the file), and switch the tunnel on.
+      </p>
     </div>
   )
 }
 
 /** The hand-off to the domain. The first sign-in there finishes onboarding; the page
  *  notices (status polling) and RootGate switches to UseDomainScreen. */
-export function GraduateStep({ status, path, onAnotherDevice }: {
-  status: OnboardingStatus
-  path: ConnectivityPath
-  onAnotherDevice: () => void
-}) {
+export function GraduateStep({ status, path }: { status: OnboardingStatus; path: ConnectivityPath }) {
   const url = `https://${status.baseDomain}`
   const signIn = `${status.account ?? "your account"}@${status.baseDomain}`
   if (path === "own") {
@@ -347,10 +333,11 @@ export function GraduateStep({ status, path, onAnotherDevice }: {
         <span className="font-mono">{signIn}</span>. That first sign-in finishes setup — from then on,
         this raw address only points you to your device's name.
       </p>
-      <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-        <Button render={<a href={url} />}>Open {status.baseDomain}</Button>
-        <Button variant="outline" onClick={onAnotherDevice}>Connect another device</Button>
-      </div>
+      <Button className="mt-6" render={<a href={url} />}>Open {status.baseDomain}</Button>
+      <p className="mt-4 text-xs text-muted-foreground">
+        More devices? Once you're signed in, add them on WireGuard's page,{" "}
+        <span className="font-mono">wg-easy.{status.baseDomain}</span>.
+      </p>
     </section>
   )
 }
