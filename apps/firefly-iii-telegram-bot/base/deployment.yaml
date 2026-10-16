@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: firefly-iii-telegram-bot
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    spec:
+      containers:
+        - name: firefly-iii-telegram-bot
+          image: ghcr.io/cyxou/firefly-iii-telegram-bot
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: firefly-iii-telegram-bot
+            - secretRef:
+                name: firefly-iii-telegram-bot-settings
+          volumeMounts:
+            - name: sessions
+              mountPath: /home/node/app/sessions
+      volumes:
+        - name: sessions
+          persistentVolumeClaim:
+            claimName: firefly-iii-telegram-bot-sessions

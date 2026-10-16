@@ -1,0 +1,85 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: firefly-iii-telegram-bot
+spec:
+  displayName: "Firefly III Telegram Bot"
+  description: "Telegram bot for the Firefly III finance manager: create transactions and browse accounts, categories and reports straight from chat"
+  icon: "https://github.com/cyxou.png"
+  category: "Finance"
+  website: "https://github.com/cyxou/firefly-iii-telegram-bot"
+
+  # renovate: datasource=docker depName=ghcr.io/cyxou/firefly-iii-telegram-bot extractVersion=^v(?<version>.+)$
+  version: "2.4.0"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/firefly-iii-telegram-bot"
+    path: ./overlays/librepod
+
+  settings:
+    items:
+      - name: BOT_TOKEN
+        label: "Telegram Bot Token"
+        description: "Token issued by @BotFather for your bot"
+        type: string
+        required: true
+        sensitive: true
+      - name: ALLOWED_TG_USER_IDS
+        label: "Allowed Telegram user IDs"
+        description: "Comma-separated Telegram user IDs that may use the bot (e.g. 123456,987654). Leave empty to allow anyone"
+        type: string
+        required: false
+        sensitive: false
+
+  dependencies:
+    required:
+      - kind: StorageClass
+        description: "nfs-client (provided by nfs-provisioner app)"
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-firefly-iii-telegram-bot
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "firefly-iii-telegram-bot"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/firefly-iii-telegram-bot
+        ref:
+          tag: "2.4.0"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-firefly-iii-telegram-bot
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "firefly-iii-telegram-bot"
+      spec:
+        dependsOn:
+          - name: storage
+        force: true
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-firefly-iii-telegram-bot
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+        postBuild:
+          substitute:
+            BASE_DOMAIN: "${BASE_DOMAIN}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml
