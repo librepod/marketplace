@@ -216,9 +216,9 @@ describe('OnboardingService', () => {
       );
     });
 
-    it('usernames: lowercase letters, digits, dots and dashes, 1–39 characters, never admin', async () => {
+    it('usernames: lowercase letters and digits joined by single dots or dashes, 1–39 characters, never admin', async () => {
       const t = await claimed();
-      for (const username of ['Alex', 'admin', '', 'a'.repeat(40), 'al ex', 'al_ex', 'al@ex', 42, undefined]) {
+      for (const username of ['Alex', 'admin', '', 'a'.repeat(40), 'al ex', 'al_ex', 'al@ex', 'alex.', '-alex', 'a..b', 'a.-b', 42, undefined]) {
         await expect(t.service.account({ username, password: 'personal-pass-12' })).rejects.toThrow(BadRequestException);
       }
       expect(t.casdoor.addUser).not.toHaveBeenCalled();

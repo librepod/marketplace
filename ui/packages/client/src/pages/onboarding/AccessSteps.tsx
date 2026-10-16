@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input"
 import { MIN_PASSWORD, SETUP_CODE_COMMAND, postJson, validPassword } from "./api"
 
 /** Mirrors the server's username rule. */
-const USERNAME = /^[a-z0-9.-]{1,39}$/
+const USERNAME = /^(?=.{1,39}$)[a-z0-9]+([.-][a-z0-9]+)*$/
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
@@ -231,7 +231,7 @@ export function AccountStep({ baseDomain, previousAccount, onDone, onSessionLost
             <Input id="account-username" className="mt-1" autoComplete="username" autoCapitalize="none"
               spellCheck={false} value={username} onChange={(e) => setUsername(e.target.value.toLowerCase())} />
             <p className="mt-1 text-xs text-muted-foreground">
-              Lowercase letters, digits, dots and dashes. You will sign in as{" "}
+              Lowercase letters and digits, joined by single dots or dashes. You will sign in as{" "}
               <span className="font-mono">{username || "name"}@{baseDomain}</span>.
             </p>
           </div>

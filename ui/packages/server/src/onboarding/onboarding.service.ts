@@ -14,7 +14,8 @@ import { setupCodeMatches } from './setup-code';
 
 /** wg-easy rejects shorter admin passwords at login; Casdoor's set-password rejects whitespace. */
 export const MIN_PASSWORD_LENGTH = 12;
-const USERNAME = /^[a-z0-9.-]{1,39}$/;
+/** Casdoor's own rule, lowercased: letters and digits joined by single dots or dashes. */
+const USERNAME = /^(?=.{1,39}$)[a-z0-9]+([.-][a-z0-9]+)*$/;
 const CHANGED_OUTSIDE = "Casdoor's admin password was changed outside LibrePod";
 const RECORD_CHANGED = 'The setup changed while you were on this step — reload the page';
 
@@ -78,7 +79,7 @@ export class OnboardingService {
   async account(input: { username: unknown; password?: unknown }): Promise<OnboardingRecord> {
     const username = typeof input.username === 'string' ? input.username : '';
     if (!USERNAME.test(username) || username === 'admin') {
-      throw new BadRequestException('Use 1–39 lowercase letters, digits, dots or dashes — "admin" is taken');
+      throw new BadRequestException('Use 1–39 lowercase letters and digits, joined by single dots or dashes — "admin" is taken');
     }
     const given = input.password;
     const password = given === undefined || given === null || given === '' ? null : checkPassword(given);

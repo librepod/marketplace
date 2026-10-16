@@ -123,7 +123,7 @@ describe("AccountStep", () => {
     type("Password", "personal-pass-12")
     type("Confirm password", "personal-pass-12")
     const create = screen.getByRole("button", { name: /create account/i })
-    for (const name of ["admin", "al ex", "al_ex", ""]) {
+    for (const name of ["admin", "al ex", "al_ex", "alex.", "-alex", "a..b", ""]) {
       type("Username", name)
       expect(create).toBeDisabled()
     }
