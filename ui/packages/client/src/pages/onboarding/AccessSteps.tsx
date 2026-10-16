@@ -38,6 +38,7 @@ function SetupCodeField({ id, value, onChange }: { id: string; value: string; on
         <summary className="cursor-pointer text-foreground">Where do I find it?</summary>
         <p className="mt-2">It is printed in this device's log. On a computer with access to the device, run:</p>
         <code className="mt-1 block break-all rounded bg-muted p-2">{SETUP_CODE_COMMAND}</code>
+        <p className="mt-2">After <code>reset-onboarding</code>, use the code it printed instead.</p>
       </details>
     </div>
   )

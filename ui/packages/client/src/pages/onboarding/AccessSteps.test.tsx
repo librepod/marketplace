@@ -50,6 +50,8 @@ describe("ClaimStep", () => {
   it("says where the code is", () => {
     render(<ClaimStep onClaimed={vi.fn()} />)
     expect(screen.getByText('kubectl -n marketplace-ui logs deploy/marketplace-ui | grep "setup code"')).toBeInTheDocument()
+    // reset-onboarding prints its code to the exec stream, not the log the command above reads
+    expect(screen.getByText(/use the code it printed instead/)).toBeInTheDocument()
   })
 
   it("posts the code and password, then hands over", async () => {
