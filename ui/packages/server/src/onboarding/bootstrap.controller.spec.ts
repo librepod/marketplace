@@ -269,6 +269,19 @@ describe('BootstrapController.install', () => {
     expect(installed.install).not.toHaveBeenCalled();
   });
 
+  it('an endpoint host with a port or a scheme is an INIT_HOST field error, before the admin password is read', async () => {
+    const { controller, installed, onboarding } = make();
+    for (const host of ['203.0.113.5:51820', 'http://vpn.example.com', 'vpn.example.com/', '2001:db8::1']) {
+      const err = await controller.install({ app: 'wg-easy', settings: { INIT_HOST: host } }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toMatchObject({ errors: [{ name: 'INIT_HOST' }] });
+    }
+    expect(onboarding.adminPassword).not.toHaveBeenCalled();
+    expect(installed.install).not.toHaveBeenCalled();
+    await controller.install({ app: 'wg-easy', settings: { INIT_HOST: 'vpn.example.com' } });
+    expect(installed.install).toHaveBeenCalledOnce();
+  });
+
   it('settings that are not an object are dropped, never spread', async () => {
     const { controller, installed } = make();
     await controller.install({ app: 'wg-easy', settings: ['x'] as never });

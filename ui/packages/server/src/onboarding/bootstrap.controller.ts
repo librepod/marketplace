@@ -26,6 +26,9 @@ import { WgEasyService } from './wg-easy.service';
 
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
 const IPV6 = /^[0-9a-fA-F:]+$/;
+/** wg-easy writes `Endpoint = <INIT_HOST>:<port>` into every client config on first start
+ * and only checks the host is non-empty: a port or scheme here breaks every config for good. */
+const ENDPOINT_HOST = /^[A-Za-z0-9.-]+$/;
 
 /** The VPN app whose state the wizard follows. */
 const VPN_APP = 'wg-easy';
@@ -191,9 +194,16 @@ export class BootstrapController {
     if (typeof app !== 'string' || !Object.hasOwn(VPN_APPS, app)) {
       throw new BadRequestException('Only a VPN app can be installed from setup');
     }
-    const adminPassword = await this.onboarding.adminPassword();
     const settings = body?.settings;
     const answers = isPlainObject(settings) ? (settings as Record<string, string>) : {};
+    const host = answers.INIT_HOST;
+    if (typeof host === 'string' && host !== '' && !ENDPOINT_HOST.test(host)) {
+      throw new BadRequestException({
+        message: 'Some settings need attention',
+        errors: [{ name: 'INIT_HOST', message: 'Only a host name or IPv4 address — no port, no http://' }],
+      });
+    }
+    const adminPassword = await this.onboarding.adminPassword();
     return this.installed.install(app, {
       settings: { ...answers, [VPN_APPS[app].adminPasswordSetting]: adminPassword },
     });
