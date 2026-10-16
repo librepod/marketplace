@@ -18,6 +18,7 @@ spec:
     path: ./overlays/librepod
 
   settings:
+    allowCustom: true
     items:
       - name: BOT_TOKEN
         label: "Telegram Bot Token"
