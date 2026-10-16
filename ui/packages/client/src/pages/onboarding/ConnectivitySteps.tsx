@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import type { InstallValidationErrorBody, OnboardingStatus, WgPeer } from "@librepod/shared"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { postJson } from "./api"
+import { errorText, postJson } from "./api"
 
 /** "wireguard" = the wizard installs wg-easy; "own" = the owner brings their own
  *  connectivity (Tailscale/Headscale, a tunnel, their own DNS). Page state only. */
@@ -12,8 +12,6 @@ export type ConnectivityPath = "wireguard" | "own"
 const VPN_APP = "wg-easy"
 /** Installing longer than this on this page means WireGuard isn't coming up here. */
 export const STUCK_AFTER_MS = 5 * 60 * 1000
-
-const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
 /** "Reach your LibrePod by name": WireGuard (recommended) or "I'll bring my own".
  *  The server answers wg-easy's admin-password question itself; the browser sends

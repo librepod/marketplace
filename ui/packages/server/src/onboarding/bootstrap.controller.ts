@@ -17,14 +17,14 @@ import type { Request, Response } from 'express';
 import type { BootstrapInstallRequest, InstallResult, OnboardingState, OnboardingStatus } from '@librepod/shared';
 import { SessionService, SESSION_COOKIE } from '../auth/session.service';
 import { InstalledService } from '../installed/installed.service';
-import { NodeAddressService } from '../installed/node-address.service';
+import { isPlainObject } from '../installed/install-settings';
+import { IPV4, NodeAddressService } from '../installed/node-address.service';
 import { CasdoorAdminService } from './casdoor-admin.service';
 import { OnboardingStore, type OnboardingRecord } from './onboarding-store';
 import { ONBOARDING_COOKIE, OnboardingGuard, isOnboardingSession } from './onboarding.guard';
 import { OnboardingService } from './onboarding.service';
 import { WgEasyService } from './wg-easy.service';
 
-const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
 const IPV6 = /^[0-9a-fA-F:]+$/;
 /** wg-easy writes `Endpoint = <INIT_HOST>:<port>` into every client config on first start
  * and only checks the host is non-empty: a port or scheme here breaks every config for good. */
@@ -61,9 +61,6 @@ function sourceOf(req: Request): string {
   const first = (Array.isArray(xff) ? xff[0] : xff)?.split(',')[0]?.trim();
   return first || req.ip || 'unknown';
 }
-
-const isPlainObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /** First-run onboarding over HTTP (spec §10). Exempt from AuthGuard; the
  * cookie-gated endpoints carry OnboardingGuard. */

@@ -9,6 +9,8 @@ export function validPassword(p: string): boolean {
 /** Where the setup code is printed — any shell with kubectl access to the device. */
 export const SETUP_CODE_COMMAND = 'kubectl -n marketplace-ui logs deploy/marketplace-ui | grep "setup code"'
 
+export const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err))
+
 export interface PostResult {
   ok: boolean
   status: number

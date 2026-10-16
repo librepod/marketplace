@@ -1,12 +1,10 @@
 import { useState, type FormEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { MIN_PASSWORD, SETUP_CODE_COMMAND, postJson, validPassword } from "./api"
+import { MIN_PASSWORD, SETUP_CODE_COMMAND, errorText, postJson, validPassword } from "./api"
 
 /** Mirrors the server's username rule. */
 const USERNAME = /^(?=.{1,39}$)[a-z0-9]+([.-][a-z0-9]+)*$/
-
-const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
 export function WelcomeStep({ onBegin }: { onBegin: () => void }) {
   return (

@@ -2,7 +2,7 @@ import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config';
 import { CoreV1Api } from '@kubernetes/client-node';
 
-const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
+export const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
 
 /**
  * The device's LAN address: the InternalIP (an IPv4 one when the node is
