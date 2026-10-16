@@ -162,7 +162,7 @@ export function ConnectStep({ status, onConnected, onUseOwn, onSessionLost }: {
   const stuck = useStuck(status.vpnStatus)
   // Flux is still rolling wg-easy out (or retrying a failed rollout): nothing to create yet.
   const settingUp = status.vpnStatus === "installing" || status.vpnStatus === "error"
-  const peers = usePeers(!settingUp)
+  const { peers, error: peersError } = usePeers(!settingUp)
   const shown = created ?? (peers ? newest(peers) : null)
   const connected = !!status.lastHandshakeAt
 
@@ -214,10 +214,14 @@ export function ConnectStep({ status, onConnected, onUseOwn, onSessionLost }: {
             <KeyPanel peer={shown} />
           ) : !peers ? (
             // Until the list answers, a create form would invite a duplicate key.
-            <p className="mt-6 flex items-center gap-2 text-sm text-muted-foreground">
-              <span aria-hidden className="inline-block size-2 animate-pulse rounded-full bg-muted-foreground/40" />
-              Looking for your connection key…
-            </p>
+            peersError ? (
+              <p role="alert" className="mt-6 text-sm text-destructive">{peersError}</p>
+            ) : (
+              <p className="mt-6 flex items-center gap-2 text-sm text-muted-foreground">
+                <span aria-hidden className="inline-block size-2 animate-pulse rounded-full bg-muted-foreground/40" />
+                Looking for your connection key…
+              </p>
+            )
           ) : (
             <div className="mt-6 space-y-3">
               <label htmlFor="peer-name" className="text-sm font-medium">Name this device (e.g. “phone”)</label>
@@ -263,23 +267,28 @@ function newest(peers: WgPeer[]): WgPeer | null {
 }
 
 /** The peer list — so a reload shows the key already made instead of the create
- *  form — polled only while Connect can show it (`enabled`). */
-function usePeers(enabled: boolean): WgPeer[] | undefined {
-  const [peers, setPeers] = useState<WgPeer[] | undefined>(undefined)
+ *  form — polled only while Connect can show it (`enabled`), with the server's
+ *  reason while it refuses (e.g. wg-easy rejecting its admin password). */
+function usePeers(enabled: boolean): { peers?: WgPeer[]; error?: string } {
+  const [result, setResult] = useState<{ peers?: WgPeer[]; error?: string }>({})
   useEffect(() => {
     if (!enabled) return
     let alive = true
     const tick = async () => {
       try {
         const res = await fetch("/api/bootstrap/wireguard")
-        if (res.ok && alive) setPeers(((await res.json()) as { peers: WgPeer[] }).peers)
+        const body = (await res.json().catch(() => ({}))) as { peers?: WgPeer[]; message?: string }
+        if (!alive) return
+        if (res.ok) setResult({ peers: body.peers })
+        // 401 = the session ended: the status poll takes the wizard to Resume.
+        else if (res.status !== 401) setResult((r) => ({ ...r, error: body.message ?? `listing keys failed (${res.status})` }))
       } catch { /* transient — next tick retries */ }
     }
     tick()
     const t = setInterval(tick, 5000)
     return () => { alive = false; clearInterval(t) }
   }, [enabled])
-  return peers
+  return result
 }
 
 function KeyPanel({ peer }: { peer: Pick<WgPeer, "clientId" | "name"> }) {

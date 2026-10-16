@@ -161,6 +161,16 @@ describe("ConnectStep", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/rejected its admin password/i)
   })
 
+  it("a key list the server refuses shows its reason instead of looking forever", async () => {
+    mockApi({
+      "/api/bootstrap/wireguard": jsonResponse(503, { message: "WireGuard rejected its admin password — it was changed in WireGuard itself." }),
+    })
+    render(<ConnectStep status={{ ...status, vpnStatus: "running", peerCount: null }} onConnected={noop} onUseOwn={noop} onSessionLost={noop} />)
+    expect(await screen.findByRole("alert")).toHaveTextContent(/rejected its admin password/i)
+    expect(screen.queryByText(/looking for your connection key/i)).toBeNull()
+    expect(screen.queryByRole("button", { name: /create connection key/i })).toBeNull()
+  })
+
   it("a key already exists (a reload): shows the newest one — no form, no picker", async () => {
     mockApi({
       "/api/bootstrap/wireguard": jsonResponse(200, { peers: [
