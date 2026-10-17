@@ -23,6 +23,11 @@ spec:
   # the PAT must arrive via FIREFLY_III_ACCESS_TOKEN env — deliverable only at
   # install through settings. See firefly-iii app's AUTHENTICATION_GUARD.
   settings:
+    # Custom install-time env vars land in the same OpenBao entry -> settings
+    # Secret (dataFrom extract), and envFrom lists the Secret after the base
+    # ConfigMap — so a custom KEY=VALUE also overrides the baked-in default
+    # (e.g. PHP_MAX_EXECUTION_TIME for very long imports).
+    allowCustom: true
     items:
       - name: FIREFLY_III_ACCESS_TOKEN
         label: "Firefly III Personal Access Token"
