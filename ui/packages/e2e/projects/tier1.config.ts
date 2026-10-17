@@ -77,6 +77,15 @@ export default defineConfig({
       CASDOOR_CLIENT_SECRET: "e2e-stub-secret",
       CASDOOR_ORG_NAME: "librepod",
       CASDOOR_APP_NAME: "marketplace-ui",
+      // RootGate owns the first paint. Tier 1 has no Casdoor and its dev-mode
+      // OpenBao has no system/ mount. Every spec carries a minted SSO session,
+      // which status already answers with "finished"; forcing the state (the
+      // documented test seam in bootstrap.controller.ts) makes that hold for any
+      // request, and keeps the onboarding store from retrying record creation
+      // against a mount that does not exist. A domain arrival in "finished" is a
+      // RootGate pass-through. The state × arrival matrix is pinned by
+      // RootGate.test.tsx instead.
+      BOOTSTRAP_MODE_OVERRIDE: "finished",
       // Force FluxStatusService to degrade to "installing" deterministically:
       // point KUBECONFIG at a closed port (see support/kubeconfig.closed.yaml)
       // so the k8s call ECONNREFUSES instead of querying the host's real cluster.

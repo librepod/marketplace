@@ -18,7 +18,8 @@ import { LaunchUrlService } from './launch-url.service';
 import { resolveSettings } from './install-settings';
 import { OpenBaoClient, OpenBaoMisconfiguredError, OpenBaoUnavailableError } from './openbao.client';
 import { LegacySecretMirror } from './legacy-secret-mirror';
-import type { CatalogApp, InstallResult } from '@librepod/shared';
+import { NodeAddressService } from './node-address.service';
+import type { AppStatus, CatalogApp, InstallResult } from '@librepod/shared';
 
 @Injectable()
 export class InstalledService {
@@ -34,6 +35,7 @@ export class InstalledService {
     private readonly launchUrl: LaunchUrlService,
     private readonly openBao: OpenBaoClient,
     private readonly legacyMirror: LegacySecretMirror,
+    private readonly nodeAddress: NodeAddressService,
   ) {}
 
   async enrich(apps: CatalogApp[]): Promise<CatalogApp[]> {
@@ -83,6 +85,14 @@ export class InstalledService {
   async getSystemApps(): Promise<CatalogApp[]> {
     const all = await this.enrich(this.catalog.findAll());
     return all.filter((app) => app.system);
+  }
+
+  /** One app's status without enriching the whole catalog (no launch-URL
+   * reads) — the onboarding status poll asks this for its VPN app. */
+  async appStatus(appName: string): Promise<AppStatus> {
+    const installed = await this.repo.listInstalledApps();
+    if (!installed.includes(appName)) return 'not_installed';
+    return this.flux.getStatusFor(appName);
   }
 
   private renderTemplate(template: string, vars: Record<string, string>): string {
@@ -137,6 +147,7 @@ export class InstalledService {
       // `settings` skip this entirely (and ignore any body). The stored entry is
       // read first so a reinstall regenerates nothing: generated questions reuse
       // what the last install wrote (NFS volumes survive, so a DB password must too).
+      let settingsToWrite: Record<string, string> | null = null;
       if (app.settings) {
         let stored: Record<string, string> | null = null;
         try {
@@ -148,18 +159,30 @@ export class InstalledService {
         if (!resolved.ok) {
           throw new BadRequestException({ message: 'Some settings need attention', errors: resolved.errors });
         }
+        settingsToWrite = resolved.values;
+      }
+
+      // 3b. Platform values. DEVICE_IP (the node's LAN address — e.g. a VPN's
+      // endpoint host) costs a Kubernetes read, so only templates that ask for
+      // it pay. Resolved once the settings validate (a malformed body is a 400,
+      // not a node error) and before any write: a failed lookup is a retryable
+      // 503 that leaves no OpenBao entry or commit behind.
+      const vars: Record<string, string> = {
+        BASE_DOMAIN: this.configService.get<string>('BASE_DOMAIN', 'libre.pod'),
+      };
+      if (Object.values(app.templates).some((t) => t?.includes('${DEVICE_IP}'))) {
+        vars.DEVICE_IP = await this.nodeAddress.internalIp();
+      }
+
+      if (settingsToWrite) {
         try {
-          await this.openBao.writeAppSettings(appName, resolved.values);
+          await this.openBao.writeAppSettings(appName, settingsToWrite);
         } catch (err) {
           this.throwSettingsStoreError(err, appName);
         }
       }
 
-      // 4. Build variable substitution map
-      const vars: Record<string, string> = {};
-      vars.BASE_DOMAIN = this.configService.get<string>('BASE_DOMAIN', 'libre.pod');
-
-      // Generate secrets
+      // 4. Legacy generated secrets join the substitution map
       if (app.secrets && app.secrets.length > 0) {
         for (const secret of app.secrets) {
           if (secret.generate) {

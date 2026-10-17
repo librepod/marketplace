@@ -33,6 +33,13 @@ spec:
           envFrom:
             - configMapRef:
                 name: marketplace-ui-env
+          env:
+            # The node this pod runs on — NodeAddressService reads its
+            # InternalIP for the ${DEVICE_IP} platform variable.
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
           volumeMounts:
             - name: catalog
               mountPath: /data

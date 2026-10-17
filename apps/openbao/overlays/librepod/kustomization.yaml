@@ -20,6 +20,7 @@ configMapGenerator:
       - eso-read-apps.hcl=policies/eso-read-apps.hcl
       - gogs-write-apps.hcl=policies/gogs-write-apps.hcl
       - marketplace-ui-write-apps.hcl=policies/marketplace-ui-write-apps.hcl
+      - marketplace-ui-system.hcl=policies/marketplace-ui-system.hcl
       - step-certificates-write-apps.hcl=policies/step-certificates-write-apps.hcl
       - step-ca-backup.hcl=policies/step-ca-backup.hcl
       - step-ca-restore.hcl=policies/step-ca-restore.hcl

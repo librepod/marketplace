@@ -1,0 +1,4 @@
+#!/bin/sh
+# Issues a new setup code and reopens first-run onboarding:
+#   kubectl -n marketplace-ui exec deploy/marketplace-ui -- reset-onboarding
+exec node /app/packages/server/dist/onboarding/reset-onboarding.cli.js "$@"

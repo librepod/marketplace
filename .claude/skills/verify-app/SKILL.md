@@ -163,6 +163,8 @@ python3 "$SKILL_DIR/scripts/render-templates.py" \
   --output-dir /tmp/verify-app
 ```
 
+Add `--device-ip <node InternalIP>` for apps whose templates use `${DEVICE_IP}` (e.g. wg-easy); without it the literal `${DEVICE_IP}` is left in the output.
+
 The script extracts templates from `spec.templates`, substitutes `${BASE_DOMAIN}`
 and secret variables, overrides the OCI tag in the source template, and writes
 rendered YAML to the output directory.

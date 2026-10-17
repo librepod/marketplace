@@ -18,14 +18,22 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/wg-easy"
     path: ./overlays/librepod
 
+  # Two install questions. The first-run wizard answers both: INIT_PASSWORD
+  # with the LibrePod admin password (server-side, from OpenBao system/admin)
+  # and INIT_HOST with the endpoint the owner confirmed. wg-easy rejects admin
+  # passwords shorter than 12 characters at login; the settings contract has
+  # no length rule, so the description states it. An empty INIT_HOST answer is
+  # never stored, so the ConfigMap's ${DEVICE_IP} default applies.
   settings:
     items:
       - name: INIT_PASSWORD
         label: "Admin password"
-        description: "Initial password for the built-in admin account (applied on first start only). SSO is the primary login; this is the fallback if the IdP is unavailable."
+        description: "Password for wg-easy's built-in admin account, applied on first start. Use your LibrePod admin password — at least 12 characters, or wg-easy rejects it at login. Single sign-on is the primary login; this is the fallback."
         sensitive: true
         required: true
-        default: "change-me"
+      - name: INIT_HOST
+        label: "Endpoint host"
+        description: "The address your devices dial to reach this VPN, applied on first start. Leave empty to use this device's IP address."
 
   dependencies:
     required:
@@ -36,6 +44,11 @@ spec:
       - kind: SSOProvider
         description: "Casdoor SSO (provided by casdoor-sso-controller)"
 
+  # templates.release substitutes exactly the two platform variables:
+  # BASE_DOMAIN, and DEVICE_IP — the device's LAN IP, which marketplace-ui reads
+  # from its node at install time (wg-easy's endpoint host, INIT_HOST). Nothing
+  # fills any other ${VAR} on a catalog install: it would stay literal text in
+  # the committed release and break the apply.
   templates:
     source: |
       apiVersion: source.toolkit.fluxcd.io/v1
@@ -78,10 +91,7 @@ spec:
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
-            FRP_SERVER_ADDR: "${FRP_SERVER_ADDR}"
-            FRP_REMOTE_PORT: "${FRP_REMOTE_PORT}"
-            WIREGUARD_PROXY_NAME: "${WIREGUARD_PROXY_NAME}"
-            TZ: "${TZ}"
+            DEVICE_IP: "${DEVICE_IP}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization

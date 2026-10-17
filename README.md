@@ -161,6 +161,46 @@ frpc — temporarily removed from system apps; requires FRP auth token that shou
 
 ---
 
+## 🔑 First Run: Claim Your Device
+
+A fresh LibrePod is set up from a browser, on the device's own address. Once the
+system apps are up, open `http://<device-ip>`.
+
+1. **Get the setup code.** Only someone with access to the cluster can read it —
+   that is what makes you the owner:
+
+   ```bash
+   kubectl -n marketplace-ui logs deploy/marketplace-ui | grep "setup code"
+   ```
+
+2. **Claim the device** with the code and an admin password (at least 12
+   characters, no spaces). `admin` is the device's master account: its password
+   is also the default admin password of apps that ship one (e.g. wg-easy), and
+   it is kept in OpenBao at `system/admin`.
+3. **Create your account** — the one you sign in with every day
+   (`<name>@<your-domain>`).
+4. **Choose how your devices reach it by name:** set up WireGuard (the wizard
+   installs it and gives you a QR code), or bring your own (Tailscale/Headscale,
+   a tunnel, or your own DNS for `<your-domain>` and `*.<your-domain>`).
+5. **Trust the root certificate** the wizard offers, then open
+   `https://<your-domain>` and sign in with your account. That first sign-in
+   finishes setup; from then on the raw IP address only points to the domain.
+
+**Cloud servers and shared networks.** The wizard runs over plain http. On a
+server with a public IP, use `https://<device-ip>` instead (one certificate
+warning — the root CA isn't trusted yet), or an SSH tunnel:
+`ssh -L 8080:<device-private-ip>:80 you@<device-public-ip>`, then open
+`http://127.0.0.1:8080`.
+
+**Lost a password or a VPN key, or abandoned setup?** Reopen onboarding with a
+new setup code. Apps, data, users and VPN peers stay:
+
+```bash
+kubectl -n marketplace-ui exec deploy/marketplace-ui -- reset-onboarding
+```
+
+---
+
 ## 🌐 Remote Access
 
 LibrePod clusters are accessed remotely via WireGuard VPN, tunneled through
@@ -184,7 +224,7 @@ FRP server (LibrePort or custom)
 
 | Component | Type | Description |
 |-----------|------|-------------|
-| **wg-easy** | System app | WireGuard VPN server with web UI for managing peers and generating client configs |
+| **wg-easy** | Catalog app | WireGuard VPN server with web UI for managing peers and generating client configs; the first-run setup wizard offers to install it |
 | **frpc** | ~~System app~~ *Temporarily user-managed* | FRP client running as a k8s Deployment with `hostNetwork: true`. Tunnels SSH (TCP 22) and WireGuard (UDP 51820) through an FRP server. Removed from system apps pending LibrePort integration — requires per-cluster FRP auth token that shouldn't be committed to git. Will return as a user-installable app. |
 | **FRP server** | External | LibrePort or custom FRP server. Users can substitute their own tunnel solution (ngrok, cloudflared, etc.) |
 

@@ -139,3 +139,45 @@ export interface User {
   name: string;
   email: string;
 }
+
+/** First-run onboarding (the onboarding record in OpenBao system/). `waiting` is
+ * never stored: OpenBao is unreachable, or the record is open/claimed and Casdoor
+ * is unreachable. */
+export type OnboardingState = 'waiting' | 'open' | 'claimed' | 'finished';
+
+/** How the browser reached the server: a raw IPv4/IPv6 literal vs a name. */
+export type ArrivalKind = 'ip' | 'domain';
+
+export interface OnboardingStatus {
+  state: OnboardingState;
+  arrival: ArrivalKind;
+  baseDomain: string;
+  /** This browser holds a valid onboarding cookie for the current generation. */
+  session: boolean;
+  // Everything below is null unless `session`.
+  /** The personal account confirmed since the last claim ("sign in as …"). */
+  account: string | null;
+  /** An account kept from before a reset, not yet confirmed since the claim ("keep …"). */
+  previousAccount: string | null;
+  /** The VPN app's (wg-easy's) install status; null when the read failed. */
+  vpnStatus: AppStatus | null;
+  peerCount: number | null;
+  /** ISO timestamp of the most recent WireGuard handshake, null if none. */
+  lastHandshakeAt: string | null;
+  /** Pre-fill for the WireGuard endpoint host: the IP the browser used, else DEVICE_IP. */
+  endpointSuggestion: string | null;
+}
+
+export interface WgPeer {
+  clientId: string;
+  name: string;
+  enabled: boolean;
+  latestHandshakeAt: string | null;
+}
+
+/** Body of POST /api/bootstrap/install: a VPN app through the catalog's install path.
+ * The server answers the app's admin-password question itself; no custom variables. */
+export interface BootstrapInstallRequest {
+  app: string;
+  settings?: Record<string, string>;
+}

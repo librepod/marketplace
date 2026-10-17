@@ -204,6 +204,10 @@ Degradation is layered, and the distinction matters:
 - `GET /api/system-apps` → `InstalledService.getSystemApps()` → enriched apps where `system === true` (the read-only Platform panel on `/`).
 - `POST /api/apps/:name/install` | `/uninstall` → `InstalledService` (mutex-serialized). Install
   takes an optional JSON body `{ settings?, custom? }` (used only by apps with catalog `settings`).
+- `/api/bootstrap/*` (first-run onboarding, `src/onboarding/`) is exempt from `AuthGuard` — see
+  "First-run onboarding" below. `POST /api/bootstrap/install` is a second, session-less entry into
+  `InstalledService.install()`: `OnboardingGuard`-gated, allowlist `{'wg-easy': INIT_PASSWORD}`, settings
+  only (no custom variables); the server fills the admin-password setting from OpenBao `system/admin`.
 - `GET /api/health` → Terminus liveness (empty checks array).
 
 ### Install flow (`InstalledService.install`, behind an `async-mutex`)
@@ -220,10 +224,12 @@ Degradation is layered, and the distinction matters:
    KV v2 version) **before** the Gogs commit → `503` if OpenBao is unset/unreachable/sealed/
    refuses auth. Settings never enter the Gogs repo or `${VAR}` substitution; apps without
    `settings` never call OpenBao.
-4. Build a `vars` map: `BASE_DOMAIN` from config + one generated value per legacy
-   `secrets[].generate` (crypto hex). **Legacy path** — no shipped app declares `secrets[]`
-   any more (settings replaced it); the renderer keeps it only so an old catalog template
-   still installs.
+4. Build a `vars` map: `BASE_DOMAIN` from config; `DEVICE_IP` — the InternalIP of the node
+   the pod runs on (`NodeAddressService`), read only when a template contains `${DEVICE_IP}`
+   and before any write, so a failed lookup is a retryable `503` that leaves nothing behind;
+   plus one generated value per legacy `secrets[].generate` (crypto hex). **Legacy path** —
+   no shipped app declares `secrets[]` any more (settings replaced it); the renderer keeps it
+   only so an old catalog template still installs.
 5. Render `apps/<name>/{source,release,kustomization}.yaml` (via `${VAR}` regex substitution;
    `secret.yaml` too when a legacy template declares one) and write them all as **one commit**
    (`UserAppsRepoService.writeApp`).
@@ -243,6 +249,32 @@ There is no root file and no second write, so atomicity comes from the commit in
 Uninstall is the true mirror now: `removeApp` **deletes the whole `apps/<name>/`
 directory** in one commit. Pre-#182 it only edited the root file and left the files behind,
 because the provider's contents API has no DELETE route.
+
+### First-run onboarding (`src/onboarding/`)
+
+One OpenBao record, `system/marketplace-ui/onboarding` (`OnboardingStore`): `open` (a setup code
+exists) → `claimed` (admin password set with the code) → `finished` (first SSO sign-in since the
+claim). `waiting` is computed: OpenBao unreachable, or Casdoor unreachable before `finished`; a device
+the server last saw `finished` (`OnboardingStore.knownFinished`, kept past the cache) stays `finished`
+while OpenBao is down, so signed-out visitors still reach SSO. The
+store creates the record on start (KV check-and-set, `cas: 0`) and logs `LibrePod setup code: …`
+while open/claimed; reads are cached ≤5 s so `reset-onboarding` (another process) lands without a
+restart. `save()` is check-and-set against the version the record was read at (`OnboardingRecord.version`,
+not stored), so a request holding a cached record can't undo a reset: it fails, the cache drops, and the
+wizard gets a 409 to reload. `reset()` alone writes unconditionally. The admin password lives readable in
+`system/admin`.
+- `GET /status` — public, read-only, never sets a cookie. A valid SSO session short-circuits to
+  `finished` (and retries the finish write). Telemetry (account, VPN status, peers, endpoint
+  suggestion) only with a valid onboarding cookie.
+- `POST /claim {code,password}` and `/resume {code}` set `mp_onboarding`: HMAC via `SessionService`,
+  `sub: 'onboarding'` + the record's `generation`, httpOnly, NOT Secure. `OnboardingGuard` admits it
+  only while `claimed` with a matching generation; `AuthGuard` never admits it.
+- `POST /account`, `POST /install`, `/wireguard/*` (wg-easy proxy) — `OnboardingGuard`-gated.
+- The SSO callback calls `OnboardingStore.finishIfClaimed()` without awaiting it: neither a failure nor a
+  slow OpenBao blocks the sign-in.
+- `reset-onboarding` (`/usr/local/bin` in the image) runs `dist/onboarding/reset-onboarding.cli.js`:
+  new code, `open`, generation + 1, account kept.
+- `BOOTSTRAP_MODE_OVERRIDE` forces the state (Tier 1: `finished`) and skips record creation.
 
 ### Catalog (`CatalogService`)
 Reads `catalog.yaml` (path from `CATALOG_PATH`, default `../../../catalog.yaml` relative to
@@ -354,6 +386,13 @@ Restart / Users) marked with `SoonTag`. All status dots read from the single
 | `USER_APPS_GIT_CREDENTIALS_DIR` | `/etc/user-apps-git` | mounted Secret with `username`/`password` files (ESO-synced from openbao KV apps/user-apps-source) |
 | `USER_APPS_WORK_DIR` | `/var/lib/user-apps` | working copy (`repo/`) + the generated `0600 .git-credentials`; disposable emptyDir |
 | `BASE_DOMAIN` | `libre.pod` | `${BASE_DOMAIN}` substituted into templates |
+| `NODE_NAME` | (empty) | downward API (`spec.nodeName`); `NodeAddressService` reads this Node's InternalIP for `${DEVICE_IP}`. Unset ⇒ installing an app whose templates use `${DEVICE_IP}` returns 503; other apps are unaffected |
+| `CASDOOR_BASE_URL` | (empty) | in-cluster Casdoor (`http://casdoor.casdoor.svc.cluster.local`). Unset ⇒ onboarding status stays `waiting` |
+| `CASDOOR_ADMIN_DEFAULT_PASSWORD` | `123` | Casdoor's factory admin password; the claim replaces it with the owner's admin password |
+| `WGEASY_BASE_URL` | (empty) | in-cluster wg-easy for the wizard's peer endpoints |
+| `ROOT_CA_PATH` | (empty) | the mounted root CA served by `GET /api/bootstrap/ca` |
+| `OPENBAO_SYSTEM_MOUNT` | `system` | KV v2 mount holding the onboarding record and `admin` |
+| `BOOTSTRAP_MODE_OVERRIDE` | (empty) | **test seam only** (Tier 1): forces the onboarding state and skips record creation |
 | `OPENBAO_ADDR` | (empty) | settings store for install questions. Unset ⇒ installing an app that has `settings` returns 503; other apps are unaffected |
 | `OPENBAO_AUTH_MOUNT` | `kubernetes` | OpenBao Kubernetes auth mount |
 | `OPENBAO_AUTH_ROLE` | `marketplace-ui` | role the pod's ServiceAccount logs in as |

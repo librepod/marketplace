@@ -86,4 +86,18 @@ describe('marketplace-ui ClusterRole RBAC', () => {
       expect(grantsListOn(rules, group, resource)).toBe(true);
     },
   );
+
+  // NodeAddressService reads ONE Node by name (get, never list) for the
+  // ${DEVICE_IP} platform variable. Without the grant, every install of an app
+  // that uses it is a 503.
+  it('grants get on core nodes (read by NodeAddressService)', () => {
+    expect(
+      rules.some(
+        (r) =>
+          (r.apiGroups ?? []).includes('') &&
+          (r.resources ?? []).includes('nodes') &&
+          (r.verbs ?? []).includes('get'),
+      ),
+    ).toBe(true);
+  });
 });

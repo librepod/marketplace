@@ -96,6 +96,7 @@ describe('InstalledService', () => {
     writeAppSettings: ReturnType<typeof vi.fn>;
   };
   let mockLegacyMirror: { snapshotApp: ReturnType<typeof vi.fn> };
+  let mockNodeAddress: { internalIp: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     mockRepo = {
@@ -131,6 +132,7 @@ describe('InstalledService', () => {
     };
 
     mockLegacyMirror = { snapshotApp: vi.fn(async () => 0) };
+    mockNodeAddress = { internalIp: vi.fn() };
 
     service = new InstalledService(
       mockCatalogService as unknown as CatalogService,
@@ -141,6 +143,7 @@ describe('InstalledService', () => {
       mockLaunchUrlService as unknown as import('./launch-url.service').LaunchUrlService,
       mockOpenBao as unknown as OpenBaoClient,
       mockLegacyMirror as unknown as import('./legacy-secret-mirror').LegacySecretMirror,
+      mockNodeAddress as unknown as import('./node-address.service').NodeAddressService,
     );
   });
 
@@ -255,6 +258,21 @@ describe('InstalledService', () => {
     });
   });
 
+  describe('appStatus()', () => {
+    it('not_installed — without asking Flux — when the app is not in the repo', async () => {
+      mockRepo.listInstalledApps.mockResolvedValue(['vaultwarden']);
+      expect(await service.appStatus('wg-easy')).toBe('not_installed');
+      expect(mockFluxService.getStatusFor).not.toHaveBeenCalled();
+    });
+
+    it("an installed app's Flux status", async () => {
+      mockRepo.listInstalledApps.mockResolvedValue(['wg-easy']);
+      mockFluxService.getStatusFor.mockResolvedValue('installing');
+      expect(await service.appStatus('wg-easy')).toBe('installing');
+      expect(mockFluxService.getStatusFor).toHaveBeenCalledWith('wg-easy');
+    });
+  });
+
   describe('getInstalled()', () => {
     it('returns only apps with installedStatus !== not_installed (INST-03)', async () => {
       mockRepo.listInstalledApps.mockResolvedValue(['vaultwarden']);
@@ -331,6 +349,57 @@ describe('InstalledService', () => {
 
       const [, files] = mockRepo.writeApp.mock.calls[0];
       expect(files['release.yaml']).not.toContain('${BASE_DOMAIN}');
+    });
+  });
+
+  describe('install() DEVICE_IP', () => {
+    // Shaped like wg-easy: one install question, and a release that asks for
+    // the device's LAN address as the WireGuard endpoint host.
+    const vpnApp = {
+      ...mockCatalogApps[1],
+      name: 'wg-easy',
+      displayName: 'WG Easy',
+      templates: {
+        ...mockCatalogApps[1].templates,
+        release:
+          'kind: Kustomization\npostBuild:\n  substitute:\n    BASE_DOMAIN: "${BASE_DOMAIN}"\n    DEVICE_IP: "${DEVICE_IP}"',
+      },
+      settings: { items: [{ name: 'INIT_PASSWORD', required: true, sensitive: true }] },
+    };
+    const body = { settings: { INIT_PASSWORD: 'correct-horse-12' } };
+
+    beforeEach(() => {
+      mockCatalogService.findOne.mockReturnValue(vpnApp);
+    });
+
+    it("renders the node's InternalIP where a template asks for ${DEVICE_IP}", async () => {
+      mockNodeAddress.internalIp.mockResolvedValue('192.168.1.50');
+      await service.install('wg-easy', body);
+      const [, files] = mockRepo.writeApp.mock.calls[0];
+      expect(files['release.yaml']).toContain('DEVICE_IP: "192.168.1.50"');
+      expect(files['release.yaml']).toContain('BASE_DOMAIN: "libre.pod"');
+    });
+
+    it('never reads the node for an app whose templates do not reference it', async () => {
+      mockCatalogService.findOne.mockReturnValue(mockCatalogApps[1]);
+      await service.install('gogs');
+      expect(mockNodeAddress.internalIp).not.toHaveBeenCalled();
+      expect(mockRepo.writeApp).toHaveBeenCalledTimes(1);
+    });
+
+    it('invalid settings are a 400 before any node lookup', async () => {
+      mockNodeAddress.internalIp.mockRejectedValue(new ServiceUnavailableException('node down'));
+      await expect(service.install('wg-easy', { settings: {} })).rejects.toThrow(BadRequestException);
+      expect(mockNodeAddress.internalIp).not.toHaveBeenCalled();
+    });
+
+    it('a failed lookup is a 503 that writes nothing — no OpenBao entry, no commit', async () => {
+      mockNodeAddress.internalIp.mockRejectedValue(
+        new ServiceUnavailableException("Couldn't determine this device's address. Try again in a minute."),
+      );
+      await expect(service.install('wg-easy', body)).rejects.toThrow(ServiceUnavailableException);
+      expect(mockOpenBao.writeAppSettings).not.toHaveBeenCalled();
+      expect(mockRepo.writeApp).not.toHaveBeenCalled();
     });
   });
 

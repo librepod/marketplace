@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ConfigService } from '@nestjs/config';
-import { OpenBaoClient, OpenBaoMisconfiguredError, OpenBaoUnavailableError } from './openbao.client';
+import { OpenBaoCasMismatchError, OpenBaoClient, OpenBaoMisconfiguredError, OpenBaoUnavailableError } from './openbao.client';
 
 const ADDR = 'http://openbao.test:8200';
 
@@ -269,5 +269,56 @@ describe('OpenBaoClient', () => {
 
     await expect(k8sClient().readAppSettings('demo')).resolves.toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  describe('KV entries (readEntry / writeEntry)', () => {
+    it('reads an entry with its version; nested paths keep their slashes', async () => {
+      fetchMock.mockResolvedValueOnce(json({ data: { data: { state: 'open', generation: 1 }, metadata: { version: 3 } } }));
+      const entry = await staticClient().readEntry('system', 'marketplace-ui/onboarding');
+      expect(entry).toEqual({ data: { state: 'open', generation: 1 }, version: 3 });
+      expect(fetchMock.mock.calls[0][0]).toBe(`${ADDR}/v1/system/data/marketplace-ui/onboarding`);
+    });
+
+    it('a missing entry reads as null', async () => {
+      fetchMock.mockResolvedValueOnce(json({ errors: [] }, 404));
+      expect(await staticClient().readEntry('system', 'admin')).toBeNull();
+    });
+
+    it('writes typed values verbatim, with no options unless check-and-set is asked for', async () => {
+      fetchMock.mockResolvedValueOnce(writeOk());
+      await staticClient().writeEntry('system', 'admin', { password: 'p', n: 1, gone: null });
+      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe(`${ADDR}/v1/system/data/admin`);
+      expect(JSON.parse(init.body as string)).toEqual({ data: { password: 'p', n: 1, gone: null } });
+    });
+
+    it('check-and-set sends options.cas and reports a lost race as OpenBaoCasMismatchError', async () => {
+      fetchMock.mockResolvedValueOnce(json({ errors: ['check-and-set parameter did not match the current version'] }, 400));
+      const err = await staticClient()
+        .writeEntry('system', 'marketplace-ui/onboarding', { a: 1 }, { cas: 0 })
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(OpenBaoCasMismatchError);
+      const init = fetchMock.mock.calls[0][1] as RequestInit;
+      expect(JSON.parse(init.body as string)).toEqual({ options: { cas: 0 }, data: { a: 1 } });
+    });
+
+    it('any other 400 on a check-and-set write stays a misconfiguration', async () => {
+      fetchMock.mockResolvedValueOnce(json({ errors: ['no handler for route "nomount/data/x"'] }, 400));
+      await expect(staticClient().writeEntry('nomount', 'x', { a: 1 }, { cas: 0 })).rejects.toBeInstanceOf(
+        OpenBaoMisconfiguredError,
+      );
+    });
+
+    it('a 5xx is retryable', async () => {
+      fetchMock.mockResolvedValueOnce(json({ errors: ['sealed'] }, 503));
+      await expect(staticClient().readEntry('system', 'admin')).rejects.toBeInstanceOf(OpenBaoUnavailableError);
+    });
+
+    it('refuses without OPENBAO_ADDR, before any request', async () => {
+      const client = new OpenBaoClient(configOf({}));
+      await expect(client.readEntry('system', 'admin')).rejects.toBeInstanceOf(OpenBaoMisconfiguredError);
+      await expect(client.writeEntry('system', 'admin', {})).rejects.toBeInstanceOf(OpenBaoMisconfiguredError);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
   });
 });

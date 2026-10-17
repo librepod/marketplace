@@ -1,8 +1,9 @@
-import { BadRequestException, Controller, Get, Query, Req, Res } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Logger, Query, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import * as crypto from 'node:crypto';
 import { CasdoorService } from './casdoor.service';
 import { SessionService, OAUTH_RD_COOKIE, OAUTH_STATE_COOKIE } from './session.service';
+import { OnboardingStore } from '../onboarding/onboarding-store';
 
 const OAUTH_STATE_TTL_SEC = 5 * 60; // 5 min for the round-trip to Casdoor
 
@@ -18,9 +19,12 @@ function safeRelativeRd(rd: unknown): string {
 
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(
     private readonly casdoor: CasdoorService,
     private readonly session: SessionService,
+    private readonly onboarding: OnboardingStore,
   ) {}
 
   @Get('login')
@@ -48,6 +52,13 @@ export class AuthController {
     const identity = await this.casdoor.exchangeCode(code, hostOf(req));
     const token = this.session.sign(identity);
     res.cookie(this.session.cookieName, token, cookieOpts(this.session.ttlSeconds));
+    // The first sign-in since the claim finishes onboarding (spec §8). It never
+    // blocks the sign-in, not even while OpenBao is slow: the redirect doesn't wait
+    // for it, and a failed write is retried by the next authenticated
+    // GET /api/bootstrap/status.
+    void this.onboarding
+      .finishIfClaimed()
+      .catch((err: Error) => this.logger.warn(`finishing onboarding failed: ${err.message}`));
     res.clearCookie(OAUTH_STATE_COOKIE);
     const rd = safeRelativeRd(req.cookies?.[OAUTH_RD_COOKIE]);
     res.clearCookie(OAUTH_RD_COOKIE);

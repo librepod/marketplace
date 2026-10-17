@@ -50,7 +50,7 @@ def replace_tag(source_template, tag):
     return re.sub(r'(tag:\s*")[^"]*(")', rf"\g<1>{tag}\g<2>", source_template)
 
 
-def render_app(app_name, tag, base_domain, output_dir, apps_dir="apps", metadata=None):
+def render_app(app_name, tag, base_domain, output_dir, apps_dir="apps", metadata=None, device_ip=None):
     """Render all templates for an app and write to output directory."""
     if metadata is None:
         metadata = load_metadata(app_name, apps_dir)
@@ -60,6 +60,8 @@ def render_app(app_name, tag, base_domain, output_dir, apps_dir="apps", metadata
 
     # Build variable map
     variables = {"BASE_DOMAIN": base_domain}
+    if device_ip:
+        variables["DEVICE_IP"] = device_ip
 
     # Generate secret values with distinction between auto-generated and required
     for secret_def in app_secrets:
@@ -128,6 +130,12 @@ def main():
         help="Base domain for the cluster (default: librepod.dev)",
     )
     parser.add_argument(
+        "--device-ip",
+        default=None,
+        help="Value for ${DEVICE_IP} (the node InternalIP); needed by apps whose "
+             "templates use it, e.g. wg-easy. Left unsubstituted when omitted.",
+    )
+    parser.add_argument(
         "--output-dir",
         default="/tmp/verify-app",
         help="Output directory (default: /tmp/verify-app)",
@@ -157,7 +165,7 @@ def main():
 
     rendered, variables = render_app(
         args.app, tag, args.base_domain, args.output_dir, args.apps_dir,
-        metadata=metadata
+        metadata=metadata, device_ip=args.device_ip
     )
 
     print(f"\nRendered {len(rendered)} files for {args.app}")

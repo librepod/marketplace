@@ -22,6 +22,20 @@ export class OpenBaoMisconfiguredError extends Error {
   }
 }
 
+/** A check-and-set write lost the race: the entry changed since it was read. */
+export class OpenBaoCasMismatchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'OpenBaoCasMismatchError';
+  }
+}
+
+/** One KV v2 entry: its data and its version (the check-and-set handle). */
+export interface KvEntry {
+  data: Record<string, unknown>;
+  version: number;
+}
+
 /** 5xx (500 internal, 503 sealed/standby) and 429 can clear by themselves; other 4xx won't. */
 function failure(operation: string, status: number): Error {
   const message = `${operation} failed: HTTP ${status}`;
@@ -42,8 +56,9 @@ interface CachedToken {
 }
 
 /**
- * The installer's view of OpenBao: a Kubernetes-auth login and one KV v2 entry
- * read back before an install and rewritten by it.
+ * The installer's view of OpenBao: a Kubernetes-auth login and KV v2 entries: one per
+ * app (read back before an install and rewritten by it) and onboarding's entries under
+ * the system mount.
  * Plain fetch, no SDK. Errors carry only the operation and the HTTP status — never
  * the values being written — so a secret cannot leak into a log line.
  *
@@ -62,36 +77,60 @@ export class OpenBaoClient {
 
   /** Replaces the whole KV v2 entry <mount>/<app> (apps/<app> on the cluster): a new version; earlier ones stay as history. */
   async writeAppSettings(app: string, data: Record<string, string>): Promise<void> {
-    if (!this.addr) throw new OpenBaoMisconfiguredError('OPENBAO_ADDR is not set');
-    const mount = this.config.get<string>('OPENBAO_KV_MOUNT', 'secret');
-    const url = `${this.addr}/v1/${mount}/data/${encodeURIComponent(app)}`;
-
-    let res = await this.post(url, { data }, { 'X-Vault-Token': await this.clientToken() });
-    if (res.status === 403 && this.token) {
-      // The cached login token expired or was revoked early: log in again, once.
-      this.token = undefined;
-      res = await this.post(url, { data }, { 'X-Vault-Token': await this.clientToken() });
-    }
-    if (!res.ok) throw failure(`write apps/${app}`, res.status);
+    await this.writeEntry(this.config.get<string>('OPENBAO_KV_MOUNT', 'secret'), app, data);
   }
 
   /** The app's current settings entry, or null when it was never written. */
   async readAppSettings(app: string): Promise<Record<string, string> | null> {
-    if (!this.addr) throw new OpenBaoMisconfiguredError('OPENBAO_ADDR is not set');
-    const mount = this.config.get<string>('OPENBAO_KV_MOUNT', 'secret');
-    const url = `${this.addr}/v1/${mount}/data/${encodeURIComponent(app)}`;
+    const entry = await this.readEntry(this.config.get<string>('OPENBAO_KV_MOUNT', 'secret'), app);
+    return entry ? (entry.data as Record<string, string>) : null;
+  }
 
+  /** The KV v2 entry <mount>/<path>, or null when it was never written. */
+  async readEntry(mount: string, path: string): Promise<KvEntry | null> {
+    const url = this.entryUrl(mount, path);
     let res = await this.get(url, { 'X-Vault-Token': await this.clientToken() });
-    if (res.status === 404) return null;
     if (res.status === 403 && this.token) {
       // The cached login token expired or was revoked early: log in again, once.
       this.token = undefined;
       res = await this.get(url, { 'X-Vault-Token': await this.clientToken() });
-      if (res.status === 404) return null;
     }
-    if (!res.ok) throw failure(`read apps/${app}`, res.status);
-    const body = (await res.json()) as { data?: { data?: Record<string, string> } };
-    return body.data?.data ?? {};
+    if (res.status === 404) return null;
+    if (!res.ok) throw failure(`read ${mount}/${path}`, res.status);
+    const body = (await res.json()) as {
+      data?: { data?: Record<string, unknown>; metadata?: { version?: number } };
+    };
+    return { data: body.data?.data ?? {}, version: body.data?.metadata?.version ?? 0 };
+  }
+
+  /**
+   * Replaces the whole KV v2 entry <mount>/<path> (a new version; earlier ones stay as
+   * history). With `cas` the write is check-and-set: it lands only while the entry is still
+   * at that version — 0 means "only if it does not exist yet" — else OpenBaoCasMismatchError.
+   */
+  async writeEntry(
+    mount: string,
+    path: string,
+    data: Record<string, unknown>,
+    opts: { cas?: number } = {},
+  ): Promise<void> {
+    const url = this.entryUrl(mount, path);
+    const body = opts.cas === undefined ? { data } : { options: { cas: opts.cas }, data };
+    let res = await this.post(url, body, { 'X-Vault-Token': await this.clientToken() });
+    if (res.status === 403 && this.token) {
+      // The cached login token expired or was revoked early: log in again, once.
+      this.token = undefined;
+      res = await this.post(url, body, { 'X-Vault-Token': await this.clientToken() });
+    }
+    if (opts.cas !== undefined && res.status === 400 && /check-and-set/i.test(await res.text().catch(() => ''))) {
+      throw new OpenBaoCasMismatchError(`write ${mount}/${path}: the entry changed since it was read`);
+    }
+    if (!res.ok) throw failure(`write ${mount}/${path}`, res.status);
+  }
+
+  private entryUrl(mount: string, path: string): string {
+    if (!this.addr) throw new OpenBaoMisconfiguredError('OPENBAO_ADDR is not set');
+    return `${this.addr}/v1/${mount}/data/${path.split('/').map(encodeURIComponent).join('/')}`;
   }
 
   private async get(url: string, headers: Record<string, string> = {}): Promise<Response> {

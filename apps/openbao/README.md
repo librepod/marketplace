@@ -49,8 +49,11 @@ idempotently:
    an OpenBao policy named after its file:
    - `eso-read-apps` ← role `external-secrets` (SA `openbao-eso`, ns `openbao`):
      **read** `apps/*`
-   - `marketplace-ui-write-apps` ← role `marketplace-ui`
-     (SA `marketplace-ui`, ns `marketplace-ui`): **create/update** `apps/*`
+   - `marketplace-ui-write-apps` + `marketplace-ui-system` ← role
+     `marketplace-ui` (SA `marketplace-ui`, ns `marketplace-ui`):
+     **create/update** `apps/*`, and **create/update/read**
+     `system/marketplace-ui/*` (the first-run onboarding record) and
+     `system/admin` (the admin password)
    - `step-certificates-write-apps` + `step-ca-backup` ← role
      `step-certificates` (SA `step-ca-bootstrap-step-issuer`, ns `step-ca`):
      **create/update** `apps/step-ca` (public certs) and `system/step-ca`

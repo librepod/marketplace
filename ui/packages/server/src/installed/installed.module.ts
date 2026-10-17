@@ -1,5 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { KubeConfig, CustomObjectsApi } from '@kubernetes/client-node';
+import { KubeConfig, CustomObjectsApi, CoreV1Api } from '@kubernetes/client-node';
 import { CatalogModule } from '../catalog/catalog.module';
 import { InstalledController } from './installed.controller';
 import { SystemAppsController } from './system-apps.controller';
@@ -12,20 +12,28 @@ import { SystemAppsService } from './system-apps.service';
 import { LaunchUrlService } from './launch-url.service';
 import { OpenBaoClient } from './openbao.client';
 import { LegacySecretMirror } from './legacy-secret-mirror';
+import { NodeAddressService } from './node-address.service';
 
-// Same kubeconfig selection FluxStatusService.onModuleInit already performs; as a
-// factory it can be injected, which is what lets GitRemoteService be unit-tested
-// without spying on a private method. Note this runs eagerly at module init, so
-// Tier 1's closed-port KUBECONFIG fixture is still what keeps `loadFromDefault()`
-// from throwing where no kubeconfig exists — unchanged behaviour, new location.
+// Same kubeconfig selection FluxStatusService.onModuleInit already performs; as
+// factories the API clients can be injected, which is what lets GitRemoteService
+// and NodeAddressService be unit-tested without spying on a private method. Note
+// these run eagerly at module init, so Tier 1's closed-port KUBECONFIG fixture is
+// still what keeps `loadFromDefault()` from throwing where no kubeconfig exists.
+function loadKubeConfig(): KubeConfig {
+  const kc = new KubeConfig();
+  if (process.env.KUBERNETES_SERVICE_HOST) kc.loadFromCluster();
+  else kc.loadFromDefault();
+  return kc;
+}
+
 const customObjectsApiProvider = {
   provide: CustomObjectsApi,
-  useFactory: (): CustomObjectsApi => {
-    const kc = new KubeConfig();
-    if (process.env.KUBERNETES_SERVICE_HOST) kc.loadFromCluster();
-    else kc.loadFromDefault();
-    return kc.makeApiClient(CustomObjectsApi);
-  },
+  useFactory: (): CustomObjectsApi => loadKubeConfig().makeApiClient(CustomObjectsApi),
+};
+
+const coreV1ApiProvider = {
+  provide: CoreV1Api,
+  useFactory: (): CoreV1Api => loadKubeConfig().makeApiClient(CoreV1Api),
 };
 
 @Module({
@@ -34,6 +42,7 @@ const customObjectsApiProvider = {
   providers: [
     InstalledService,
     customObjectsApiProvider,
+    coreV1ApiProvider,
     GitClient,
     GitRemoteService,
     UserAppsRepoService,
@@ -42,7 +51,10 @@ const customObjectsApiProvider = {
     LaunchUrlService,
     OpenBaoClient,
     LegacySecretMirror,
+    NodeAddressService,
   ],
-  exports: [InstalledService],
+  // OpenBaoClient and NodeAddressService also serve first-run onboarding
+  // (src/onboarding): one OpenBao login, one node lookup.
+  exports: [InstalledService, OpenBaoClient, NodeAddressService],
 })
 export class InstalledModule {}
