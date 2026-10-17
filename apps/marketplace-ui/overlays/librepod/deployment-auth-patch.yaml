@@ -36,6 +36,13 @@ spec:
               mountPath: /etc/ssl/certs/ca-certificates.crt
               subPath: ca-certificates.crt
               readOnly: true
+            # The raw root CA for the onboarding wizard's Trust step
+            # (GET /api/bootstrap/ca streams it). The root-ca-cert volume
+            # already exists in this patch for the init container above —
+            # this mount reuses it in the main container.
+            - name: root-ca-cert
+              mountPath: /mnt/root-ca
+              readOnly: true
           env:
             - name: CASDOOR_CLIENT_ID
               valueFrom:
@@ -56,6 +63,10 @@ spec:
               value: /etc/ssl/certs/ca-certificates.crt
             - name: SSL_CERT_FILE
               value: /etc/ssl/certs/ca-certificates.crt
+            # Where the onboarding wizard serves the root CA from
+            # (GET /api/bootstrap/ca).
+            - name: ROOT_CA_PATH
+              value: /mnt/root-ca/root_ca.crt
       volumes:
         - name: root-ca-cert
           secret:

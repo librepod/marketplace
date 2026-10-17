@@ -18,14 +18,12 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/wg-easy"
     path: ./overlays/librepod
 
-  settings:
-    items:
-      - name: INIT_PASSWORD
-        label: "Admin password"
-        description: "Initial password for the built-in admin account (applied on first start only). SSO is the primary login; this is the fallback if the IdP is unavailable."
-        sensitive: true
-        required: true
-        default: "change-me"
+  # No install questions: wg-easy is a system app (deployed with the cluster,
+  # not user-installable). The admin credential is not an install answer —
+  # the openbao bootstrap seeds apps/wg-easy with a per-device random boot
+  # ticket (ESO delivers it so the pod can start), and the marketplace-ui
+  # onboarding wizard completes wg-easy's first-boot setup with the user's
+  # chosen device-admin password at claim time.
 
   dependencies:
     required:

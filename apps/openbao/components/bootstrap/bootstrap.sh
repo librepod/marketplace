@@ -147,6 +147,22 @@ bao write auth/kubernetes/role/gogs \
 # keep auth/oidc and its admin-sso role (policies admin,default) enabled.
 # Disable once by hand on those clusters: bao auth disable oidc
 
+# System-app settings seed: wg-easy. wg-easy is a system app (tailnet =
+# device infrastructure) that boots from apps/wg-easy via ESO — but a
+# system app has no install dialog, so nothing else would ever write that
+# entry and the pod would wait forever on the settings Secret. Seed a
+# per-device random INIT_PASSWORD ONLY if absent, so re-runs and existing
+# clusters (an install-time answer, or the onboarding wizard's write-back
+# of the chosen password) keep their value. The wizard reads this entry
+# (marketplace-ui-write-apps policy) and adopts the user's chosen password
+# at claim time — completing wg-easy's first-boot setup on a fresh
+# instance, or rotating an already-set-up one.
+if ! bao kv get -field=INIT_PASSWORD apps/wg-easy >/dev/null 2>&1; then
+  PW="$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 24)"
+  bao kv put apps/wg-easy INIT_PASSWORD="$PW" >/dev/null
+  echo "seeded apps/wg-easy with a per-device random INIT_PASSWORD"
+fi
+
 # The audit device is declared in the server configuration (see
 # helmrelease.yaml), not enabled via the API.
 

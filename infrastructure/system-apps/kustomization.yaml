@@ -19,3 +19,4 @@ resources:
   - marketplace-ui.yaml
   - marketplace-catalog.yaml
   - traefik.yaml
+  - wg-easy.yaml
