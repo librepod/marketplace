@@ -3,6 +3,7 @@ import { Separator } from "@/components/ui/separator"
 import { Toaster } from "@/components/ui/sonner"
 import { UserMenu } from "@/components/UserMenu"
 import { SoonTag } from "@/components/SoonTag"
+import { TrustBanner } from "@/components/TrustBanner"
 import { cn } from "@/lib/utils"
 
 // Top-nav link styling. The active item carries a foreground underline so the
@@ -20,6 +21,8 @@ function navLinkClassName({ isActive }: { isActive: boolean }) {
 export function AppShell() {
   return (
     <div className="min-h-screen bg-background text-foreground">
+      {/* Above the header: a distrust condition concerns the whole device, not one page. */}
+      <TrustBanner />
       <div className="mx-auto max-w-screen-xl px-6 md:px-8">
         <header className="pb-6 pt-8">
           <h1 className="text-2xl font-semibold">LibrePod</h1>

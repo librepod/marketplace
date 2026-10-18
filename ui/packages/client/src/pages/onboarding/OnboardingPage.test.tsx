@@ -22,17 +22,22 @@ const vpnHeading = () => screen.getByRole("heading", { name: /reach your librepo
 
 describe("deriveStep — cluster truth decides the step", () => {
   it.each([
-    ["open", open, CLAIM],
-    ["claimed, no account confirmed", { ...claimed, account: null }, ACCOUNT],
-    ["VPN not installed", claimed, VPN],
-    ["VPN status unknown", { ...claimed, vpnStatus: null }, VPN],
-    ["installing, no peers", { ...claimed, vpnStatus: "installing" as const, peerCount: 0 }, TRUST],
-    ["running, no peers", { ...claimed, vpnStatus: "running" as const, peerCount: 0 }, TRUST],
-    ["error, no peers", { ...claimed, vpnStatus: "error" as const, peerCount: 0 }, TRUST],
-    ["a peer, no handshake", { ...claimed, vpnStatus: "running" as const, peerCount: 1 }, CONNECT],
-    ["a handshake", { ...claimed, vpnStatus: "running" as const, peerCount: 1, lastHandshakeAt: "2026-10-14T10:00:00Z" }, GRADUATE],
-  ])("%s", (_name, status, step) => {
-    expect(deriveStep(status)).toBe(step)
+    ["open", open, false, CLAIM],
+    ["claimed, no account confirmed", { ...claimed, account: null }, false, ACCOUNT],
+    ["VPN not installed", claimed, false, VPN],
+    ["VPN status unknown", { ...claimed, vpnStatus: null }, false, VPN],
+    ["installing, CA not confirmed", { ...claimed, vpnStatus: "installing" as const, peerCount: 0 }, false, TRUST],
+    ["running, no peers, CA not confirmed", { ...claimed, vpnStatus: "running" as const, peerCount: 0 }, false, TRUST],
+    ["error, no peers, CA not confirmed", { ...claimed, vpnStatus: "error" as const, peerCount: 0 }, false, TRUST],
+    // The CA checkbox is this browser's record of Trust: with it, a reload between
+    // the install and the first peer lands back on Connect, not Trust again.
+    ["running, no peers, CA confirmed", { ...claimed, vpnStatus: "running" as const, peerCount: 0 }, true, CONNECT],
+    // A fresh browser after a reset (peers exist, but this one never saw Trust) must not skip the CA.
+    ["a peer, no handshake, CA not confirmed", { ...claimed, vpnStatus: "running" as const, peerCount: 1 }, false, TRUST],
+    ["a peer, no handshake, CA confirmed", { ...claimed, vpnStatus: "running" as const, peerCount: 1 }, true, CONNECT],
+    ["a handshake", { ...claimed, vpnStatus: "running" as const, peerCount: 1, lastHandshakeAt: "2026-10-14T10:00:00Z" }, false, GRADUATE],
+  ])("%s", (_name, status, caInstalled, step) => {
+    expect(deriveStep(status, caInstalled)).toBe(step)
   })
 })
 
@@ -104,9 +109,18 @@ describe("OnboardingPage", () => {
     ["Connect", { ...claimed, vpnStatus: "running" as const, peerCount: 1 }],
   ])("%s has no Back: the device's state decides the step, and a reload is the way back", (_step, status) => {
     localStorage.setItem("librepod-onboarding-welcome", "1")
+    localStorage.setItem("librepod-onboarding-ca", "1")
     mockApi()
     page(status)
     expect(screen.queryByRole("button", { name: /^back$/i })).toBeNull()
+  })
+
+  it("a reload between install and the first peer resumes at Connect, not Trust again", () => {
+    mockApi()
+    localStorage.setItem("librepod-onboarding-welcome", "1")
+    localStorage.setItem("librepod-onboarding-ca", "1")
+    page({ ...claimed, vpnStatus: "running", peerCount: 0 })
+    expect(screen.getByRole("heading", { name: /connect your first device/i })).toBeVisible()
   })
 
   it("a handshake leads to Graduate, the end of the road — no way back to make more keys", () => {

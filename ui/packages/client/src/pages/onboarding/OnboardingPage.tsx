@@ -2,7 +2,9 @@ import { useState, type ReactNode } from "react"
 import type { OnboardingStatus } from "@librepod/shared"
 import { Separator } from "@/components/ui/separator"
 import { AccountStep, ClaimStep, ResumeScreen, WelcomeStep } from "./AccessSteps"
-import { ConnectStep, GraduateStep, TrustStep, VpnStep, type ConnectivityPath } from "./ConnectivitySteps"
+import {
+  CA_INSTALLED_KEY, ConnectStep, GraduateStep, TrustStep, VpnStep, type ConnectivityPath,
+} from "./ConnectivitySteps"
 
 /**
  * The first-run wizard: raw-IP arrivals while the device is open or claimed. One
@@ -24,16 +26,17 @@ export const GRADUATE = 6
 
 const WELCOME_KEY = "librepod-onboarding-welcome"
 
-export function deriveStep(s: OnboardingStatus): number {
+/** Trust's done-ness is per-browser (the CA checkbox), so it arrives as an argument
+ *  instead of living in the status. */
+export function deriveStep(s: OnboardingStatus, caInstalled: boolean): number {
   if (s.state !== "claimed") return CLAIM
   if (!s.account) return ACCOUNT
   // An unknown VPN status counts as not installed: a repeat install is harmless
   // (409 counts as success). Once it is installing, running or failing, Trust comes
   // first — never skip the CA.
   if (s.vpnStatus === "not_installed" || s.vpnStatus == null) return VPN
-  if (!s.peerCount) return TRUST
-  if (!s.lastHandshakeAt) return CONNECT
-  return GRADUATE
+  if (s.lastHandshakeAt) return GRADUATE
+  return caInstalled ? CONNECT : TRUST
 }
 
 /** `reconnecting`: the device answered `waiting` mid-setup; `status` is the last good one. */
@@ -50,7 +53,7 @@ export function OnboardingPage({ status, onRefresh, reconnecting = false }: {
     return <Frame reconnecting={reconnecting}><ResumeScreen onResumed={onRefresh} /></Frame>
   }
 
-  const derived = deriveStep(status)
+  const derived = deriveStep(status, localStorage.getItem(CA_INSTALLED_KEY) === "1")
   const seenWelcome = localStorage.getItem(WELCOME_KEY) === "1"
   const floor = derived === CLAIM && !seenWelcome ? WELCOME : derived
   const step = Math.max(floor, userStep ?? 0)
