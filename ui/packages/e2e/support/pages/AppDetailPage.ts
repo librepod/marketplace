@@ -33,6 +33,11 @@ export class AppDetailPage {
     return this.page.getByRole("button", { name: "Install App" });
   }
 
+  // Edits an installed app's settings (any installed status, so Tier 1's "installing" too).
+  settingsButton(): Locator {
+    return this.page.getByRole("button", { name: "Settings", exact: true });
+  }
+
   // The install-questions dialog (apps with catalog `settings`). A plain dialog —
   // the Uninstall confirmation is an alertdialog, so the roles never collide.
   installDialog(): Locator {
