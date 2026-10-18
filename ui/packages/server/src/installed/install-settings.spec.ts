@@ -325,7 +325,7 @@ describe('storedToRequest', () => {
 
   it('splits the entry into question answers and custom variables, leaving generated values out', () => {
     expect(storedToRequest(settings, { TOKEN: 't', DB_PASSWORD: 'gen', HTTP_PROXY: 'p' })).toEqual({
-      settings: { TOKEN: 't' },
+      settings: { TOKEN: 't', LOG: '' },
       custom: [{ name: 'HTTP_PROXY', value: 'p' }],
     });
   });
@@ -337,6 +337,17 @@ describe('storedToRequest', () => {
   it('drops unclaimed keys when the app does not allow custom variables', () => {
     const result = storedToRequest({ ...settings, allowCustom: false }, { TOKEN: 't', DB_PASSWORD: 'gen', HTTP_PROXY: 'p' });
     expect(result.custom).toEqual([]);
+  });
+
+  it('reads a cleared optional question back as empty, so a save with no changes keeps it unset', () => {
+    const stored = { TOKEN: 't', DB_PASSWORD: 'gen' };
+    expect(storedToRequest(settings, stored).settings).toEqual({ TOKEN: 't', LOG: '' });
+    expect(resolveSettings(settings, storedToRequest(settings, stored), stored)).toEqual({ ok: true, values: stored });
+  });
+
+  it('leaves out a missing required question, so one added after install shows its default', () => {
+    const withRequired: AppSettings = { items: [{ name: 'REGION', required: true, default: 'eu' }] };
+    expect(storedToRequest(withRequired, {}).settings).toEqual({});
   });
 
   it('round-trips: resolving the read-back request reproduces the stored entry', () => {

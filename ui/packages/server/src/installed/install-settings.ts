@@ -173,13 +173,19 @@ export function resolveSettings(
  */
 export function storedToRequest(settings: AppSettings, stored: Record<string, string> | null): AppSettingsValues {
   const request: AppSettingsValues = { settings: {}, custom: [] };
-  const items = new Map((settings.items ?? []).map((item) => [item.name, item]));
-  for (const [name, value] of Object.entries(stored ?? {})) {
-    const item = items.get(name);
-    if (item) {
-      if (!item.generate) request.settings[name] = value;
-    } else if (settings.allowCustom) {
-      request.custom.push({ name, value });
+  if (!stored) return request;
+  const items = settings.items ?? [];
+  for (const item of items) {
+    if (item.generate) continue;
+    // A missing optional key is how a cleared answer is stored: read it back as empty, or any
+    // save would put the default back. A missing required one was added after the write.
+    if (Object.hasOwn(stored, item.name)) request.settings[item.name] = stored[item.name];
+    else if (!item.required) request.settings[item.name] = '';
+  }
+  if (settings.allowCustom) {
+    const claimed = new Set(items.map((item) => item.name));
+    for (const [name, value] of Object.entries(stored)) {
+      if (!claimed.has(name)) request.custom.push({ name, value });
     }
   }
   return request;

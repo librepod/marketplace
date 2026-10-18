@@ -637,7 +637,7 @@ describe('InstalledService', () => {
       mockRepo.listInstalledApps.mockResolvedValue([]);
 
       await expect(service.getSettings('renovate')).resolves.toEqual({
-        settings: { RENOVATE_TOKEN: 't' },
+        settings: { RENOVATE_TOKEN: 't', LOG_FORMAT: '' },
         custom: [{ name: 'HTTP_PROXY', value: 'p' }],
       });
     });

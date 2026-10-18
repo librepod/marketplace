@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Param, Body, NotFoundException, HttpCode } from '@nestjs/common';
+import { Controller, Get, Post, Put, Param, Body, NotFoundException, HttpCode, Header } from '@nestjs/common';
 import { CatalogService } from './catalog.service';
 import { InstalledService } from '../installed/installed.service';
 import { CatalogApp } from './catalog.types';
@@ -37,6 +37,7 @@ export class CatalogController {
   }
 
   @Get(':name/settings')
+  @Header('Cache-Control', 'no-store') // the body carries plaintext tokens: keep it out of the browser cache
   async getSettings(@Param('name') name: string): Promise<AppSettingsValues> {
     return this.installedService.getSettings(name);
   }

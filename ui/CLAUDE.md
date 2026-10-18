@@ -204,6 +204,12 @@ Degradation is layered, and the distinction matters:
 - `GET /api/system-apps` → `InstalledService.getSystemApps()` → enriched apps where `system === true` (the read-only Platform panel on `/`).
 - `POST /api/apps/:name/install` | `/uninstall` → `InstalledService` (mutex-serialized). Install
   takes an optional JSON body `{ settings?, custom? }` (used only by apps with catalog `settings`).
+- `GET /api/apps/:name/settings` → the stored OpenBao entry as an install body (generated items
+  never leave the server; a cleared optional answer reads back as `''`; `Cache-Control: no-store`).
+  Works for a not-installed app too — that is how a reinstall prefills the dialog.
+- `PUT /api/apps/:name/settings` → same body as install, installed apps only, mutex-serialized:
+  replaces the whole entry, then best-effort annotates `ExternalSecret <name>-settings` with
+  `force-sync` (external-secrets-reloader restarts the app's Deployments). Never touches Gogs.
 - `/api/bootstrap/*` (first-run onboarding, `src/onboarding/`) is exempt from `AuthGuard` — see
   "First-run onboarding" below. `POST /api/bootstrap/install` is a second, session-less entry into
   `InstalledService.install()`: `OnboardingGuard`-gated, allowlist `{'wg-easy': INIT_PASSWORD}`, settings
@@ -354,7 +360,8 @@ of a system app returns 409. The `SYSTEM_APPS_OVERRIDE` env (JSON
 `[{name, kustomization}]`) is a test seam used by Tier 1 e2e.
 
 ### Client data layer
-Three TanStack Query keys: `["apps"]` (catalog), `["apps", name]` (detail), `["installed"]`.
+Three TanStack Query keys: `["apps"]` (catalog), `["apps", name]` (detail), `["installed"]`,
+plus `["apps", name, "settings"]` (the settings dialog's prefill, `gcTime: 0` so every open reads fresh).
 Install/uninstall mutations (`useInstallApp`/`useUninstallApp`) invalidate all three on
 success. Default `staleTime: 5min`, `retry: 0` (manual retry via UI button). Routes:
 `/` (MyAppsPage — the installed-apps control plane, the daily home), `/catalog`
