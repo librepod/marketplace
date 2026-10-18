@@ -1,8 +1,8 @@
-import { Controller, Get, Post, Param, Body, NotFoundException, HttpCode } from '@nestjs/common';
+import { Controller, Get, Post, Put, Param, Body, NotFoundException, HttpCode } from '@nestjs/common';
 import { CatalogService } from './catalog.service';
 import { InstalledService } from '../installed/installed.service';
 import { CatalogApp } from './catalog.types';
-import type { InstallResult } from '@librepod/shared';
+import type { AppSettingsValues, InstallResult } from '@librepod/shared';
 
 @Controller('apps')
 export class CatalogController {
@@ -34,6 +34,18 @@ export class CatalogController {
     // Optional { settings?, custom? }. Express 5 leaves req.body undefined when no
     // JSON was sent; InstalledService treats that as "all defaults".
     return this.installedService.install(name, body);
+  }
+
+  @Get(':name/settings')
+  async getSettings(@Param('name') name: string): Promise<AppSettingsValues> {
+    return this.installedService.getSettings(name);
+  }
+
+  @Put(':name/settings')
+  @HttpCode(200)
+  async updateSettings(@Param('name') name: string, @Body() body: unknown): Promise<InstallResult> {
+    // Same body as install; the whole stored entry is replaced.
+    return this.installedService.updateSettings(name, body);
   }
 
   @Post(':name/uninstall')

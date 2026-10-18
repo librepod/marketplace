@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { AppSettings } from '@librepod/shared';
-import { JSON_BODY_LIMIT_BYTES, resolveSettings, SETTINGS_LIMITS } from './install-settings';
+import { JSON_BODY_LIMIT_BYTES, resolveSettings, SETTINGS_LIMITS, storedToRequest } from './install-settings';
 
 const renovate: AppSettings = {
   allowCustom: true,
@@ -314,5 +314,33 @@ describe('resolveSettings', () => {
       const r = resolveSettings(settings, { settings: { TOKEN: 't' } }, { STALE: 'z', DB_PASSWORD: 'old' }, gen);
       expect(r.ok && r.values.STALE).toBeUndefined();
     });
+  });
+});
+
+describe('storedToRequest', () => {
+  const settings: AppSettings = {
+    allowCustom: true,
+    items: [{ name: 'TOKEN', sensitive: true }, { name: 'LOG', default: 'json' }, { name: 'DB_PASSWORD', generate: { length: 8 } }],
+  };
+
+  it('splits the entry into question answers and custom variables, leaving generated values out', () => {
+    expect(storedToRequest(settings, { TOKEN: 't', DB_PASSWORD: 'gen', HTTP_PROXY: 'p' })).toEqual({
+      settings: { TOKEN: 't' },
+      custom: [{ name: 'HTTP_PROXY', value: 'p' }],
+    });
+  });
+
+  it('returns empty answers for no entry', () => {
+    expect(storedToRequest(settings, null)).toEqual({ settings: {}, custom: [] });
+  });
+
+  it('drops unclaimed keys when the app does not allow custom variables', () => {
+    const result = storedToRequest({ ...settings, allowCustom: false }, { TOKEN: 't', DB_PASSWORD: 'gen', HTTP_PROXY: 'p' });
+    expect(result.custom).toEqual([]);
+  });
+
+  it('round-trips: resolving the read-back request reproduces the stored entry', () => {
+    const stored = { TOKEN: 't', LOG: 'pretty', DB_PASSWORD: 'gen', HTTP_PROXY: 'p' };
+    expect(resolveSettings(settings, storedToRequest(settings, stored), stored)).toEqual({ ok: true, values: stored });
   });
 });
