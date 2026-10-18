@@ -98,6 +98,7 @@ describe('InstalledService', () => {
   };
   let mockLegacyMirror: { snapshotApp: ReturnType<typeof vi.fn> };
   let mockNodeAddress: { internalIp: ReturnType<typeof vi.fn> };
+  let mockK8s: { patchNamespacedCustomObject: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     mockRepo = {
@@ -134,6 +135,7 @@ describe('InstalledService', () => {
 
     mockLegacyMirror = { snapshotApp: vi.fn(async () => 0) };
     mockNodeAddress = { internalIp: vi.fn() };
+    mockK8s = { patchNamespacedCustomObject: vi.fn(async () => ({})) };
 
     service = new InstalledService(
       mockCatalogService as unknown as CatalogService,
@@ -145,6 +147,7 @@ describe('InstalledService', () => {
       mockOpenBao as unknown as OpenBaoClient,
       mockLegacyMirror as unknown as import('./legacy-secret-mirror').LegacySecretMirror,
       mockNodeAddress as unknown as import('./node-address.service').NodeAddressService,
+      mockK8s as unknown as import('@kubernetes/client-node').CustomObjectsApi,
     );
   });
 
@@ -729,6 +732,39 @@ describe('InstalledService', () => {
       ]);
 
       expect(order).toEqual(['start-vaultwarden', 'end-vaultwarden', 'settings-renovate']);
+    });
+
+    it("asks ESO to re-sync the app's ExternalSecret after the write", async () => {
+      await service.updateSettings('renovate', { settings: { RENOVATE_TOKEN: 't' } });
+
+      expect(mockK8s.patchNamespacedCustomObject).toHaveBeenCalledTimes(1);
+      expect(mockK8s.patchNamespacedCustomObject.mock.calls[0][0]).toMatchObject({
+        group: 'external-secrets.io',
+        version: 'v1',
+        namespace: 'renovate',
+        plural: 'externalsecrets',
+        name: 'renovate-settings',
+        body: { metadata: { annotations: { 'force-sync': expect.any(String) } } },
+      });
+      expect(mockOpenBao.writeAppSettings.mock.invocationCallOrder[0]).toBeLessThan(
+        mockK8s.patchNamespacedCustomObject.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('a failed nudge is logged, not fatal — the save still succeeds', async () => {
+      mockK8s.patchNamespacedCustomObject.mockRejectedValue(new Error('externalsecrets is forbidden'));
+
+      await expect(service.updateSettings('renovate', { settings: { RENOVATE_TOKEN: 't' } })).resolves.toMatchObject({
+        success: true,
+      });
+    });
+
+    it('install never nudges', async () => {
+      mockRepo.listInstalledApps.mockResolvedValue([]);
+
+      await service.install('renovate', { settings: { RENOVATE_TOKEN: 't' } });
+
+      expect(mockK8s.patchNamespacedCustomObject).not.toHaveBeenCalled();
     });
   });
 

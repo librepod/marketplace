@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Mutex } from 'async-mutex';
+import { CustomObjectsApi, PatchStrategy, setHeaderOptions } from '@kubernetes/client-node';
 import * as crypto from 'node:crypto';
 import { CatalogService } from '../catalog/catalog.service';
 import { UserAppsRepoService } from './user-apps-repo.service';
@@ -36,6 +37,7 @@ export class InstalledService {
     private readonly openBao: OpenBaoClient,
     private readonly legacyMirror: LegacySecretMirror,
     private readonly nodeAddress: NodeAddressService,
+    private readonly k8s: CustomObjectsApi,
   ) {}
 
   async enrich(apps: CatalogApp[]): Promise<CatalogApp[]> {
@@ -180,8 +182,32 @@ export class InstalledService {
       } catch (err) {
         this.throwSettingsStoreError(err, appName);
       }
+      await this.requestSettingsSync(appName);
       return { success: true, message: `${app.displayName} settings saved` };
     });
+  }
+
+  /**
+   * Asks ESO to re-sync <app>-settings now instead of at its refresh interval; the
+   * external-secrets-reloader then restarts the Deployments using the Secret. Best-effort:
+   * the entry is already saved, and ESO picks it up on its own schedule anyway.
+   */
+  private async requestSettingsSync(appName: string): Promise<void> {
+    try {
+      await this.k8s.patchNamespacedCustomObject(
+        {
+          group: 'external-secrets.io',
+          version: 'v1',
+          namespace: appName,
+          plural: 'externalsecrets',
+          name: `${appName}-settings`,
+          body: { metadata: { annotations: { 'force-sync': new Date().toISOString() } } },
+        },
+        setHeaderOptions('Content-Type', PatchStrategy.MergePatch),
+      );
+    } catch (err) {
+      this.logger.warn(`could not force-sync ${appName}-settings: ${(err as Error).message}`);
+    }
   }
 
   async install(appName: string, body?: unknown): Promise<InstallResult> {
