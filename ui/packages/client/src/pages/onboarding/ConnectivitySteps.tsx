@@ -13,6 +13,11 @@ const VPN_APP = "wg-easy"
 /** Installing longer than this on this page means WireGuard isn't coming up here. */
 export const STUCK_AFTER_MS = 5 * 60 * 1000
 
+/** This browser has marked the root certificate installed (the Trust checkbox).
+ *  Trust is the one step whose done-ness the device cannot know, so the wizard
+ *  derives it per-browser — see deriveStep. */
+export const CA_INSTALLED_KEY = "librepod-onboarding-ca"
+
 /** "Reach your LibrePod by name": WireGuard (recommended) or "I'll bring my own".
  *  The server answers wg-easy's admin-password question itself; the browser sends
  *  only the endpoint the owner confirmed. */
@@ -98,17 +103,14 @@ export function VpnStep({ status, onWireguard, onOwn, onSessionLost }: {
   )
 }
 
-export function TrustStep({ onDone }: { onDone: () => void }) {
-  const [installed, setInstalled] = useState(localStorage.getItem("librepod-onboarding-ca") === "1")
+/** The CA download + per-platform install instructions — the one trust artifact
+ *  shared by the wizard's Trust step, the in-app distrust banner, and the
+ *  new-device helper on the raw-IP screen. Renders on any origin that serves
+ *  the SPA (the download URL is same-origin relative). */
+export function TrustSheet() {
   return (
-    <section>
-      <h1 className="text-2xl font-semibold">Trust your device</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Your device issues its own certificates. Installing this root certificate on your
-        phone and laptop now means every address ends in a clean padlock, starting with the
-        next step.
-      </p>
-      <Button className="mt-6" render={<a href="/api/bootstrap/ca" download />}>
+    <div>
+      <Button render={<a href="/api/bootstrap/ca" download />}>
         Download root certificate
       </Button>
       <details className="mt-4 text-sm text-muted-foreground">
@@ -121,9 +123,26 @@ export function TrustStep({ onDone }: { onDone: () => void }) {
           <li><b>Ubuntu:</b> <code>sudo cp librepod-root-ca.crt /usr/local/share/ca-certificates/ && sudo update-ca-certificates</code></li>
         </ul>
       </details>
+    </div>
+  )
+}
+
+export function TrustStep({ onDone }: { onDone: () => void }) {
+  const [installed, setInstalled] = useState(localStorage.getItem(CA_INSTALLED_KEY) === "1")
+  return (
+    <section>
+      <h1 className="text-2xl font-semibold">Trust your device</h1>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Your device issues its own certificates. Installing this root certificate on your
+        phone and laptop now means every address ends in a clean padlock, starting with the
+        next step.
+      </p>
+      <div className="mt-6">
+        <TrustSheet />
+      </div>
       <label className="mt-6 flex items-center gap-2 text-sm">
         <input type="checkbox" checked={installed}
-          onChange={(e) => { setInstalled(e.target.checked); localStorage.setItem("librepod-onboarding-ca", e.target.checked ? "1" : "0") }} />
+          onChange={(e) => { setInstalled(e.target.checked); localStorage.setItem(CA_INSTALLED_KEY, e.target.checked ? "1" : "0") }} />
         I installed the certificate
       </label>
       <Button className="mt-4" disabled={!installed} onClick={onDone}>Continue</Button>
