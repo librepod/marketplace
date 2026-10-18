@@ -87,9 +87,6 @@ describe('marketplace-ui ClusterRole RBAC', () => {
     },
   );
 
-  // NodeAddressService reads ONE Node by name (get, never list) for the
-  // ${DEVICE_IP} platform variable. Without the grant, every install of an app
-  // that uses it is a 503.
   it('grants patch on external-secrets.io/externalsecrets (nudged by InstalledService.updateSettings)', () => {
     expect(
       rules.some(
@@ -101,6 +98,9 @@ describe('marketplace-ui ClusterRole RBAC', () => {
     ).toBe(true);
   });
 
+  // NodeAddressService reads ONE Node by name (get, never list) for the
+  // ${DEVICE_IP} platform variable. Without the grant, every install of an app
+  // that uses it is a 503.
   it('grants get on core nodes (read by NodeAddressService)', () => {
     expect(
       rules.some(

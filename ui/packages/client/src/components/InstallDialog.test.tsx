@@ -355,7 +355,7 @@ describe('InstallDialog', () => {
     expect(sentBody(fetchSpy)).toEqual({ settings: { LOG_FORMAT: 'json', RENOVATE_TOKEN: 'old', DRY_RUN: 'false' } })
     await waitFor(() =>
       expect(toast.success).toHaveBeenCalledWith('Settings saved', {
-        description: 'Renovate will restart in a moment to use them.',
+        description: 'Renovate picks them up the next time it starts.',
       }),
     )
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())

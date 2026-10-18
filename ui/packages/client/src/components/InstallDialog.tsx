@@ -414,7 +414,7 @@ export function InstallDialog({
           <DialogTitle>{mode === "edit" ? `${app.displayName} settings` : `Install ${app.displayName}`}</DialogTitle>
           <DialogDescription>
             {mode === "edit"
-              ? "Saving restarts the app with the new settings."
+              ? "The app picks up saved settings the next time it starts."
               : "Fill in what the app needs, then install."}
           </DialogDescription>
         </DialogHeader>
