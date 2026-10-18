@@ -13,7 +13,7 @@ components:
 
 images:
 - name: ghcr.io/cyxou/collie-lead
-  newTag: 1.21.3
+  newTag: 1.22.6
 - name: tailscale/tailscale
   newTag: v1.104.1
 
