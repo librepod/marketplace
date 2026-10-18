@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from "react"
 import { Eye, EyeOff, Loader2, Plus, Trash2 } from "lucide-react"
-import type { AppSettingItem, AppSettings, CatalogApp, InstallRequest } from "@librepod/shared"
+import type { AppSettingItem, AppSettings, AppSettingsValues, CatalogApp, InstallRequest } from "@librepod/shared"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
@@ -12,9 +12,24 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import type { useInstallApp } from "@/hooks/useInstallApp"
+import { useAppSettings } from "@/hooks/useAppSettings"
+import type { InstallError } from "@/hooks/useInstallApp"
 
-type InstallMutation = ReturnType<typeof useInstallApp>
+/**
+ * Install (POST) or save settings (PUT): only what the dialog uses, so both hooks fit (their
+ * variable types differ, which react-query's own result types won't let one type cover).
+ */
+interface SettingsMutation {
+  mutate: (request: InstallRequest, options: { onSuccess: () => void }) => void
+  isPending: boolean
+  error: InstallError | null
+}
+type Mode = "install" | "edit"
+
+const COPY = {
+  install: { submit: "Install", pending: "Installing..." },
+  edit: { submit: "Save", pending: "Saving..." },
+} as const
 
 interface CustomRow {
   id: number
@@ -184,11 +199,15 @@ function QuestionField({
 
 function InstallForm({
   app,
+  stored,
   mutation,
+  mode,
   onClose,
 }: {
   app: CatalogApp
-  mutation: InstallMutation
+  stored: AppSettingsValues
+  mutation: SettingsMutation
+  mode: Mode
   onClose: () => void
 }) {
   const settings = app.settings ?? {}
@@ -197,14 +216,15 @@ function InstallForm({
   const items = (settings.items ?? [])
     .filter((item) => !item.generate)
     .sort((a, b) => Number(!!b.required) - Number(!!a.required))
+  // Stored answer first (a reinstall or an edit starts from what is saved), then the default.
   const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(items.map((item) => [item.name, initialValue(item)])),
+    Object.fromEntries(items.map((item) => [item.name, stored.settings[item.name] ?? initialValue(item)])),
   )
-  const [rows, setRows] = useState<CustomRow[]>([])
-  const [nextRowId, setNextRowId] = useState(1)
+  const [rows, setRows] = useState<CustomRow[]>(() => stored.custom.map((v, i) => ({ id: i + 1, ...v })))
+  const [nextRowId, setNextRowId] = useState(stored.custom.length + 1)
   // Ids of the rows sent last, in order: maps a server "custom.<i>" error back to its row.
   const [sentRowIds, setSentRowIds] = useState<number[]>([])
-  const [customOpen, setCustomOpen] = useState(false)
+  const [customOpen, setCustomOpen] = useState(stored.custom.length > 0)
 
   const error = mutation.error
   const fieldErrors = new Map((error?.fieldErrors ?? []).map((e) => [e.name, e.message]))
@@ -320,7 +340,7 @@ function InstallForm({
         </Button>
         <Button type="submit" disabled={mutation.isPending}>
           {mutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-          {mutation.isPending ? "Installing..." : "Install"}
+          {mutation.isPending ? COPY[mode].pending : COPY[mode].submit}
         </Button>
       </DialogFooter>
     </form>
@@ -328,32 +348,77 @@ function InstallForm({
 }
 
 /**
- * Asks an app's install questions (catalog `settings`) before installing. The form lives
+ * The form once the stored settings are loaded. Never a form without them: saving one built
+ * from defaults alone would wipe the user's values.
+ */
+function SettingsBody({
+  app,
+  mutation,
+  mode,
+  onClose,
+}: {
+  app: CatalogApp
+  mutation: SettingsMutation
+  mode: Mode
+  onClose: () => void
+}) {
+  const stored = useAppSettings(app.name)
+  if (stored.data) return <InstallForm app={app} stored={stored.data} mutation={mutation} mode={mode} onClose={onClose} />
+  if (stored.isError) {
+    return (
+      <div className="grid gap-4">
+        <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          Couldn't load the current settings. Try again in a minute.
+        </p>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </DialogFooter>
+      </div>
+    )
+  }
+  return (
+    <div className="flex justify-center py-8">
+      <Loader2 aria-label="Loading settings" className="h-6 w-6 animate-spin text-muted-foreground" />
+    </div>
+  )
+}
+
+/**
+ * Asks an app's install questions (catalog `settings`), prefilled from the stored entry:
+ * before installing (`install`) or to change an installed app (`edit`). The form lives
  * inside the dialog content, so closing the dialog discards what was typed.
  */
 export function InstallDialog({
   app,
   open,
   onOpenChange,
-  installMutation,
+  mutation,
+  mode = "install",
 }: {
   app: CatalogApp
   open: boolean
   onOpenChange: (open: boolean) => void
-  installMutation: InstallMutation
+  mutation: SettingsMutation
+  mode?: Mode
 }) {
   // Never close mid-request: the outcome must land somewhere visible.
   const handleOpenChange = (next: boolean) => {
-    if (!installMutation.isPending) onOpenChange(next)
+    if (!mutation.isPending) onOpenChange(next)
   }
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Install {app.displayName}</DialogTitle>
-          <DialogDescription>Fill in what the app needs, then install.</DialogDescription>
+          <DialogTitle>{mode === "edit" ? `${app.displayName} settings` : `Install ${app.displayName}`}</DialogTitle>
+          <DialogDescription>
+            {mode === "edit"
+              ? "The app picks up saved settings the next time it starts."
+              : "Fill in what the app needs, then install."}
+          </DialogDescription>
         </DialogHeader>
-        <InstallForm app={app} mutation={installMutation} onClose={() => onOpenChange(false)} />
+        <SettingsBody app={app} mutation={mutation} mode={mode} onClose={() => onOpenChange(false)} />
       </DialogContent>
     </Dialog>
   )

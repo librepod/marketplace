@@ -721,7 +721,7 @@ settings:
 
 **Storage:** one OpenBao KV v2 entry per app — mount `apps`, key `<app>` (API path `/v1/apps/data/<app>`). marketplace-ui writes it during install, before the Gogs commit.
 
-**Delivery (every app, both types):** `base/externalsecret.yaml` — an `ExternalSecret` named `<app>-settings` targeting the Secret `<app>-settings` in the app's own namespace, via `ClusterSecretStore openbao` (which points at the `apps` mount). Standard form:
+**Delivery (every app, both types):** `base/externalsecret.yaml` — an `ExternalSecret` named `<app>-settings` targeting the Secret `<app>-settings` in the app's own namespace, via `ClusterSecretStore openbao` (which points at the `apps` mount). The `<app>-settings` name in the app's namespace is a contract: marketplace-ui's settings editor force-syncs that ExternalSecret after a save, and external-secrets-reloader then restarts only the **Deployments** that use the Secret (StatefulSets/DaemonSets are not restarted; CronJobs read it on their next run). Standard form:
 
 ```yaml
 apiVersion: external-secrets.io/v1

@@ -9,6 +9,7 @@ import {
   BadRequestException,
   ConflictException,
   InternalServerErrorException,
+  NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { OpenBaoClient, OpenBaoMisconfiguredError, OpenBaoUnavailableError } from './openbao.client';
@@ -97,6 +98,7 @@ describe('InstalledService', () => {
   };
   let mockLegacyMirror: { snapshotApp: ReturnType<typeof vi.fn> };
   let mockNodeAddress: { internalIp: ReturnType<typeof vi.fn> };
+  let mockK8s: { patchNamespacedCustomObject: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     mockRepo = {
@@ -108,7 +110,7 @@ describe('InstalledService', () => {
     mockCatalogService = {
       findAll: vi.fn().mockReturnValue(mockCatalogApps),
       findOne: vi.fn().mockImplementation((name: string) =>
-        mockCatalogApps.find(a => a.name === name),
+        [...mockCatalogApps, settingsApp].find(a => a.name === name),
       ),
     };
 
@@ -133,6 +135,7 @@ describe('InstalledService', () => {
 
     mockLegacyMirror = { snapshotApp: vi.fn(async () => 0) };
     mockNodeAddress = { internalIp: vi.fn() };
+    mockK8s = { patchNamespacedCustomObject: vi.fn(async () => ({})) };
 
     service = new InstalledService(
       mockCatalogService as unknown as CatalogService,
@@ -144,6 +147,7 @@ describe('InstalledService', () => {
       mockOpenBao as unknown as OpenBaoClient,
       mockLegacyMirror as unknown as import('./legacy-secret-mirror').LegacySecretMirror,
       mockNodeAddress as unknown as import('./node-address.service').NodeAddressService,
+      mockK8s as unknown as import('@kubernetes/client-node').CustomObjectsApi,
     );
   });
 
@@ -624,6 +628,143 @@ describe('InstalledService', () => {
       await service.install('vaultwarden');
 
       expect(mockLegacyMirror.snapshotApp).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getSettings()', () => {
+    it('returns the stored entry as a request, for an app that is not installed too', async () => {
+      mockOpenBao.readAppSettings.mockResolvedValue({ RENOVATE_TOKEN: 't', HTTP_PROXY: 'p' });
+      mockRepo.listInstalledApps.mockResolvedValue([]);
+
+      await expect(service.getSettings('renovate')).resolves.toEqual({
+        settings: { RENOVATE_TOKEN: 't', LOG_FORMAT: '' },
+        custom: [{ name: 'HTTP_PROXY', value: 'p' }],
+      });
+    });
+
+    it('404s for an app with no settings', async () => {
+      await expect(service.getSettings('gogs')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('409s for a managed app', async () => {
+      mockSystemAppsService.isSystem.mockResolvedValue(true);
+
+      await expect(service.getSettings('renovate')).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('maps an unavailable store to 503 "load"', async () => {
+      mockOpenBao.readAppSettings.mockRejectedValue(new OpenBaoUnavailableError('down'));
+
+      const err = await service.getSettings('renovate').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ServiceUnavailableException);
+      expect((err as Error).message).toContain("Couldn't load the settings");
+    });
+  });
+
+  describe('updateSettings()', () => {
+    beforeEach(() => {
+      mockRepo.listInstalledApps.mockResolvedValue(['renovate']);
+    });
+
+    it('rewrites the entry, keeping stored generated values', async () => {
+      mockCatalogService.findOne.mockReturnValue({
+        ...settingsApp,
+        settings: { ...settingsApp.settings, items: [...settingsApp.settings.items, { name: 'CACHE', generate: { length: 8 } }] },
+      });
+      mockOpenBao.readAppSettings.mockResolvedValue({ RENOVATE_TOKEN: 'old', LOG_FORMAT: 'json', CACHE: 'keep' });
+
+      const result = await service.updateSettings('renovate', { settings: { RENOVATE_TOKEN: 'new', LOG_FORMAT: 'json' } });
+
+      expect(mockOpenBao.writeAppSettings).toHaveBeenCalledWith('renovate', {
+        RENOVATE_TOKEN: 'new',
+        LOG_FORMAT: 'json',
+        CACHE: 'keep',
+      });
+      expect(result).toEqual({ success: true, message: 'Renovate settings saved' });
+    });
+
+    it('removes a custom variable left out of the request', async () => {
+      mockOpenBao.readAppSettings.mockResolvedValue({ RENOVATE_TOKEN: 't', LOG_FORMAT: 'json', HTTP_PROXY: 'p' });
+
+      await service.updateSettings('renovate', { settings: { RENOVATE_TOKEN: 't' } });
+
+      const written = mockOpenBao.writeAppSettings.mock.calls[0][1] as Record<string, string>;
+      expect(written).not.toHaveProperty('HTTP_PROXY');
+    });
+
+    it('409s when the app is not installed and writes nothing', async () => {
+      mockRepo.listInstalledApps.mockResolvedValue([]);
+
+      await expect(service.updateSettings('renovate', { settings: { RENOVATE_TOKEN: 't' } })).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(mockOpenBao.writeAppSettings).not.toHaveBeenCalled();
+    });
+
+    it('400s with field errors and writes nothing', async () => {
+      await expect(service.updateSettings('renovate', { settings: { RENOVATE_TOKEN: '' } })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(mockOpenBao.writeAppSettings).not.toHaveBeenCalled();
+    });
+
+    it('never commits to Gogs', async () => {
+      await service.updateSettings('renovate', { settings: { RENOVATE_TOKEN: 't' } });
+
+      expect(mockRepo.writeApp).not.toHaveBeenCalled();
+      expect(mockRepo.removeApp).not.toHaveBeenCalled();
+    });
+
+    it('runs under the install mutex', async () => {
+      const order: string[] = [];
+      mockRepo.writeApp.mockImplementation(async (name: string) => {
+        order.push(`start-${name}`);
+        await new Promise(r => setTimeout(r, 50));
+        order.push(`end-${name}`);
+      });
+      mockOpenBao.writeAppSettings.mockImplementation(async (name: string) => {
+        order.push(`settings-${name}`);
+      });
+
+      await Promise.all([
+        service.install('vaultwarden'),
+        service.updateSettings('renovate', { settings: { RENOVATE_TOKEN: 't' } }),
+      ]);
+
+      expect(order).toEqual(['start-vaultwarden', 'end-vaultwarden', 'settings-renovate']);
+    });
+
+    it("asks ESO to re-sync the app's ExternalSecret after the write", async () => {
+      await service.updateSettings('renovate', { settings: { RENOVATE_TOKEN: 't' } });
+
+      expect(mockK8s.patchNamespacedCustomObject).toHaveBeenCalledTimes(1);
+      expect(mockK8s.patchNamespacedCustomObject.mock.calls[0][0]).toMatchObject({
+        group: 'external-secrets.io',
+        version: 'v1',
+        namespace: 'renovate',
+        plural: 'externalsecrets',
+        name: 'renovate-settings',
+        body: { metadata: { annotations: { 'force-sync': expect.any(String) } } },
+      });
+      expect(mockOpenBao.writeAppSettings.mock.invocationCallOrder[0]).toBeLessThan(
+        mockK8s.patchNamespacedCustomObject.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('a failed nudge is logged, not fatal — the save still succeeds', async () => {
+      mockK8s.patchNamespacedCustomObject.mockRejectedValue(new Error('externalsecrets is forbidden'));
+
+      await expect(service.updateSettings('renovate', { settings: { RENOVATE_TOKEN: 't' } })).resolves.toMatchObject({
+        success: true,
+      });
+    });
+
+    it('install never nudges', async () => {
+      mockRepo.listInstalledApps.mockResolvedValue([]);
+
+      await service.install('renovate', { settings: { RENOVATE_TOKEN: 't' } });
+
+      expect(mockK8s.patchNamespacedCustomObject).not.toHaveBeenCalled();
     });
   });
 

@@ -12,6 +12,7 @@ const OPENBAO_TOKEN = "tier1-e2e-root-token";
 // Password URL-encoded (`@` → %40) exactly as support/gogs/seed.sh does it.
 const GIT_ORIGIN = "http://flux:pass%40w0rd@127.0.0.1:43000/flux/user-apps.git";
 const TOKEN = "tier1-secret-token-7f3a";
+const TOKEN_2 = "tier1-secret-token-9b1c";
 const PROXY = "http://proxy.lan:3128";
 // The fixture's generated item (E2E_FIXTURE_CACHE_KEY, generate.length 32) resolves
 // server-side to a fresh 32-hex value — the dialog never asks for it.
@@ -61,8 +62,9 @@ async function uninstallRenovate(request: APIRequestContext): Promise<void> {
   }
 }
 
-// Sequential flow on the shared Gogs + OpenBao: install via the dialog, then
-// uninstall. Owns its clean slate both ways so other specs never see renovate.
+// Sequential flow on the shared Gogs + OpenBao: install via the dialog, edit the
+// settings, uninstall, then reinstall from the kept entry. Owns its clean slate
+// both ways so other specs never see renovate.
 test.describe("install with settings", () => {
   test.beforeAll(async ({ request }) => uninstallRenovate(request));
   test.afterAll(async ({ request }) => uninstallRenovate(request));
@@ -102,6 +104,31 @@ test.describe("install with settings", () => {
     expect(repoContains(TOKEN)).toBe(false);
   });
 
+  // Tier 1 has no cluster: the status stays "installing" (Settings still shows) and the
+  // force-sync nudge fails, which must not fail the save.
+  test("Settings edits the stored entry and keeps the generated secret", async ({ page, request }) => {
+    const before = await storedSettings(request);
+    const detail = new AppDetailPage(page);
+    const shell = new AppShell(page);
+    await detail.open("renovate");
+    await detail.settingsButton().click();
+
+    const dialog = detail.installDialog();
+    await expect(dialog.getByRole("heading", { name: "Renovate settings" })).toBeVisible();
+    await expect(dialog.getByLabel("Access token")).toHaveValue(TOKEN);
+    await expect(dialog.getByLabel("Variable name")).toHaveValue("HTTP_PROXY");
+
+    await dialog.getByLabel("Access token").fill(TOKEN_2);
+    await dialog.getByRole("button", { name: "Save", exact: true }).click();
+
+    await expect(shell.toast("Settings saved")).toBeVisible();
+    await expect(dialog).toBeHidden();
+    await expect
+      .poll(() => storedSettings(request), { message: "the edit lands in OpenBao" })
+      .toEqual({ ...before, RENOVATE_TOKEN: TOKEN_2 });
+    expect(repoContains(TOKEN_2)).toBe(false);
+  });
+
   test("uninstall keeps the OpenBao entry (reinstall stays consistent with kept data)", async ({ request }) => {
     const r = await request.post("/api/apps/renovate/uninstall");
     expect(r.ok()).toBeTruthy();
@@ -109,6 +136,25 @@ test.describe("install with settings", () => {
     await expect
       .poll(() => installedNames(request), { message: "renovate leaves /api/installed", timeout: 15_000 })
       .not.toContain("renovate");
-    expect(await storedSettings(request)).toEqual(EXPECTED_STORED);
+    expect(await storedSettings(request)).toEqual({ ...EXPECTED_STORED, RENOVATE_TOKEN: TOKEN_2 });
+  });
+
+  test("reinstall prefills the dialog from the kept entry", async ({ page, request }) => {
+    const kept = await storedSettings(request);
+    const detail = new AppDetailPage(page);
+    const shell = new AppShell(page);
+    await detail.open("renovate");
+    await detail.installButton().click();
+
+    const dialog = detail.installDialog();
+    await expect(dialog.getByLabel("Access token")).toHaveValue(TOKEN_2);
+    await expect(dialog.getByLabel("Variable name")).toHaveValue("HTTP_PROXY");
+    await expect(dialog.getByLabel("Variable value")).toHaveValue(PROXY);
+
+    await dialog.getByRole("button", { name: "Install", exact: true }).click();
+
+    await expect(shell.toast("Install started")).toBeVisible();
+    // Unchanged answers rewrite the same entry: the generated key is reused, not regenerated.
+    expect(await storedSettings(request)).toEqual(kept);
   });
 });

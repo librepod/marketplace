@@ -16,6 +16,12 @@ export class InstallError extends Error {
   }
 }
 
+/** The InstallError for a failed install or settings save response. */
+export async function toInstallError(res: Response): Promise<InstallError> {
+  const body = await res.json().catch(() => ({ message: FALLBACK_MESSAGE }))
+  return new InstallError(body.message || FALLBACK_MESSAGE, Array.isArray(body.errors) ? body.errors : [])
+}
+
 /**
  * Install an app. Call `mutate(undefined)` for a one-click install (no body), or
  * `mutate(request)` from the install dialog. The dialog shows its own errors, so only
@@ -32,13 +38,7 @@ export function useInstallApp(appName: string, displayName: string) {
           body: JSON.stringify(request),
         }),
       })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({ message: FALLBACK_MESSAGE }))
-        throw new InstallError(
-          body.message || FALLBACK_MESSAGE,
-          Array.isArray(body.errors) ? body.errors : [],
-        )
-      }
+      if (!res.ok) throw await toInstallError(res)
       return res.json()
     },
     onSuccess: () => {

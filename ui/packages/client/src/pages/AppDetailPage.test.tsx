@@ -37,6 +37,21 @@ function createWrapper(appName = 'vaultwarden') {
   )
 }
 
+/** Answers by request: non-GET → `submit`, GET …/settings → `stored`, any other GET → `app`. */
+function routeFetch(
+  app: unknown,
+  { stored = { settings: {}, custom: [] }, submit = { success: true, message: 'ok' } }: { stored?: unknown; submit?: unknown } = {},
+) {
+  return vi.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
+    const body = (init?.method ?? 'GET') !== 'GET' ? submit : String(input).endsWith('/settings') ? stored : app
+    return { ok: true, status: 200, json: async () => body } as Response
+  })
+}
+
+type FetchSpy = { mock: { calls: unknown[][] } }
+const writes = (spy: FetchSpy) =>
+  spy.mock.calls.filter((call) => ((call[1] as RequestInit | undefined)?.method ?? 'GET') !== 'GET') as [string, RequestInit][]
+
 beforeEach(() => {
   vi.resetAllMocks()
   // sonner Toaster uses window.matchMedia
@@ -141,31 +156,59 @@ describe('AppDetailPage', () => {
       settings: { items: [{ name: 'ADMIN_EMAIL', label: 'Admin email', required: true }] },
     }
 
+    it.each(['installing', 'running', 'error'] as const)(
+      'shows Settings for an installed app with questions (%s)',
+      async (installedStatus) => {
+        routeFetch({ ...withQuestions, installedStatus })
+        render(<AppDetailPage />, { wrapper: createWrapper() })
+
+        expect(await screen.findByRole('button', { name: 'Settings' })).toBeInTheDocument()
+      },
+    )
+
+    it('hides Settings when the app is not installed or has nothing to ask', async () => {
+      routeFetch(withQuestions)
+      const { unmount } = render(<AppDetailPage />, { wrapper: createWrapper() })
+      await screen.findByRole('button', { name: 'Install App' })
+      expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument()
+      unmount()
+
+      vi.restoreAllMocks()
+      routeFetch({
+        ...mockApp,
+        installedStatus: 'running',
+        settings: { items: [{ name: 'DB_PASSWORD', generate: { length: 40 } }] },
+      })
+      render(<AppDetailPage />, { wrapper: createWrapper() })
+      await screen.findByRole('button', { name: 'Uninstall App' })
+      expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument()
+    })
+
+    it('Settings opens the dialog in edit mode, prefilled from the stored settings', async () => {
+      routeFetch(
+        { ...withQuestions, installedStatus: 'running' },
+        { stored: { settings: { ADMIN_EMAIL: 'admin@example.com' }, custom: [] } },
+      )
+      render(<AppDetailPage />, { wrapper: createWrapper() })
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Settings' }))
+
+      expect(await screen.findByRole('heading', { name: 'Vaultwarden settings' })).toBeInTheDocument()
+      expect(await screen.findByLabelText('Admin email')).toHaveValue('admin@example.com')
+    })
+
     it('opens the install dialog instead of installing when the app asks questions', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => withQuestions,
-      } as Response)
+      const fetchSpy = routeFetch(withQuestions)
       render(<AppDetailPage />, { wrapper: createWrapper() })
 
       await userEvent.click(await screen.findByRole('button', { name: 'Install App' }))
 
       expect(await screen.findByRole('dialog')).toHaveTextContent('Install Vaultwarden')
-      expect(fetchSpy).toHaveBeenCalledTimes(1) // the detail GET only — nothing posted yet
+      expect(writes(fetchSpy)).toHaveLength(0) // reads only — nothing posted yet
     })
 
     it('installs from the dialog with the answers and closes it', async () => {
-      const detail = { ok: true, status: 200, json: async () => withQuestions } as Response
-      const fetchSpy = vi
-        .spyOn(global, 'fetch')
-        .mockResolvedValue(detail)
-        .mockResolvedValueOnce(detail)
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: async () => ({ success: true, message: 'Vaultwarden is being deployed' }),
-        } as Response)
+      const fetchSpy = routeFetch(withQuestions, { submit: { success: true, message: 'Vaultwarden is being deployed' } })
       render(<AppDetailPage />, { wrapper: createWrapper() })
 
       await userEvent.click(await screen.findByRole('button', { name: 'Install App' }))
@@ -173,7 +216,7 @@ describe('AppDetailPage', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Install' }))
 
       await waitFor(() => expect(screen.getByText(/is being deployed/)).toBeInTheDocument())
-      const [url, init] = fetchSpy.mock.calls[1] as [string, RequestInit]
+      const [url, init] = writes(fetchSpy)[0]
       expect(url).toBe('/api/apps/vaultwarden/install')
       expect(JSON.parse(init.body as string)).toEqual({ settings: { ADMIN_EMAIL: 'admin@example.com' } })
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
@@ -209,21 +252,17 @@ describe('AppDetailPage', () => {
     })
 
     it('opens the dialog for generated-only settings when custom variables are allowed (a deliberate offer)', async () => {
-      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          ...mockApp,
-          installedStatus: 'not_installed',
-          settings: { allowCustom: true, items: [{ name: 'DB_PASSWORD', generate: { length: 40 } }] },
-        }),
-      } as Response)
+      const fetchSpy = routeFetch({
+        ...mockApp,
+        installedStatus: 'not_installed',
+        settings: { allowCustom: true, items: [{ name: 'DB_PASSWORD', generate: { length: 40 } }] },
+      })
       render(<AppDetailPage />, { wrapper: createWrapper() })
 
       await userEvent.click(await screen.findByRole('button', { name: 'Install App' }))
 
       expect(await screen.findByRole('dialog')).toHaveTextContent('Install Vaultwarden')
-      expect(fetchSpy).toHaveBeenCalledTimes(1) // the detail GET only — nothing posted yet
+      expect(writes(fetchSpy)).toHaveLength(0) // reads only — nothing posted yet
     })
 
     it('keeps one-click install (no body) for apps without questions', async () => {
@@ -408,13 +447,19 @@ describe('AppDetailPage', () => {
     vi.spyOn(global, 'fetch').mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: async () => ({ ...mockApp, system: true, installedStatus: 'running' }),
+      json: async () => ({
+        ...mockApp,
+        system: true,
+        installedStatus: 'running',
+        settings: { items: [{ name: 'ADMIN_EMAIL', required: true }] },
+      }),
     } as Response)
     render(<AppDetailPage />, { wrapper: createWrapper() })
     await waitFor(() => {
       expect(screen.getByText(/Managed by platform/i)).toBeInTheDocument()
     })
     expect(screen.queryByRole('button', { name: 'Install App' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Open Vaultwarden/i })).not.toBeInTheDocument()
   })
 })

@@ -9,17 +9,18 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Mutex } from 'async-mutex';
+import { CustomObjectsApi, PatchStrategy, setHeaderOptions } from '@kubernetes/client-node';
 import * as crypto from 'node:crypto';
 import { CatalogService } from '../catalog/catalog.service';
 import { UserAppsRepoService } from './user-apps-repo.service';
 import { FluxStatusService } from './flux-status.service';
 import { SystemAppsService } from './system-apps.service';
 import { LaunchUrlService } from './launch-url.service';
-import { resolveSettings } from './install-settings';
+import { resolveSettings, storedToRequest } from './install-settings';
 import { OpenBaoClient, OpenBaoMisconfiguredError, OpenBaoUnavailableError } from './openbao.client';
 import { LegacySecretMirror } from './legacy-secret-mirror';
 import { NodeAddressService } from './node-address.service';
-import type { AppStatus, CatalogApp, InstallResult } from '@librepod/shared';
+import type { AppSettings, AppSettingsValues, AppStatus, CatalogApp, InstallResult } from '@librepod/shared';
 
 @Injectable()
 export class InstalledService {
@@ -36,6 +37,7 @@ export class InstalledService {
     private readonly openBao: OpenBaoClient,
     private readonly legacyMirror: LegacySecretMirror,
     private readonly nodeAddress: NodeAddressService,
+    private readonly k8s: CustomObjectsApi,
   ) {}
 
   async enrich(apps: CatalogApp[]): Promise<CatalogApp[]> {
@@ -108,18 +110,104 @@ export class InstalledService {
    * answer: 503 "try again" when the store may recover, 500 without it when it won't. One
    * helper so the two call sites cannot drift apart.
    */
-  private throwSettingsStoreError(err: unknown, appName: string): never {
+  private throwSettingsStoreError(err: unknown, appName: string, action: 'load' | 'save' = 'save'): never {
+    const doing = action === 'load' ? 'loading' : 'saving';
     if (err instanceof OpenBaoUnavailableError) {
-      this.logger.warn(`settings store unavailable while installing ${appName}: ${err.message}`);
-      throw new ServiceUnavailableException("Couldn't save the settings right now. Try again in a minute.");
+      this.logger.warn(`settings store unavailable while ${doing} settings for ${appName}: ${err.message}`);
+      throw new ServiceUnavailableException(`Couldn't ${action} the settings right now. Try again in a minute.`);
     }
     if (err instanceof OpenBaoMisconfiguredError) {
-      this.logger.error(`settings store misconfigured, cannot install ${appName}: ${err.message}`);
+      this.logger.error(`settings store misconfigured while ${doing} settings for ${appName}: ${err.message}`);
       throw new InternalServerErrorException(
-        "Couldn't save the settings: the settings store isn't set up correctly. Trying again won't help.",
+        `Couldn't ${action} the settings: the settings store isn't set up correctly. Trying again won't help.`,
       );
     }
     throw err;
+  }
+
+  /** A user app that asks install questions: the only kind whose settings can be read or edited. */
+  private async settingsApp(appName: string): Promise<CatalogApp & { settings: AppSettings }> {
+    const app = this.catalog.findOne(appName);
+    if (!app) throw new NotFoundException(`App "${appName}" not found in catalog`);
+    if (await this.systemApps.isSystem(appName)) {
+      throw new ConflictException(`${app.displayName} is managed by the platform`);
+    }
+    if (!app.settings) throw new NotFoundException(`${app.displayName} has no settings`);
+    return { ...app, settings: app.settings };
+  }
+
+  /**
+   * The request body resolved into the full entry to write. The stored entry is read first
+   * so generated questions reuse what the last write stored (NFS volumes survive a
+   * reinstall, so a DB password must too).
+   */
+  private async resolveForWrite(
+    app: CatalogApp & { settings: AppSettings },
+    body: unknown,
+  ): Promise<Record<string, string>> {
+    let stored: Record<string, string> | null = null;
+    try {
+      stored = await this.openBao.readAppSettings(app.name);
+    } catch (err) {
+      this.throwSettingsStoreError(err, app.name);
+    }
+    const resolved = resolveSettings(app.settings, body, stored);
+    if (!resolved.ok) {
+      throw new BadRequestException({ message: 'Some settings need attention', errors: resolved.errors });
+    }
+    return resolved.values;
+  }
+
+  /** The stored answers in install-request shape. The app need not be installed: a reinstall prefills from this. */
+  async getSettings(appName: string): Promise<AppSettingsValues> {
+    const app = await this.settingsApp(appName);
+    let stored: Record<string, string> | null = null;
+    try {
+      stored = await this.openBao.readAppSettings(appName);
+    } catch (err) {
+      this.throwSettingsStoreError(err, appName, 'load');
+    }
+    return storedToRequest(app.settings, stored);
+  }
+
+  /** Replaces an installed app's OpenBao entry. Nothing in Gogs changes. */
+  async updateSettings(appName: string, body: unknown): Promise<InstallResult> {
+    return this.mutex.runExclusive(async () => {
+      const app = await this.settingsApp(appName);
+      const installed = await this.repo.listInstalledApps();
+      if (!installed.includes(appName)) throw new ConflictException(`${app.displayName} is not installed`);
+      const values = await this.resolveForWrite(app, body);
+      try {
+        await this.openBao.writeAppSettings(appName, values);
+      } catch (err) {
+        this.throwSettingsStoreError(err, appName);
+      }
+      await this.requestSettingsSync(appName);
+      return { success: true, message: `${app.displayName} settings saved` };
+    });
+  }
+
+  /**
+   * Asks ESO to re-sync <app>-settings now instead of at its refresh interval; the
+   * external-secrets-reloader then restarts the Deployments using the Secret. Best-effort:
+   * the entry is already saved, and ESO picks it up on its own schedule anyway.
+   */
+  private async requestSettingsSync(appName: string): Promise<void> {
+    try {
+      await this.k8s.patchNamespacedCustomObject(
+        {
+          group: 'external-secrets.io',
+          version: 'v1',
+          namespace: appName,
+          plural: 'externalsecrets',
+          name: `${appName}-settings`,
+          body: { metadata: { annotations: { 'force-sync': new Date().toISOString() } } },
+        },
+        setHeaderOptions('Content-Type', PatchStrategy.MergePatch),
+      );
+    } catch (err) {
+      this.logger.warn(`could not force-sync ${appName}-settings: ${(err as Error).message}`);
+    }
   }
 
   async install(appName: string, body?: unknown): Promise<InstallResult> {
@@ -144,23 +232,9 @@ export class InstalledService {
       // 3. Install questions + custom variables → OpenBao, BEFORE the Gogs commit, so
       // the app's ExternalSecret finds its entry as soon as Flux applies the app.
       // Values never enter the Gogs repo or ${VAR} substitution. Apps without
-      // `settings` skip this entirely (and ignore any body). The stored entry is
-      // read first so a reinstall regenerates nothing: generated questions reuse
-      // what the last install wrote (NFS volumes survive, so a DB password must too).
-      let settingsToWrite: Record<string, string> | null = null;
-      if (app.settings) {
-        let stored: Record<string, string> | null = null;
-        try {
-          stored = await this.openBao.readAppSettings(appName);
-        } catch (err) {
-          this.throwSettingsStoreError(err, appName);
-        }
-        const resolved = resolveSettings(app.settings, body, stored);
-        if (!resolved.ok) {
-          throw new BadRequestException({ message: 'Some settings need attention', errors: resolved.errors });
-        }
-        settingsToWrite = resolved.values;
-      }
+      // `settings` skip this entirely (and ignore any body). A reinstall
+      // regenerates nothing (see resolveForWrite).
+      const settingsToWrite = app.settings ? await this.resolveForWrite({ ...app, settings: app.settings }, body) : null;
 
       // 3b. Platform values. DEVICE_IP (the node's LAN address — e.g. a VPN's
       // endpoint host) costs a Kubernetes read, so only templates that ask for

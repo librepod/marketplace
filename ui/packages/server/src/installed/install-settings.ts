@@ -1,5 +1,5 @@
 import * as crypto from 'node:crypto';
-import type { AppSettingItem, AppSettings, FieldError } from '@librepod/shared';
+import type { AppSettingItem, AppSettings, AppSettingsValues, FieldError } from '@librepod/shared';
 
 /** Validation limits (spec §5.3). */
 export const SETTINGS_LIMITS = {
@@ -162,4 +162,31 @@ export function resolveSettings(
     errors.push({ name: 'settings', message: 'All settings together are too large (max 64 KiB)' });
   }
   return errors.length > 0 ? { ok: false, errors } : { ok: true, values };
+}
+
+/**
+ * The stored OpenBao entry as an install request, so the dialog can prefill from it and
+ * sending it back unchanged reproduces the entry. Generated values stay on the server
+ * (resolveSettings reuses them when unanswered). Keys no item claims become custom
+ * variables, or are dropped when the app takes none, so a stale key can't make the
+ * request invalid.
+ */
+export function storedToRequest(settings: AppSettings, stored: Record<string, string> | null): AppSettingsValues {
+  const request: AppSettingsValues = { settings: {}, custom: [] };
+  if (!stored) return request;
+  const items = settings.items ?? [];
+  for (const item of items) {
+    if (item.generate) continue;
+    // A missing optional key is how a cleared answer is stored: read it back as empty, or any
+    // save would put the default back. A missing required one was added after the write.
+    if (Object.hasOwn(stored, item.name)) request.settings[item.name] = stored[item.name];
+    else if (!item.required) request.settings[item.name] = '';
+  }
+  if (settings.allowCustom) {
+    const claimed = new Set(items.map((item) => item.name));
+    for (const [name, value] of Object.entries(stored)) {
+      if (!claimed.has(name)) request.custom.push({ name, value });
+    }
+  }
+  return request;
 }

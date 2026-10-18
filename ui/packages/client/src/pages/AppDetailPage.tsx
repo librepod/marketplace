@@ -13,9 +13,10 @@ import { ErrorBlock } from "@/components/ErrorBlock"
 import { StatusBadge } from "@/components/StatusBadge"
 import { InstallDialog, hasInstallQuestions } from "@/components/InstallDialog"
 import { NotFoundPage } from "./NotFoundPage"
-import { Loader2, ExternalLink, Lock } from "lucide-react"
+import { Loader2, ExternalLink, Lock, Settings } from "lucide-react"
 import { useInstallApp } from "@/hooks/useInstallApp"
 import { useUninstallApp } from "@/hooks/useUninstallApp"
+import { useSaveSettings } from "@/hooks/useSaveSettings"
 import { useConfig } from "@/hooks/useConfig"
 import {
   AlertDialog,
@@ -110,6 +111,8 @@ export function AppDetailPage() {
   const installMutation = useInstallApp(name ?? '', data?.displayName ?? '')
   const uninstallMutation = useUninstallApp(name ?? '', data?.displayName ?? '')
   const [installDialogOpen, setInstallDialogOpen] = useState(false)
+  const saveSettingsMutation = useSaveSettings(name ?? '', data?.displayName ?? '')
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
 
   // baseDomain is the same value substituted into app templates at install
   // time, so this URL matches the Traefik IngressRoute host the app runs under.
@@ -206,7 +209,7 @@ export function AppDetailPage() {
                       app={data}
                       open={installDialogOpen}
                       onOpenChange={setInstallDialogOpen}
-                      installMutation={installMutation}
+                      mutation={installMutation}
                     />
                   )}
                 </>
@@ -242,6 +245,29 @@ export function AppDetailPage() {
                   displayName={data.displayName}
                   uninstallMutation={uninstallMutation}
                 />
+              )}
+
+              {/* Settings live in OpenBao, so they can be edited in any installed state. */}
+              {data.installedStatus && data.installedStatus !== 'not_installed' && asksQuestions && (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      saveSettingsMutation.reset()
+                      setSettingsDialogOpen(true)
+                    }}
+                  >
+                    <Settings />
+                    Settings
+                  </Button>
+                  <InstallDialog
+                    app={data}
+                    mode="edit"
+                    open={settingsDialogOpen}
+                    onOpenChange={setSettingsDialogOpen}
+                    mutation={saveSettingsMutation}
+                  />
+                </>
               )}
             </>
           )}

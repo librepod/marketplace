@@ -77,6 +77,12 @@ export interface InstallRequest {
   custom?: CustomVariable[];
 }
 
+/**
+ * Body of GET /api/apps/:name/settings: the stored answers in the shape install and
+ * PUT /api/apps/:name/settings accept. Never includes generated items.
+ */
+export type AppSettingsValues = Required<InstallRequest>;
+
 /** One field-level problem: `name` is a question name, `custom.<i>`, `settings` or `custom`. */
 export interface FieldError {
   name: string;
