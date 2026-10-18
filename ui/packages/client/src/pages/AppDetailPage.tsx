@@ -206,7 +206,7 @@ export function AppDetailPage() {
                       app={data}
                       open={installDialogOpen}
                       onOpenChange={setInstallDialogOpen}
-                      installMutation={installMutation}
+                      mutation={installMutation}
                     />
                   )}
                 </>

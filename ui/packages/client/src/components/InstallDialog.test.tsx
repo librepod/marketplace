@@ -3,9 +3,10 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { CatalogApp } from '@librepod/shared'
+import type { AppSettingsValues, CatalogApp } from '@librepod/shared'
 import { toast } from 'sonner'
 import { useInstallApp } from '@/hooks/useInstallApp'
+import { useSaveSettings } from '@/hooks/useSaveSettings'
 import { InstallDialog, hasInstallQuestions, humanize } from './InstallDialog'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
@@ -29,30 +30,53 @@ const app: CatalogApp = {
   },
 }
 
-function Harness({ app: subject }: { app: CatalogApp }) {
-  const mutation = useInstallApp(subject.name, subject.displayName)
+function Harness({ app: subject, mode }: { app: CatalogApp; mode?: 'install' | 'edit' }) {
+  const install = useInstallApp(subject.name, subject.displayName)
+  const save = useSaveSettings(subject.name, subject.displayName)
   const [open, setOpen] = useState(true)
   return (
     <>
       <button onClick={() => setOpen(true)}>reopen</button>
-      <InstallDialog app={subject} open={open} onOpenChange={setOpen} installMutation={mutation} />
+      <InstallDialog
+        app={subject}
+        open={open}
+        onOpenChange={setOpen}
+        mutation={mode === 'edit' ? save : install}
+        mode={mode}
+      />
     </>
   )
 }
 
-function renderDialog(subject: CatalogApp = app) {
+function renderDialog(subject: CatalogApp = app, mode?: 'install' | 'edit') {
   const client = new QueryClient({ defaultOptions: { mutations: { retry: 0 } } })
   return render(
     <QueryClientProvider client={client}>
-      <Harness app={subject} />
+      <Harness app={subject} mode={mode} />
     </QueryClientProvider>,
   )
 }
 
 const reply = (body: unknown, status = 200) =>
   ({ ok: status < 400, status, json: async () => body }) as Response
-const sentBody = (spy: { mock: { calls: unknown[][] } }) =>
-  JSON.parse((spy.mock.calls[0][1] as RequestInit).body as string)
+
+/** GET /api/apps/renovate/settings answers `stored`; any other method answers `submit`. */
+function mockApi({
+  stored = { settings: {}, custom: [] },
+  storedStatus = 200,
+  submit = reply({ success: true, message: 'ok' }),
+}: { stored?: AppSettingsValues; storedStatus?: number; submit?: Response | Promise<Response> } = {}) {
+  return vi.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
+    if ((init?.method ?? 'GET') !== 'GET') return submit
+    expect(input).toBe('/api/apps/renovate/settings')
+    return reply(stored, storedStatus)
+  })
+}
+
+type FetchSpy = { mock: { calls: unknown[][] } }
+const submits = (spy: FetchSpy) =>
+  spy.mock.calls.filter((call) => ((call[1] as RequestInit | undefined)?.method ?? 'GET') !== 'GET')
+const sentBody = (spy: FetchSpy) => JSON.parse((submits(spy)[0][1] as RequestInit).body as string)
 
 beforeEach(() => {
   vi.resetAllMocks()
@@ -87,8 +111,10 @@ describe('hasInstallQuestions', () => {
 })
 
 describe('InstallDialog', () => {
-  it('lists required questions first and marks optional ones', () => {
+  it('lists required questions first and marks optional ones', async () => {
+    mockApi()
     renderDialog()
+    await screen.findByLabelText('Access token')
     const dialog = screen.getByRole('dialog')
     expect(within(dialog).getByText('Install Renovate')).toBeInTheDocument()
     const labels = Array.from(dialog.querySelectorAll('form label')).map((l) => l.textContent)
@@ -96,58 +122,62 @@ describe('InstallDialog', () => {
   })
 
   it('masks sensitive answers until "Show value" is pressed', async () => {
+    mockApi()
     renderDialog()
-    const token = screen.getByLabelText('Access token')
+    const token = await screen.findByLabelText('Access token')
     expect(token).toHaveAttribute('type', 'password')
     await userEvent.click(screen.getByRole('button', { name: 'Show value' }))
     expect(token).toHaveAttribute('type', 'text')
   })
 
-  it('renders fixed choices as a dropdown with the default selected', () => {
+  it('renders fixed choices as a dropdown with the default selected', async () => {
+    mockApi()
     renderDialog()
-    const select = screen.getByLabelText(/Log format/) as HTMLSelectElement
+    const select = (await screen.findByLabelText(/Log format/)) as HTMLSelectElement
     expect(select.tagName).toBe('SELECT')
     expect(select.value).toBe('json')
     // Optional, so "Not set" stays available even with a default.
     expect(Array.from(select.options).map((o) => o.value)).toEqual(['', 'json', 'pretty'])
   })
 
-  it('offers no empty choice for a required dropdown that has a default', () => {
+  it('offers no empty choice for a required dropdown that has a default', async () => {
+    mockApi()
     renderDialog({
       ...app,
       settings: { items: [{ name: 'LOG_FORMAT', options: ['json', 'pretty'], default: 'json', required: true }] },
     })
-    const select = screen.getByLabelText(/Log format/) as HTMLSelectElement
+    const select = (await screen.findByLabelText(/Log format/)) as HTMLSelectElement
     expect(Array.from(select.options).map((o) => o.value)).toEqual(['json', 'pretty'])
   })
 
   it('sends a cleared optional answer as empty, so its default is not put back', async () => {
-    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce(reply({ success: true, message: 'ok' }))
+    const fetchSpy = mockApi()
     renderDialog({ ...app, settings: { items: [{ name: 'HTTP_PROXY', default: 'http://proxy:3128' }] } })
 
-    const field = screen.getByLabelText(/Http proxy/)
+    const field = await screen.findByLabelText(/Http proxy/)
     expect(field).toHaveValue('http://proxy:3128')
     await userEvent.clear(field)
     await userEvent.click(screen.getByRole('button', { name: 'Install' }))
 
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(submits(fetchSpy)).toHaveLength(1))
     expect(sentBody(fetchSpy)).toEqual({ settings: { HTTP_PROXY: '' } })
   })
 
-  it('treats a YAML null default as no default, never showing "null"', () => {
+  it('treats a YAML null default as no default, never showing "null"', async () => {
+    mockApi()
     renderDialog({ ...app, settings: { items: [{ name: 'EXTRA', default: null }] } })
-    expect(screen.getByLabelText(/Extra/)).toHaveValue('')
+    expect(await screen.findByLabelText(/Extra/)).toHaveValue('')
   })
 
   it('submits answers: defaults kept, booleans as text, then closes', async () => {
-    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce(reply({ success: true, message: 'ok' }))
+    const fetchSpy = mockApi()
     renderDialog()
 
-    await userEvent.type(screen.getByLabelText('Access token'), 's3cr3t')
+    await userEvent.type(await screen.findByLabelText('Access token'), 's3cr3t')
     await userEvent.click(screen.getByRole('switch', { name: 'Dry run' }))
     await userEvent.click(screen.getByRole('button', { name: 'Install' }))
 
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(submits(fetchSpy)).toHaveLength(1))
     expect(sentBody(fetchSpy)).toEqual({
       settings: { LOG_FORMAT: 'json', RENOVATE_TOKEN: 's3cr3t', DRY_RUN: 'true' },
     })
@@ -155,8 +185,9 @@ describe('InstallDialog', () => {
   })
 
   it('sends custom variables, dropping blank rows; the section starts collapsed', async () => {
-    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce(reply({ success: true, message: 'ok' }))
+    const fetchSpy = mockApi()
     renderDialog()
+    await screen.findByLabelText('Access token')
     const details = screen.getByText('Custom environment variables').closest('details')
     expect(details).not.toHaveAttribute('open')
 
@@ -167,13 +198,14 @@ describe('InstallDialog', () => {
     await userEvent.type(screen.getByLabelText('Access token'), 't')
     await userEvent.click(screen.getByRole('button', { name: 'Install' }))
 
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(submits(fetchSpy)).toHaveLength(1))
     expect(sentBody(fetchSpy).custom).toEqual([{ name: 'HTTP_PROXY', value: 'http://p:3128' }])
     // An untouched switch still answers: YAML `default: false` is sent as "false".
     expect(sentBody(fetchSpy).settings.DRY_RUN).toBe('false')
   })
 
-  it('hides machine-generated items: the server makes those secrets, the dialog never asks', () => {
+  it('hides machine-generated items: the server makes those secrets, the dialog never asks', async () => {
+    mockApi()
     renderDialog({
       ...app,
       settings: {
@@ -184,19 +216,21 @@ describe('InstallDialog', () => {
       },
     })
     const dialog = screen.getByRole('dialog')
-    expect(within(dialog).getByLabelText('Token')).toBeInTheDocument()
+    expect(await within(dialog).findByLabelText('Token')).toBeInTheDocument()
     // Regex, not the exact string: an unrequired question's label carries an " (optional)" suffix.
     expect(within(dialog).queryByLabelText(/Db password/)).toBeNull()
   })
 
-  it('hides custom variables when the app does not allow them', () => {
+  it('hides custom variables when the app does not allow them', async () => {
+    mockApi()
     renderDialog({ ...app, settings: { ...app.settings, allowCustom: false } })
+    await screen.findByLabelText('Access token')
     expect(screen.queryByText('Custom environment variables')).not.toBeInTheDocument()
   })
 
   it('shows server field errors under their fields and keeps everything typed', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
-      reply(
+    mockApi({
+      submit: reply(
         {
           message: 'Some settings need attention',
           errors: [
@@ -206,8 +240,9 @@ describe('InstallDialog', () => {
         },
         400,
       ),
-    )
+    })
     renderDialog()
+    await screen.findByLabelText('Access token')
 
     await userEvent.click(screen.getByRole('button', { name: 'Add variable' }))
     await userEvent.type(screen.getByLabelText('Variable name'), 'X')
@@ -223,8 +258,8 @@ describe('InstallDialog', () => {
   })
 
   it('shows errors that belong to no field (whole request, unknown names) in the alert', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
-      reply(
+    mockApi({
+      submit: reply(
         {
           message: 'Some settings need attention',
           errors: [
@@ -234,10 +269,10 @@ describe('InstallDialog', () => {
         },
         400,
       ),
-    )
+    })
     renderDialog()
 
-    await userEvent.type(screen.getByLabelText('Access token'), 't')
+    await userEvent.type(await screen.findByLabelText('Access token'), 't')
     await userEvent.click(screen.getByRole('button', { name: 'Install' }))
 
     const alert = await screen.findByRole('alert')
@@ -247,12 +282,12 @@ describe('InstallDialog', () => {
   })
 
   it('shows an unavailable store inside the dialog, keeping the typed token', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
-      reply({ message: "Couldn't save the settings right now. Try again in a minute.", statusCode: 503 }, 503),
-    )
+    mockApi({
+      submit: reply({ message: "Couldn't save the settings right now. Try again in a minute.", statusCode: 503 }, 503),
+    })
     renderDialog()
 
-    await userEvent.type(screen.getByLabelText('Access token'), 's3cr3t')
+    await userEvent.type(await screen.findByLabelText('Access token'), 's3cr3t')
     await userEvent.click(screen.getByRole('button', { name: 'Install' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't save the settings right now")
@@ -261,24 +296,82 @@ describe('InstallDialog', () => {
   })
 
   it('disables Install and Cancel while the request is in flight', async () => {
-    vi.spyOn(global, 'fetch').mockReturnValueOnce(new Promise<Response>(() => {}))
+    mockApi({ submit: new Promise<Response>(() => {}) })
     renderDialog()
 
-    await userEvent.type(screen.getByLabelText('Access token'), 't')
+    await userEvent.type(await screen.findByLabelText('Access token'), 't')
     await userEvent.click(screen.getByRole('button', { name: 'Install' }))
 
     expect(await screen.findByRole('button', { name: 'Installing...' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
   })
 
-  it('Cancel closes the dialog and reopening starts from the defaults', async () => {
+  it('prefills answers and custom variables from the stored settings (a reinstall keeps them)', async () => {
+    mockApi({
+      stored: {
+        settings: { RENOVATE_TOKEN: 'old', LOG_FORMAT: 'pretty' },
+        custom: [{ name: 'HTTP_PROXY', value: 'http://p' }],
+      },
+    })
     renderDialog()
-    await userEvent.type(screen.getByLabelText('Access token'), 'abc')
+
+    expect(await screen.findByLabelText('Access token')).toHaveValue('old')
+    expect((screen.getByLabelText(/Log format/) as HTMLSelectElement).value).toBe('pretty')
+    expect(screen.getByText('Custom environment variables').closest('details')).toHaveAttribute('open')
+    expect(screen.getByLabelText('Variable name')).toHaveValue('HTTP_PROXY')
+  })
+
+  it("shows a question's default when the stored entry has no answer for it", async () => {
+    mockApi()
+    renderDialog()
+    await screen.findByLabelText('Access token')
+    expect((screen.getByLabelText(/Log format/) as HTMLSelectElement).value).toBe('json')
+  })
+
+  it('shows an error and no form when the stored settings cannot be loaded', async () => {
+    const fetchSpy = mockApi({ storedStatus: 503 })
+    renderDialog()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "Couldn't load the current settings. Try again in a minute.",
+    )
+    expect(screen.queryByRole('button', { name: 'Install' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Access token')).not.toBeInTheDocument()
+    expect(submits(fetchSpy)).toHaveLength(0)
+  })
+
+  it('edit mode: titled "Renovate settings", saves with PUT, toasts and closes', async () => {
+    const fetchSpy = mockApi({ stored: { settings: { RENOVATE_TOKEN: 'old' }, custom: [] } })
+    renderDialog(app, 'edit')
+
+    await screen.findByLabelText('Access token')
+    expect(screen.getByRole('heading', { name: 'Renovate settings' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(submits(fetchSpy)).toHaveLength(1))
+    const [url, init] = submits(fetchSpy)[0] as [string, RequestInit]
+    expect(url).toBe('/api/apps/renovate/settings')
+    expect(init.method).toBe('PUT')
+    expect(sentBody(fetchSpy)).toEqual({ settings: { LOG_FORMAT: 'json', RENOVATE_TOKEN: 'old', DRY_RUN: 'false' } })
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith('Settings saved', {
+        description: 'Renovate will restart in a moment to use them.',
+      }),
+    )
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('Cancel discards edits: reopening starts from the stored settings again', async () => {
+    mockApi({ stored: { settings: { RENOVATE_TOKEN: 'old' }, custom: [] } })
+    renderDialog()
+    const token = await screen.findByLabelText('Access token')
+    await userEvent.clear(token)
+    await userEvent.type(token, 'abc')
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     await userEvent.click(screen.getByRole('button', { name: 'reopen' }))
 
-    expect(await screen.findByLabelText('Access token')).toHaveValue('')
+    expect(await screen.findByLabelText('Access token')).toHaveValue('old')
   })
 })
