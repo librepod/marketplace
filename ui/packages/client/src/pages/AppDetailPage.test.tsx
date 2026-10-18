@@ -156,6 +156,47 @@ describe('AppDetailPage', () => {
       settings: { items: [{ name: 'ADMIN_EMAIL', label: 'Admin email', required: true }] },
     }
 
+    it.each(['installing', 'running', 'error'] as const)(
+      'shows Settings for an installed app with questions (%s)',
+      async (installedStatus) => {
+        routeFetch({ ...withQuestions, installedStatus })
+        render(<AppDetailPage />, { wrapper: createWrapper() })
+
+        expect(await screen.findByRole('button', { name: 'Settings' })).toBeInTheDocument()
+      },
+    )
+
+    it('hides Settings when the app is not installed or has nothing to ask', async () => {
+      routeFetch(withQuestions)
+      const { unmount } = render(<AppDetailPage />, { wrapper: createWrapper() })
+      await screen.findByRole('button', { name: 'Install App' })
+      expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument()
+      unmount()
+
+      vi.restoreAllMocks()
+      routeFetch({
+        ...mockApp,
+        installedStatus: 'running',
+        settings: { items: [{ name: 'DB_PASSWORD', generate: { length: 40 } }] },
+      })
+      render(<AppDetailPage />, { wrapper: createWrapper() })
+      await screen.findByRole('button', { name: 'Uninstall App' })
+      expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument()
+    })
+
+    it('Settings opens the dialog in edit mode, prefilled from the stored settings', async () => {
+      routeFetch(
+        { ...withQuestions, installedStatus: 'running' },
+        { stored: { settings: { ADMIN_EMAIL: 'admin@example.com' }, custom: [] } },
+      )
+      render(<AppDetailPage />, { wrapper: createWrapper() })
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Settings' }))
+
+      expect(await screen.findByRole('heading', { name: 'Vaultwarden settings' })).toBeInTheDocument()
+      expect(await screen.findByLabelText('Admin email')).toHaveValue('admin@example.com')
+    })
+
     it('opens the install dialog instead of installing when the app asks questions', async () => {
       const fetchSpy = routeFetch(withQuestions)
       render(<AppDetailPage />, { wrapper: createWrapper() })
@@ -406,13 +447,19 @@ describe('AppDetailPage', () => {
     vi.spyOn(global, 'fetch').mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: async () => ({ ...mockApp, system: true, installedStatus: 'running' }),
+      json: async () => ({
+        ...mockApp,
+        system: true,
+        installedStatus: 'running',
+        settings: { items: [{ name: 'ADMIN_EMAIL', required: true }] },
+      }),
     } as Response)
     render(<AppDetailPage />, { wrapper: createWrapper() })
     await waitFor(() => {
       expect(screen.getByText(/Managed by platform/i)).toBeInTheDocument()
     })
     expect(screen.queryByRole('button', { name: 'Install App' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Open Vaultwarden/i })).not.toBeInTheDocument()
   })
 })
