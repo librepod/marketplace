@@ -4,6 +4,6 @@
   "dolt_mode": "server",
   "dolt_server_host": "dolt.dolt.svc.cluster.local",
   "dolt_server_user": "root",
-  "dolt_database": "marketplace",
+  "dolt_database": "librepod_marketplace",
   "project_id": "c365dbbc-360e-43db-9ce8-e07441def102"
 }
