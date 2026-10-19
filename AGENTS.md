@@ -23,6 +23,12 @@ bd close <id>         # Complete work
 bd dolt push          # Push beads data to remote
 ```
 
+## Public-Repo Privacy: No Personal Infrastructure References
+
+This repository is public. Do NOT refer to the maintainer's personal devices, their hostnames, IPs, real domains, relay servers, or personal incident narratives in PRs, commit messages, docs, code comments, or issues — not even as examples. Other contributors should not need to know — and must not learn — the maintainer's private topology.
+
+Generalize instead: "a production device", "a cluster", "the subnet-router pod", "the device's base domain". If work was debugged against specific personal hardware, describe it generically ("validated on a live production cluster").
+
 ## Non-Interactive Shell Commands
 
 **ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
