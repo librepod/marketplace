@@ -40,41 +40,25 @@ spec:
             capabilities:
               add:
                 - NET_ADMIN
-          # Self-heal the wedged control stream (seen twice in
-          # production): pod Running, daemon blind to headscale, node marked
-          # offline, clients lose the 10.42/10.43 subnet routes. Healthy =
-          # empty "Health":[] (e.g. "not in map poll" appears when the map
-          # poll is dead and reconnects fail). The nc guard makes the probe
-          # fail only while the login server is REACHABLE: dirty Health with
-          # an unreachable control plane is a headscale outage, and cached
-          # netmaps keep the data plane alive then — restarting would turn
-          # that into a full tailnet outage. Containerboot's :9002/healthz is
-          # not listening in userspace mode and only reports "holds a tailnet
-          # IP" anyway, which the wedged node does. The half-open-TCP wedge
-          # variant keeps Health clean; only headscale's last-seen catches it.
-          startupProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - tailscale status --json | grep '"Health"' | grep -q '\[\]' || ! nc -z -w 2 "$(echo "$TS_EXTRA_ARGS" | sed -n 's/.*--login-server=https\?:\/\/\([^:/]*\).*/\1/p')" 443
-            periodSeconds: 5
-            failureThreshold: 36
+          # Self-heal the wedged control stream (seen twice in production):
+          # pod Running, daemon blind to headscale, node offline, subnet
+          # routes lost. Healthy = empty "Health":[] ("not in map poll" =
+          # dead map poll). nc guard: fail only while the login server is
+          # REACHABLE — during a headscale outage cached netmaps keep the
+          # data plane alive and a restart would kill it. containerboot's
+          # :9002/healthz is dead in userspace mode and passes wedged nodes;
+          # the half-open-TCP variant keeps Health clean (only headscale
+          # last-seen catches it).
           livenessProbe:
-            exec:
+            exec: &health-probe
               command:
                 - /bin/sh
                 - -c
                 - tailscale status --json | grep '"Health"' | grep -q '\[\]' || ! nc -z -w 2 "$(echo "$TS_EXTRA_ARGS" | sed -n 's/.*--login-server=https\?:\/\/\([^:/]*\).*/\1/p')" 443
             periodSeconds: 30
             timeoutSeconds: 10
-            failureThreshold: 3
           readinessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - tailscale status --json | grep '"Health"' | grep -q '\[\]' || ! nc -z -w 2 "$(echo "$TS_EXTRA_ARGS" | sed -n 's/.*--login-server=https\?:\/\/\([^:/]*\).*/\1/p')" 443
+            exec: *health-probe
             periodSeconds: 30
             timeoutSeconds: 10
           volumeMounts:
