@@ -101,6 +101,8 @@ Copying from a sibling app propagates exceptions, drift, and mistakes instead of
 | **Kustomize** | `deployment.yaml`, `service.yaml`, `pvc.yaml`, `.env` | Direct container deployment |
 | **Helm** | `ocirepository.yaml` (or `helmrepository.yaml`), `helmrelease.yaml`, `pvc.yaml` | App has an official Helm chart |
 
+**Vendored charts.** A vendor chart needing postRenderer patches that assume its internal structure (container order, label helpers, env plumbing) is a trap — any release can silently invalidate a patch. Prefer rendering the chart (`helm template`) and committing the adapted output as a Kustomize-type app. Record the chart version and the bump procedure (diff the new render, port changes, move image pins + `spec.version`) in a comment in `base/kustomization.yaml`. Watch for version anchors the `images:` transformer cannot reach: env vars naming images for resources the app creates **at runtime** (e.g. agent pods) must be bumped by hand.
+
 ---
 
 ## Directory Structure
@@ -757,6 +759,19 @@ envFrom:
                                   # and custom variables reach the app this way
 ```
 
+**Composing secret-bearing URLs** (DATABASE_URL & co.): never put the secret in the ConfigMap — define it as an explicit `env:` `secretKeyRef`, then reference it with `$(VAR)` in the next entry; kubelet expands `$(VAR)` in `env:` values and `args:` alike:
+
+```yaml
+env:
+  - name: DB_PASSWORD
+    valueFrom:
+      secretKeyRef: { name: <app-name>-settings, key: DB_PASSWORD }
+  - name: DATABASE_URL
+    value: postgres://user:$(DB_PASSWORD)@postgres:5432/db
+```
+
+Expansion sees only env entries defined EARLIER in the same list — do not rely on envFrom-provided vars being expandable.
+
 The Secret is **non-optional by default**: the pod waits in `CreateContainerConfigError` until ESO has synced it — a deliberate gate so the app can never boot before its required configuration (a generated `DB_PASSWORD`, a required token) has arrived. When an env var name must differ from the settings key, use an explicit `env:` `secretKeyRef` instead (e.g. the bundled postgres takes `POSTGRES_PASSWORD` from key `DB_PASSWORD`, shared with the app).
 
 **Exception — all-optional settings MUST set `optional: true` on the secretRef.** If every settings item can resolve empty (no `required`, no `generate:`, no `default` — including `allowCustom`-only apps with zero items), an install that leaves everything blank writes an *empty* OpenBao entry. ESO then maps the empty `dataFrom.extract` payload to "nothing to sync": it creates **no Secret** yet reports `Ready=True` with `secret retained due to DeletionPolicy=Retain` — an empty KV entry is indistinguishable from a deleted one in ESO's semantics, so no error surfaces anywhere. A non-optional secretRef blocks the container in `CreateContainerConfigError` forever: reconciliation can never create the missing Secret (the "condition that can never become true" anti-pattern). `optional: true` lets the pod boot on the `.env` defaults; when the entry does have values (a token, custom vars) ESO creates the Secret and it still wins — it stays last in `envFrom`. Document the deviation inline in the app; worked example: `apps/vaultwarden/base/deployment.yaml`. Do NOT blanket-apply `optional: true` to apps that need their settings — it would let them boot misconfigured when ESO is merely slow (env vars are fixed at container start, so a raced pod keeps the wrong config until its next restart).
@@ -789,6 +804,8 @@ kubectl --kubeconfig ~/.kube/librepod-dev.config -n openbao exec openbao-0 -- \
 ```
 
 (Marketplace installs do this for you — this only matters for hand-applied test deployments.)
+
+A hand-created fixture `<app>-settings` Secret gets stamped by ESO (`reconcile.external-secrets.io/managed=true`, Retain semantics with no OpenBao entry), and external-secrets-reloader then rolls every Deployment referencing it — expect one restart right after apply. Harmless once NFS-postgres Deployments carry `Recreate`; otherwise it can corrupt a WAL mid-boot.
 
 ### `converge-db-password` is unchanged
 
@@ -970,7 +987,7 @@ For Helm-based apps, check the chart's values for `initContainers` or `extraInit
 
 ## Bundled PostgreSQL
 
-When an app bundles its own database as a sibling Deployment (conventionally `components/postgres/` with its own `deployment.yaml`, `service.yaml`, `pvc.yaml`), two rules apply.
+When an app bundles its own database as a sibling Deployment (conventionally `components/postgres/` with its own `deployment.yaml`, `service.yaml`, `pvc.yaml`), three rules apply. Include the component from `base/kustomization.yaml` via `components:` — a component declared in base is mandatory and inherits base's labels/namespace transformers; overlay-level components (headscale's pattern) are for optional features.
 
 ### Rule 1 — `converge-db-password` container is REQUIRED when the password comes from settings
 
@@ -1022,6 +1039,14 @@ It works because the official image's `pg_hba.conf` trusts loopback TCP (127.0.0
 
 Postgres 18+ images store data in versioned subdirs (`18/docker`) and **hard-error on a PVC mounted at the legacy `/var/lib/postgresql/data` path**. Mount the data volume at `/var/lib/postgresql` instead (matches upstream compose).
 
+### Rule 3 — `strategy: Recreate` (single writer on NFS)
+
+A single-instance stateful engine on an NFS-backed PVC (postgres, mysql) MUST set `strategy: type: Recreate` on its Deployment. RollingUpdate's surge pod mounts the same NFS export while the old process still runs — NFS has no attach phase to serialize writers and file locks are unreliable over NFS — so two processes write one data directory and corrupt it (postgres: PANIC "could not locate a valid checkpoint record"; recovery needs `pg_resetwal` or a wipe). Chart defaults get away with RollingUpdate only on attach-semantic volumes (EBS and friends).
+
+## Bundled Redis-compatible cache
+
+Prefer `valkey/valkey` over the redis image (BSD-3, actively maintained; ships a `redis-server` compat symlink, so `args: [redis-server, …]` work unchanged). If the container runs read-only-rootfs with no writable data volume, disable persistence explicitly (`--save ""`): with default RDB save points the first BGSAVE fails on the read-only fs and the server flips to MISCONF, rejecting every write an hour after first boot. Auth: `--requirepass $(REDIS_PASSWORD)` + an env `secretKeyRef` from a generated settings item.
+
 ---
 
 ## Conventions
@@ -1041,6 +1066,8 @@ configMapGenerator:
   envs:
   - myapp.env
 ```
+
+**Exception:** a ConfigMap the app reads BY EXACT NAME at runtime (not via envFrom) must stay a plain resource — the generator's hash suffix breaks the lookup (optio's `optio-agent-pvc-template`).
 
 ### Environment variables — envFrom from a generated ConfigMap, never inline literals
 
