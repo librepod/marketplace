@@ -24,6 +24,15 @@ spec:
           envFrom:
             - configMapRef:
                 name: jellyfin
+            # Install-time custom variables (metadata settings.allowCustom),
+            # e.g. JELLYFIN_PublishedServerUrl. LAST in envFrom so they
+            # override the .env defaults. Optional: jellyfin declares no
+            # settings items, so installs commonly write no OpenBao entry —
+            # ESO then creates no Secret, and a non-optional ref would block
+            # the pod (CreateContainerConfigError).
+            - secretRef:
+                name: jellyfin-settings
+                optional: true
           # First boot runs library migrations against /config on NFS — give the
           # startup probe a generous budget before liveness can kill the pod.
           startupProbe:

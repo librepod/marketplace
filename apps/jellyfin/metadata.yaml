@@ -18,6 +18,12 @@ spec:
     url: oci://ghcr.io/librepod/marketplace/apps/jellyfin
     path: ./overlays/librepod
 
+  # No settings items (first-run wizard creates the admin in-band); custom
+  # variables only — e.g. JELLYFIN_PublishedServerUrl for LAN autodiscovery.
+  # They land in the jellyfin-settings Secret, last in envFrom.
+  settings:
+    allowCustom: true
+
   dependencies:
     required:
       - kind: IngressController
