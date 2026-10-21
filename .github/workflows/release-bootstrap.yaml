@@ -141,6 +141,8 @@ jobs:
           VERSION: ${{ steps.version.outputs.next }}
           NOTES: ${{ steps.version.outputs.notes }}
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if [ -n "$NOTES" ]; then
             git tag -a "marketplace-bootstrap-v$VERSION" -m "$NOTES" "$GITHUB_SHA"
           else
