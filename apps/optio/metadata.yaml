@@ -73,7 +73,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/optio
         ref:
-          tag: "<version>"
+          tag: "__VERSION__"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization

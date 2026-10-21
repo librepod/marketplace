@@ -570,7 +570,11 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/<app-name>
         ref:
-          tag: "<version>"
+          # __VERSION__ is the generate-catalog.sh sentinel — it is replaced by
+          # spec.version when catalog.yaml is built. Any other placeholder
+          # spelling (e.g. "<version>") leaks through unsubstituted and the
+          # install pulls a literally-named tag → 404 → stuck install.
+          tag: "__VERSION__"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization
