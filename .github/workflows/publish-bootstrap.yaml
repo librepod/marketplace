@@ -150,46 +150,20 @@ jobs:
               });
             }
 
-  release:
+  # Reusable workflows can only be called at job level (not step level), so
+  # the cut is its own job. It runs with the CALLER's granted permissions
+  # (the called workflow's own block can only narrow them), hence the write
+  # scopes here. Version derivation ("auto"), serialization (the
+  # bootstrap-release concurrency group), and all cutting steps live inside
+  # the called workflow so compute-and-cut is one atomic unit.
+  cut-release:
     needs: [publish]
-    runs-on: ubuntu-latest
     # Auto-cut only real master merges; PR builds stop at the pr-N artifact.
     if: github.event_name == 'push'
-    # Serialize release jobs: two rapid merges must not compute the same
-    # next version from the same base tag. A collision that still slips
-    # through dies in the release guards (tag/OCI reuse refusal).
-    concurrency:
-      group: bootstrap-release
-      cancel-in-progress: false
-    permissions:
-      contents: read
-    outputs:
-      next: ${{ steps.version.outputs.next }}
-      notes: ${{ steps.version.outputs.notes }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Compute next version
-        id: version
-        run: bash scripts/bootstrap-next-version.sh
-
-  # Reusable workflows can only be called at job level (not step level), so
-  # the cut is its own job fed by the classifier's outputs above. It runs
-  # with the CALLER's granted permissions (the called workflow's own block
-  # can only narrow them), hence the write scopes here.
-  cut-release:
-    needs: [release]
-    if: >
-      github.event_name == 'push' &&
-      needs.release.outputs.next != ''
     permissions:
       packages: write
       contents: write
     uses: ./.github/workflows/release-bootstrap.yaml
     with:
-      version: ${{ needs.release.outputs.next }}
-      notes: ${{ needs.release.outputs.notes }}
+      version: auto
     secrets: inherit

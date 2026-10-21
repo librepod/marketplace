@@ -92,6 +92,9 @@ release 1.3.2
 
 # 9. no diff since last release -> empty NEXT (skip)
 [ "$(next_of)" = "NEXT=" ] || fail "9: expected empty NEXT, got $(next_of)"
+OUT9="$(mktemp)"
+(cd "$TMP" && GITHUB_OUTPUT="$OUT9" bash "$CLASSIFIER") > /dev/null
+grep -q '^skip=true$' "$OUT9" || fail "9b: expected skip=true in GITHUB_OUTPUT"
 
 # 10. cosmetic quote change normalizes to equal -> not a pin change, default patch
 sed -i 's/tag: "3.7.11"/tag: 3.7.11/' "$TMP/infrastructure/system-apps/traefik.yaml"
@@ -107,5 +110,54 @@ TMP2="$(mktemp -d)"; trap 'rm -rf "$TMP" "$TMP2"' EXIT
 git -C "$TMP2" init -q -b main
 git -C "$TMP2" config user.email test@local; git -C "$TMP2" config user.name test
 if (cd "$TMP2" && bash "$CLASSIFIER") >/dev/null 2>&1; then fail "12: expected failure without tags"; fi
+
+# 13. trailing comment on the tag line: cosmetic alone, still parses when bumped
+sed -i 's|tag: 3.7.11$|tag: "3.7.11"  # pinned for CVE|' "$TMP/infrastructure/system-apps/traefik.yaml"
+commit_all "comment on tag line"
+[ "$(next_of)" = "NEXT=1.3.3" ] || fail "13a: expected NEXT=1.3.3, got $(next_of)"
+notes_of | grep -qF 'no pin changes' || fail "13a: comment-only edit should be cosmetic"
+release 1.3.3
+sed -i 's|tag: "3.7.11"  # pinned for CVE|tag: "3.7.12"  # pinned for CVE|' "$TMP/infrastructure/system-apps/traefik.yaml"
+commit_all "traefik bump with comment"
+[ "$(next_of)" = "NEXT=1.3.4" ] || fail "13b: expected NEXT=1.3.4, got $(next_of)"
+notes_of | grep -qF 'traefik 3.7.11->3.7.12 [patch]' || fail "13b: bumped pin behind trailing comment not classified"
+release 1.3.4
+
+# 14. multi-doc pin file: a bump in the SECOND tag must classify
+cat > "$TMP/infrastructure/system-apps/dual.yaml" <<'EOF'
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+spec:
+  ref:
+    tag: "1.0.0"
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+spec:
+  ref:
+    tag: "2.0.0"
+EOF
+commit_all "add dual"
+[ "$(next_of)" = "NEXT=1.4.0" ] || fail "14a: expected NEXT=1.4.0, got $(next_of)"
+notes_of | grep -qF 'dual added [minor]' || fail "14a: added note missing"
+release 1.4.0
+sed -i 's|tag: "2.0.0"|tag: "2.1.0"|' "$TMP/infrastructure/system-apps/dual.yaml"
+commit_all "bump second doc tag"
+[ "$(next_of)" = "NEXT=1.5.0" ] || fail "14b: expected NEXT=1.5.0, got $(next_of)"
+notes_of | grep -qF 'dual 2.0.0->2.1.0 [minor]' || fail "14b: second-doc tag bump not classified"
+release 1.5.0
+
+# 15. leading-zero segments: compare and bump in base 10, never octal
+pin_file octest "1.09.0"; commit_all "add octest"
+[ "$(next_of)" = "NEXT=1.6.0" ] || fail "15a: expected NEXT=1.6.0, got $(next_of)"
+release 1.6.0
+pin_file octest "1.10.0"; commit_all "octest minor"
+[ "$(next_of)" = "NEXT=1.7.0" ] || fail "15b: expected NEXT=1.7.0 (leading-zero minor), got $(next_of)"
+notes_of | grep -qF 'octest 1.09.0->1.10.0 [minor]' || fail "15b: leading-zero minor note missing"
+release 1.7.0
+release 1.7.09
+printf '# c\n' >> "$TMP/infrastructure/system-apps/octest.yaml"; commit_all "touch for patch"
+[ "$(next_of)" = "NEXT=1.7.10" ] || fail "15c: expected NEXT=1.7.10 from base 1.7.09, got $(next_of)"
+release 1.7.10
 
 echo "PASS: all bootstrap-next-version scenarios"
