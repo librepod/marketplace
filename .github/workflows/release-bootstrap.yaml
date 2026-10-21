@@ -7,6 +7,17 @@ on:
         description: 'Release version (bare X.Y.Z, e.g. 0.1.1 — no "v" prefix)'
         required: true
         type: string
+  workflow_call:
+    inputs:
+      version:
+        description: 'Release version (bare X.Y.Z)'
+        required: true
+        type: string
+      notes:
+        description: 'Annotated-tag message (pin-diff summary from auto-cut)'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   release:
@@ -59,17 +70,38 @@ jobs:
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
           VERSION: ${{ inputs.version }}
         run: |
+          retry() {
+            # Retry through transient GHCR secondary rate-limits (HTTP 403)
+            # during cosign signature blob uploads, and any 409 from re-signing
+            # a digest that the publish job already signed (same content).
+            local max=5 delay=15 i=0
+            until "$@"; do
+              i=$((i + 1))
+              if [ "$i" -ge "$max" ]; then
+                echo "::error::Failed after $i attempts: $*" >&2
+                return 1
+              fi
+              echo "Attempt $i failed; retrying in ${delay}s..." >&2
+              sleep "$delay"
+              delay=$((delay + 15))
+            done
+          }
           DIGEST=$(flux push artifact \
             oci://ghcr.io/${{ github.repository_owner }}/marketplace/bootstrap:"$VERSION" \
             --path=/tmp/bootstrap \
             --source="$(git config --get remote.origin.url)" \
             --revision="$(git rev-parse HEAD)" \
             --output json | jq -r '.repository + "@" + .digest')
-          cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST"
+          retry cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST"
 
       - name: Bookmark release with a git tag
         env:
           VERSION: ${{ inputs.version }}
+          NOTES: ${{ inputs.notes }}
         run: |
-          git tag "marketplace-bootstrap-v$VERSION" "$GITHUB_SHA"
+          if [ -n "$NOTES" ]; then
+            git tag -a "marketplace-bootstrap-v$VERSION" -m "$NOTES" "$GITHUB_SHA"
+          else
+            git tag "marketplace-bootstrap-v$VERSION" "$GITHUB_SHA"
+          fi
           git push origin "marketplace-bootstrap-v$VERSION"
