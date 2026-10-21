@@ -152,6 +152,7 @@ jobs:
 
   release:
     needs: [publish]
+    runs-on: ubuntu-latest
     # Auto-cut only real master merges; PR builds stop at the pr-N artifact.
     if: github.event_name == 'push'
     # Serialize release jobs: two rapid merges must not compute the same
