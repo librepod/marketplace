@@ -2,7 +2,6 @@
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   extends: ["config:recommended"],
   dependencyDashboard: true,
-  ignorePaths: ["infrastructure/**"],
   automerge: false,
   // config:recommended defaults to prHourlyLimit: 2, which parks most updates
   // as "rate-limited" on the dashboard (security PRs consume the budget first).
@@ -11,7 +10,7 @@
   prHourlyLimit: 0,
   prConcurrentLimit: 0,
   kustomize: { managerFilePatterns: ["/apps/.*/overlays/.*/kustomization\\.ya?ml/"] },
-  flux: { managerFilePatterns: ["/apps/.*/base/ocirepository\\.ya?ml/"] },
+  flux: { managerFilePatterns: ["/apps/.*/base/ocirepository\\.ya?ml/", "/infrastructure/system-apps/marketplace-ui\\.ya?ml/"] },
   customManagers: [
     {
       customType: "regex",
@@ -29,6 +28,11 @@
     // go.mod) is disabled — the mission is app image/chart updates.
     // Re-enable those areas deliberately later if desired.
     { matchFileNames: ["**/*", "!apps/**"], enabled: false },
+
+    // Bootstrap pin for marketplace-ui: the one infrastructure file Renovate
+    // manages. Scoped by file — the file contains exactly one OCIRepository.
+    // All other system-app pins stay hand-maintained by design.
+    { matchFileNames: ["infrastructure/system-apps/marketplace-ui.yaml"], enabled: true },
 
     // --- Pin vendored dependency images. A sidecar shipped by the app vendor
     // (e.g. postgres:16) is a compatibility contract, not something to chase —

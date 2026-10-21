@@ -1,12 +1,34 @@
 name: Release Bootstrap Artifact
 
+# Workflow-level (not job-level) so it also serializes runs of this workflow
+# when it is called from publish-bootstrap.yaml: deriving the next version
+# must observe any previous cut's git tag, so two rapid master merges cannot
+# compute the same version. A collision that still slips through dies in the
+# guards below (git-tag reuse refusal).
+concurrency:
+  group: bootstrap-release
+  cancel-in-progress: false
+
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (bare X.Y.Z, e.g. 0.1.1 — no "v" prefix)'
+        description: 'Release version (bare X.Y.Z, e.g. 0.1.1 — no "v" prefix; "auto" derives it from the pin diff)'
         required: true
         type: string
+        default: 'auto'
+  workflow_call:
+    inputs:
+      version:
+        description: "Release version (bare X.Y.Z, or 'auto' to derive from the pin diff)"
+        required: true
+        type: string
+        default: 'auto'
+      notes:
+        description: 'Annotated-tag message (only used when version is explicit; auto derives its own)'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   release:
@@ -16,6 +38,9 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - uses: fluxcd/flux2/action@main
 
@@ -30,9 +55,30 @@ jobs:
         with:
           cosign-release: 'v3.0.6'
 
-      - name: Validate version and guard against reuse
+      - name: Resolve version
+        id: version
         env:
-          VERSION: ${{ inputs.version }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_NOTES: ${{ inputs.notes }}
+        run: |
+          if [ "$INPUT_VERSION" != "auto" ]; then
+            {
+              echo "next=$INPUT_VERSION"
+              echo "skip=false"
+              echo "notes<<EOF"
+              echo "$INPUT_NOTES"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            # Emits `next`, `skip` (true = empty pin diff, nothing to cut),
+            # and multiline `notes` with the pin-diff summary.
+            bash scripts/bootstrap-next-version.sh
+          fi
+
+      - name: Validate version and guard against reuse
+        if: steps.version.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.next }}
         run: |
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::Refusing to release: version '$VERSION' is not bare X.Y.Z (no 'v' prefix)"; exit 1
@@ -44,32 +90,60 @@ jobs:
             echo "::error::Refusing to release: git tag marketplace-bootstrap-v$VERSION already exists"; exit 1
           fi
           if docker manifest inspect "ghcr.io/${{ github.repository_owner }}/marketplace/bootstrap:$VERSION" > /dev/null 2>&1; then
-            echo "::error::Refusing to release: OCI tag $VERSION already exists"; exit 1
+            # OCI tag without its git tag = a previous cut died between the OCI
+            # push and the tag push. Resume rather than refuse: the push below
+            # re-points the OCI tag at this HEAD and the run finishes by
+            # pushing the missing git tag, un-wedging the release line.
+            echo "::notice::OCI tag $VERSION exists without its git tag — resuming interrupted release"
           fi
 
       - name: Build bootstrap artifact directory
+        if: steps.version.outputs.skip != 'true'
         run: |
           mkdir -p /tmp/bootstrap
           cp -r clusters /tmp/bootstrap/
           cp -r infrastructure /tmp/bootstrap/
 
       - name: Push and sign bootstrap artifact
+        if: steps.version.outputs.skip != 'true'
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ steps.version.outputs.next }}
         run: |
+          retry() {
+            # Retry through transient GHCR secondary rate-limits (HTTP 403)
+            # during cosign signature blob uploads, and any 409 from re-signing
+            # a digest that the publish job already signed (same content).
+            local max=5 delay=15 i=0
+            until "$@"; do
+              i=$((i + 1))
+              if [ "$i" -ge "$max" ]; then
+                echo "::error::Failed after $i attempts: $*" >&2
+                return 1
+              fi
+              echo "Attempt $i failed; retrying in ${delay}s..." >&2
+              sleep "$delay"
+              delay=$((delay + 15))
+            done
+          }
           DIGEST=$(flux push artifact \
             oci://ghcr.io/${{ github.repository_owner }}/marketplace/bootstrap:"$VERSION" \
             --path=/tmp/bootstrap \
             --source="$(git config --get remote.origin.url)" \
             --revision="$(git rev-parse HEAD)" \
             --output json | jq -r '.repository + "@" + .digest')
-          cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST"
+          retry cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST"
 
       - name: Bookmark release with a git tag
+        if: steps.version.outputs.skip != 'true'
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ steps.version.outputs.next }}
+          NOTES: ${{ steps.version.outputs.notes }}
         run: |
-          git tag "marketplace-bootstrap-v$VERSION" "$GITHUB_SHA"
+          if [ -n "$NOTES" ]; then
+            git tag -a "marketplace-bootstrap-v$VERSION" -m "$NOTES" "$GITHUB_SHA"
+          else
+            git tag "marketplace-bootstrap-v$VERSION" "$GITHUB_SHA"
+          fi
           git push origin "marketplace-bootstrap-v$VERSION"

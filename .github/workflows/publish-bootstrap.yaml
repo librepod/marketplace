@@ -149,3 +149,21 @@ jobs:
                 body
               });
             }
+
+  # Reusable workflows can only be called at job level (not step level), so
+  # the cut is its own job. It runs with the CALLER's granted permissions
+  # (the called workflow's own block can only narrow them), hence the write
+  # scopes here. Version derivation ("auto"), serialization (the
+  # bootstrap-release concurrency group), and all cutting steps live inside
+  # the called workflow so compute-and-cut is one atomic unit.
+  cut-release:
+    needs: [publish]
+    # Auto-cut only real master merges; PR builds stop at the pr-N artifact.
+    if: github.event_name == 'push'
+    permissions:
+      packages: write
+      contents: write
+    uses: ./.github/workflows/release-bootstrap.yaml
+    with:
+      version: auto
+    secrets: inherit
