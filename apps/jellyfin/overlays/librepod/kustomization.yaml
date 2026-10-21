@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: jellyfin
+
+resources:
+- ../../base
+- ingressroute.yaml
+
+images:
+- name: jellyfin/jellyfin
+  newTag: "12.2"
+
+# Multi-document patch: each document self-identifies by metadata.name, so no
+# target selector (kustomize rejects a target on a multi-document patch entry).
+patches:
+- path: ./patch-storage-class.yaml
