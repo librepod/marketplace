@@ -136,8 +136,11 @@ ENTRY
   fi
 done
 
-if grep -q '__VERSION__' "$CATALOG_FILE"; then
-  echo "ERROR: __VERSION__ sentinel leaked into catalog.yaml" >&2; exit 1
+# The version sentinel is __VERSION__ (substituted above). "<version>" is the
+# misspelling the app-authoring skill used to document — it matches nothing and
+# ships verbatim, breaking installs with a literally-named OCI tag.
+if grep -qE '__VERSION__|<version>' "$CATALOG_FILE"; then
+  echo "ERROR: version sentinel leaked into catalog.yaml (unsubstituted __VERSION__ or <version>)" >&2; exit 1
 fi
 
 # An empty catalog is always a regression (extraction failure, moved metadata
