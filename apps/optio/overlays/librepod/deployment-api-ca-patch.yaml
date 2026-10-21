@@ -1,0 +1,27 @@
+# Private-CA trust for the API's server-side HTTPS calls to the IdP
+# (docs/sso-app-author-guide.md §4): mount the LibrePod root CA; the
+# NODE_EXTRA_CA_CERTS entry in base/optio.env points Node at it. Optio is a
+# pure Node app and NODE_EXTRA_CA_CERTS alone is sufficient for it (verified:
+# OIDC discovery over the private CA passes), so the guide's fused-bundle
+# init container is not needed here. Strategic merge by container name —
+# lands on "api" whatever position it holds in the pod.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: optio-api
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          volumeMounts:
+            - name: root-ca-cert
+              mountPath: /mnt/root-ca
+              readOnly: true
+      volumes:
+        - name: root-ca-cert
+          secret:
+            secretName: step-certificates-certs
+            items:
+              - key: root_ca.crt
+                path: root_ca.crt

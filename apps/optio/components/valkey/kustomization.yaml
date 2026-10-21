@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Bundled Valkey — BSD-3 Redis-compatible server (Linux Foundation fork; the
+# image ships a redis-server compat symlink) replacing the chart's redis
+# image, for the same licensing reasons as the rest of the marketplace.
+# Ephemeral by design, matching the vendor chart: no PVC and a read-only root
+# filesystem — RDB snapshots are DISABLED (--save ""), because the chart's
+# default save points made the first BGSAVE fail on the read-only rootfs an
+# hour after first write, flipping the server to MISCONF (it then rejects
+# every write; the API health check writes rate-limit counters, so readiness
+# dies with it). Optio's reconciliation recovers in-flight work after a
+# restart. Auth: requirepass from the settings Secret (REDIS_PASSWORD).
+#
+# Included unconditionally from base/kustomization.yaml.
+
+resources:
+- service.yaml
+- deployment.yaml
