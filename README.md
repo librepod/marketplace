@@ -361,16 +361,19 @@ Publishes a thin orchestration artifact containing:
 No app code is bundled. All apps (system and user) are fetched at runtime via
 their individual OCI artifacts.
 
-**Stable releases:** dispatch the `Release Bootstrap Artifact` workflow
-(Actions → *Release Bootstrap Artifact* → *Run workflow* → version `X.Y.Z`).
-It validates the version, refuses if the OCI tag or the release git tag
-already exists, publishes a cosign-signed `marketplace/bootstrap:X.Y.Z`
-artifact, and bookmarks the released commit with a CI-created git tag
-(`marketplace-bootstrap-vX.Y.Z` — component-prefixed so marketplace
-components can't collide in the flat git tag namespace; release tags are
-never hand-pushed). Production clusters pin a fixed `X.Y.Z` version
-(configured in the os repo); `latest` remains the rolling dev stream, and
-`pr-<N>` artifacts are published per PR for testing.
+**Stable releases:** cut automatically. Every successful publish on `master`
+runs a version classifier over the system-app pin changes since the last
+release tag and cuts the next release at the **highest bump level seen** — any
+pin patch bump → patch, any pin minor/major bump → minor/major, an added or
+removed system app → minor, rollbacks and non-semver changes → patch (flagged
+in the tag annotation). Release tags are annotated with the pin-diff summary
+(`git tag -l -n9 'marketplace-bootstrap-v*'` to read them), so the version
+level is a risk signal: patch = safe to take on production without review,
+minor/major = read the annotation first. Manual dispatch of the *Release
+Bootstrap Artifact* workflow remains for deliberate overrides (e.g. milestone
+majors). Production clusters pin a fixed `X.Y.Z` version (configured in the
+os repo); `latest` remains the rolling dev stream, and `pr-<N>` artifacts are
+published per PR for testing.
 
 ---
 
