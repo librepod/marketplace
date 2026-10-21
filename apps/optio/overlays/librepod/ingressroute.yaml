@@ -1,0 +1,37 @@
+# Optio natively handles OIDC sign-in (wired via SSOClient + auth.oidc.* in
+# patch-helmrelease.yaml), so there are NO oauth2-proxy forward-auth
+# middlewares here — the app validates sessions itself.
+#
+# Routing mirrors the vendor chart's ingress model: / and the app shell come
+# from the web container, /api and /ws go straight to the API. /api/internal/*
+# is deliberately matched by NO rule (Traefik answers 404): those endpoints
+# use bearer-token auth instead of sessions and must not be public — the
+# chart's nginx template blocks them with a server snippet; with Traefik the
+# negative PathPrefix match plus the web rule's own exclusion does the same.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: optio
+spec:
+  entryPoints:
+  - web
+  - websecure
+  routes:
+  - kind: Rule
+    match: Host(`optio.${BASE_DOMAIN:=libre.pod}`) && PathPrefix(`/api`) && !PathPrefix(`/api/internal`)
+    priority: 100
+    services:
+    - name: optio-api
+      port: 4000
+  - kind: Rule
+    match: Host(`optio.${BASE_DOMAIN:=libre.pod}`) && PathPrefix(`/ws`)
+    priority: 90
+    services:
+    - name: optio-api
+      port: 4000
+  - kind: Rule
+    match: Host(`optio.${BASE_DOMAIN:=libre.pod}`) && !PathPrefix(`/api`)
+    priority: 1
+    services:
+    - name: optio-web
+      port: 3000

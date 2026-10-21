@@ -1,0 +1,98 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: optio
+spec:
+  displayName: "Optio"
+  description: "Self-hosted orchestration for AI coding agents — run agents on schedules, tickets, and events; follow sessions and terminals from one Work feed"
+  icon: "https://raw.githubusercontent.com/jonwiggins/optio/main/apps/site/public/optio-mark.svg"
+  category: "AI"
+  website: "https://github.com/jonwiggins/optio"
+
+  # The upstream app version. The vendor chart is OCI-published in lockstep
+  # (chart N.N.N = app N.N.N) but defaults every image to `latest`; the pins
+  # in base/ocirepository.yaml and base/helmrelease.yaml carry this version.
+  # All four move together in one commit.
+  version: "0.18.2"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/optio"
+    path: ./overlays/librepod
+
+  # Both items are machine-generated — the install dialog never opens
+  # (one-click install). OPTIO_ENCRYPTION_KEY seals stored credentials;
+  # DB_PASSWORD backs the bundled PostgreSQL. OpenBao retains both across
+  # uninstall, so reinstalls converge with surviving NFS data.
+  settings:
+    items:
+      - name: OPTIO_ENCRYPTION_KEY
+        label: "Encryption key"
+        description: "AES key for encrypting stored credentials (auto-generated)"
+        sensitive: true
+        generate:
+          length: 64
+      - name: DB_PASSWORD
+        label: "Database password"
+        description: "PostgreSQL password for the bundled database (auto-generated)"
+        sensitive: true
+        generate:
+          length: 64
+
+  dependencies:
+    required:
+      - kind: IngressController
+        description: "Traefik (provided by bootstrap)"
+      - kind: StorageClass
+        description: "nfs-client (provided by bootstrap)"
+      - kind: SSOProvider
+        description: "Casdoor SSO (provided by casdoor-sso-controller)"
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-optio
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "optio"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/optio
+        ref:
+          tag: "<version>"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-optio
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "optio"
+      spec:
+        dependsOn:
+          - name: traefik
+          - name: storage
+          - name: casdoor-sso-controller
+        force: true
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-optio
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+        postBuild:
+          substitute:
+            BASE_DOMAIN: "${BASE_DOMAIN}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml

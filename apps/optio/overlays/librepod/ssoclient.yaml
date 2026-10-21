@@ -1,0 +1,33 @@
+# The casdoor-sso-controller reconciles this CR: it provisions the Casdoor
+# OIDC Application (clientId "optio") and writes the client id/secret into
+# Secret/optio-sso in this namespace. The chart consumes them via
+# existingSecrets (OIDC_CLIENT_ID / OIDC_CLIENT_SECRET) in
+# patch-helmrelease.yaml. SSO_ISSUER is mapped but deliberately unused:
+# Optio's OIDC client (apps/api/src/services/oauth/oidc.ts) takes the BARE
+# issuer and appends /.well-known/openid-configuration itself, while the
+# controller's issuer key is the full discovery URL — feeding it would make
+# discovery fetch ".../openid-configuration/.well-known/openid-configuration"
+# and 404. The bare issuer comes from auth.oidc.issuerUrl in
+# patch-helmrelease.yaml instead.
+apiVersion: marketplace.librepod.org/v1alpha1
+kind: SSOClient
+metadata:
+  name: optio-sso
+  namespace: optio
+spec:
+  clientId: optio
+  organization: librepod
+  redirectUris:
+    - "https://optio.${BASE_DOMAIN}/api/auth/oidc/callback"
+  grantTypes: [authorization_code, refresh_token]
+  # JWT-Standard: spec-compliant OIDC claims, no Casdoor user-object leakage.
+  # Optio's TS OIDC client is lenient, but standard claims are all it reads.
+  tokenFormat: JWT-Standard
+  expireInHours: 168
+  output:
+    secretName: optio-sso
+    keys:
+      clientId: OIDC_CLIENT_ID
+      clientSecret: OIDC_CLIENT_SECRET
+      issuer: SSO_ISSUER
+  casdoorPolicy: retain

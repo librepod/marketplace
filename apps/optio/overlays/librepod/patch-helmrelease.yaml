@@ -1,0 +1,75 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: optio
+spec:
+  # DB_PASSWORD (generated at install, stored in OpenBao) feeds the chart's
+  # required postgresql.auth.password. OpenBao retains the entry across
+  # uninstall, so a reinstall reuses the SAME password against the NFS-rebound
+  # data dir — the initdb-only-password drift the converge-db-password pattern
+  # exists for cannot occur, and the chart exposes no extraContainers hook on
+  # its postgres Deployment anyway.
+  valuesFrom:
+    - kind: Secret
+      name: optio-settings
+      valuesKey: DB_PASSWORD
+      targetPath: postgresql.auth.password
+  values:
+    namespace: optio
+    # Both Flux-substituted: the browser-facing origin and the bare OIDC
+    # issuer (Optio appends /.well-known/openid-configuration itself).
+    publicUrl: https://optio.${BASE_DOMAIN:=libre.pod}
+    auth:
+      oidc:
+        issuerUrl: https://id.${BASE_DOMAIN:=libre.pod}
+    # Credentials come from the casdoor-sso-controller's Secret (see
+    # ssoclient.yaml); the chart skips its own OIDC_* env for any key already
+    # provided here. OPTIO_ENCRYPTION_KEY likewise arrives from the settings
+    # Secret, satisfying the chart's encryption.key requirement without a
+    # committed value.
+    existingSecrets:
+      OPTIO_ENCRYPTION_KEY:
+        name: optio-settings
+        key: OPTIO_ENCRYPTION_KEY
+      OIDC_CLIENT_ID:
+        name: optio-sso
+        key: OIDC_CLIENT_ID
+      OIDC_CLIENT_SECRET:
+        name: optio-sso
+        key: OIDC_CLIENT_SECRET
+    api:
+      # CA trust for IdP HTTPS: mount the LibrePod root CA synced by
+      # externalsecret-ca.yaml; the NODE_EXTRA_CA_CERTS env var itself is
+      # appended by a postRenderer patch in base/helmrelease.yaml (the chart
+      # has no generic env passthrough — api.env only feeds LOG_LEVEL).
+      extraVolumes:
+        - name: root-ca-cert
+          secret:
+            secretName: step-certificates-certs
+            items:
+              - key: root_ca.crt
+                path: root_ca.crt
+      extraVolumeMounts:
+        - name: root-ca-cert
+          mountPath: /mnt/root-ca
+          readOnly: true
+    postgresql:
+      storage:
+        storageClass: nfs-client
+    agent:
+      # Agent homes and caches: PVCs the API server creates dynamically at
+      # runtime; the chart passes this storage class through to them.
+      pvc:
+        storageClass: nfs-client
+      cache:
+        storageClass: nfs-client
+    redis:
+      image:
+        # Valkey (BSD-3) instead of redis:7-alpine (RSALv2) — protocol- and
+        # config-compatible drop-in; the chart template invokes the
+        # `redis-server` binary, which the Valkey image ships as a compat
+        # symlink. Redis is non-persistent here (queue/cache, no PVC), so the
+        # swap is low-risk. Self-hosting RSALv2 Redis would be legally fine
+        # too; this is a preference for a permissively-licensed store.
+        repository: valkey/valkey
+        tag: "8.1-alpine"
