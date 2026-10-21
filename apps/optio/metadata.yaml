@@ -20,11 +20,16 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/optio"
     path: ./overlays/librepod
 
-  # Both items are machine-generated — the install dialog never opens
-  # (one-click install). OPTIO_ENCRYPTION_KEY seals stored credentials;
-  # DB_PASSWORD backs the bundled PostgreSQL. OpenBao retains both across
-  # uninstall, so reinstalls converge with surviving NFS data.
+  # Both items are machine-generated. allowCustom opens the free-form env-var
+  # section of the install dialog: Optio has env-only knobs with no chart
+  # values equivalent worth committing (webhook signing secrets, GitHub App
+  # credentials, OPTIO_DEPLOYMENT_ADMINS), so power users can set them at
+  # install or later in the settings editor. Custom vars reach the api
+  # container through envFrom on the settings Secret (postRenderer patch in
+  # base/helmrelease.yaml — the chart has no env passthrough) and override
+  # chart-configured env of the same name.
   settings:
+    allowCustom: true
     items:
       - name: OPTIO_ENCRYPTION_KEY
         label: "Encryption key"

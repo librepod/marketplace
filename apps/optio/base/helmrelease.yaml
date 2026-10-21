@@ -33,20 +33,82 @@ spec:
               - op: remove
                 path: /metadata/labels/helm.sh~1chart
           # The chart's api.env values key only feeds LOG_LEVEL — there is no
-          # generic env passthrough — so the CA-trust env var is appended to
-          # the api container (containers[0]; web is the second container)
-          # here instead. NODE_EXTRA_CA_CERTS makes Node append the mounted
-          # LibrePod root CA (extraVolumes below) to its built-in roots for
-          # the API's HTTPS calls to the IdP.
+          # generic env passthrough — so the CA-trust env var is merged into
+          # the api container here. This is a strategic-merge patch: the
+          # containers list merges BY NAME, so it lands on the api container
+          # whatever position the chart puts it in. NODE_EXTRA_CA_CERTS makes
+          # Node append the mounted LibrePod root CA (api.extraVolumes) to
+          # its built-in roots for the API's HTTPS calls to the IdP.
           - target:
               kind: Deployment
               name: optio-api
             patch: |
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: optio-api
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: api
+                        env:
+                          - name: NODE_EXTRA_CA_CERTS
+                            value: /mnt/root-ca/root_ca.crt
+          # Custom install-time env vars (metadata.yaml allowCustom) live in
+          # the optio-settings Secret like every settings item; this appends
+          # it to the api container's envFrom so they reach the process the
+          # way they reach a Kustomize app. envFrom is an ATOMIC list in
+          # strategic merge (an SMP would REPLACE it and drop the chart's
+          # optio-config entry, losing DATABASE_URL), so this must be a
+          # JSON6902 positional append. The `test` op first asserts
+          # containers[0] is still the api container: if a chart release
+          # reorders or inserts containers, the patch application FAILS
+          # LOUDLY (helm-controller reports a postRenderer build error)
+          # instead of silently injecting into the wrong container.
+          # Precedence: explicit env entries (chart's fixed vars,
+          # existingSecrets secretKeyRefs) always win; among envFrom sources
+          # the LAST one wins, so custom vars DO override the chart's
+          # optio-config keys (DATABASE_URL, REDIS_URL, …) — this append
+          # lands after optio-config. The two generated keys leaking through
+          # envFrom are inert: the app reads DATABASE_URL, not DB_PASSWORD,
+          # and OPTIO_ENCRYPTION_KEY matches the explicit env entry anyway.
+          - target:
+              kind: Deployment
+              name: optio-api
+            patch: |
+              - op: test
+                path: /spec/template/spec/containers/0/name
+                value: api
               - op: add
-                path: /spec/template/spec/containers/0/env/-
+                path: /spec/template/spec/containers/0/envFrom/-
                 value:
-                  name: NODE_EXTRA_CA_CERTS
-                  value: /mnt/root-ca/root_ca.crt
+                  secretRef:
+                    name: optio-settings
+          # The chart's bundled Redis runs with readOnlyRootFilesystem: true
+          # and no writable /data volume, yet leaves RDB save points at their
+          # defaults — the first BGSAVE (one hour after the first write)
+          # fails on the read-only rootfs and Redis/Valkey flips to MISCONF,
+          # rejecting EVERY write (the API health check writes rate-limit
+          # counters, so readiness dies with it; symptom: /api/health 500
+          # "MISCONF Valkey is configured to save RDB snapshots"). --save ""
+          # disables snapshots, matching the chart's own design — the bundled
+          # Redis is an ephemeral cache/queue with no persistence volume, and
+          # Optio's reconciliation recovers in-flight work after a restart.
+          # Guarded: container[0] must still be named redis.
+          - target:
+              kind: Deployment
+              name: optio-redis
+            patch: |
+              - op: test
+                path: /spec/template/spec/containers/0/name
+                value: redis
+              - op: add
+                path: /spec/template/spec/containers/0/args/-
+                value: --save
+              - op: add
+                path: /spec/template/spec/containers/0/args/-
+                value: ""
   values:
     namespace: optio
     # The chart defaults EVERY image to tag "latest" — it bakes no version
