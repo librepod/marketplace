@@ -1,0 +1,13 @@
+# PVC template for agent repo pods: the API server reads this ConfigMap at
+# RUNTIME (by this exact name) when dynamically provisioning their home PVCs
+# ("optio-home-<repo>-<index>"). It must stay a plain resource — a
+# configMapGenerator hash suffix would break the lookup. Keep in sync with
+# OPTIO_HOME_PVC_* in optio.env.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: optio-agent-pvc-template
+data:
+  storageClass: nfs-client
+  size: 10Gi
+  accessModes: '["ReadWriteOnce"]'

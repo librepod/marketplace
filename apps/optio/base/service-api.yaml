@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: optio-api
+  labels:
+    app: optio-api
+spec:
+  type: ClusterIP
+  selector:
+    app: optio-api
+  ports:
+    - name: http
+      port: 4000
+      targetPort: http
+      # WebSocket support for the /ws/* endpoints (session streams)
+      appProtocol: kubernetes.io/ws

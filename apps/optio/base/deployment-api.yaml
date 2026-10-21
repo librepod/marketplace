@@ -1,0 +1,170 @@
+# One pod, two containers: the web UI reaches the API over localhost, so one
+# rollout covers both. Container names are stable ("api", "web") — the
+# overlay's CA patch and any future patch merge by NAME, never by position.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: optio-api
+  labels:
+    app: optio-api
+spec:
+  replicas: 1
+  # Migrations run at boot: no old and new version may serve side by side.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: optio-api
+  template:
+    metadata:
+      labels:
+        app: optio-api
+    spec:
+      terminationGracePeriodSeconds: 60
+      serviceAccountName: optio
+      affinity:
+        # Soft anti-affinity: spread api replicas across nodes when there
+        # are several (harmless on a single-node cluster).
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: optio-api
+                topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: api
+          image: ghcr.io/jonwiggins/optio-api
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - name: http
+              containerPort: 4000
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          envFrom:
+            - configMapRef:
+                name: optio
+            # Settings Secret LAST: its values (generated secrets, custom
+            # install vars from metadata.yaml allowCustom) override the
+            # .env defaults above.
+            - secretRef:
+                name: optio-settings
+          env:
+            # kubelet expands $(DB_PASSWORD) from the entry above, so the
+            # composed URL carries the password without it ever landing in
+            # the ConfigMap or a rendered manifest. Explicit entry (rather
+            # than relying on the envFrom one) because env-to-env expansion
+            # is only guaranteed for entries defined earlier in this list.
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: optio-settings
+                  key: DB_PASSWORD
+            - name: DATABASE_URL
+              value: postgres://optio:$(DB_PASSWORD)@optio-postgres:5432/optio
+            # Provisioned by the SSOClient in the overlay; the app appends
+            # /.well-known/openid-configuration to the issuer itself.
+            - name: OIDC_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: optio-sso
+                  key: OIDC_CLIENT_ID
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: optio-sso
+                  key: OIDC_CLIENT_SECRET
+            - name: OPTIO_SERVICE_ACCOUNT_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.serviceAccountName
+            # Which API pod this is: the holder of leases and the instance a
+            # run is attached to.
+            - name: OPTIO_INSTANCE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            # Where agent pods, their StatefulSets and PVCs go.
+            - name: OPTIO_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          # Migrations run at boot before the server listens; the startup
+          # probe holds off liveness until /api/health first answers, so a
+          # long migration isn't killed half-way and retried in a loop.
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+        - name: web
+          image: ghcr.io/jonwiggins/optio-web
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - name: web
+              containerPort: 3000
+          volumeMounts:
+            - name: web-tmp
+              mountPath: /tmp
+            - name: next-cache
+              mountPath: /app/.next/cache
+          envFrom:
+            - configMapRef:
+                name: optio
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: web-tmp
+          emptyDir: {}
+        - name: next-cache
+          emptyDir: {}

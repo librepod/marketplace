@@ -1,0 +1,17 @@
+# The web UI runs as a second container in the API pod (see
+# deployment-api.yaml), so this Service selects the same pods and targets the
+# web container's port.
+apiVersion: v1
+kind: Service
+metadata:
+  name: optio-web
+  labels:
+    app: optio-web
+spec:
+  type: ClusterIP
+  selector:
+    app: optio-api
+  ports:
+    - name: http
+      port: 3000
+      targetPort: web

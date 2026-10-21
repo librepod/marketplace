@@ -1,6 +1,34 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# Optio, vendored from the upstream chart (helm/optio in jonwiggins/optio) at
+# app 0.18.2: the chart templates were rendered and hand-adapted into plain
+# manifests. Why not a HelmRelease: the chart stamps an unsanitized
+# helm.sh/chart label that SSA rejects, has no env passthrough, and defaults
+# every image to `latest` — running it took four postRenderer patches, each
+# assuming chart-internal structure that any release could silently reshuffle
+# (e.g. the api/web container order in the shared pod). Owning the manifests
+# makes every upstream change an explicit, reviewable diff instead.
+#
+# Deviations from the chart render (each documented at its site):
+#   - no in-cluster TLS for postgres/redis (helm generated install-time certs;
+#     password auth kept) — matches the marketplace's bundled-DB convention
+#   - Valkey instead of the redis image (licensing), with --save "" fixing the
+#     read-only-rootfs MISCONF bug the chart ships
+#   - config lives in optio.env + settings Secret instead of a chart Secret
+#
+# BUMP PROCEDURE (all in ONE commit):
+#   1. helm template the new chart and diff against these files; port
+#      relevant upstream changes by hand.
+#   2. overlays/librepod/kustomization.yaml: images[].newTag (optio-api,
+#      optio-web, postgres, valkey/valkey)
+#   3. base/optio.env: OPTIO_AGENT_IMAGE and OPTIO_AGENT_IMAGE_TAG — agent
+#      pods are created at RUNTIME by the API from these env vars, so the
+#      overlay images transformer cannot pin them
+#   4. metadata.yaml spec.version
+# The renovate annotation on spec.version covers only the api image; nothing
+# covers step 3 — a bump PR must move it by hand.
+
 namespace: optio
 
 labels:
@@ -9,8 +37,22 @@ labels:
   pairs:
     app.kubernetes.io/name: optio
 
+configMapGenerator:
+- name: optio
+  envs:
+  - optio.env
+
 resources:
 - namespace.yaml
-- ocirepository.yaml
-- helmrelease.yaml
+- serviceaccount.yaml
+- agent-serviceaccount.yaml
+- rbac.yaml
+- configmap-agent-pvc.yaml
+- service-api.yaml
+- service-web.yaml
+- deployment-api.yaml
 - externalsecret.yaml
+
+components:
+- ../components/postgres
+- ../components/valkey

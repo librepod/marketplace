@@ -9,7 +9,23 @@ resources:
 - ssoclient.yaml
 - ingressroute.yaml
 
+# Version anchors for the whole app — move together with
+# base/optio.env OPTIO_AGENT_IMAGE(_TAG) and metadata.yaml spec.version.
+images:
+- name: ghcr.io/jonwiggins/optio-api
+  newTag: "0.18.2"
+- name: ghcr.io/jonwiggins/optio-web
+  newTag: "0.18.2"
+- name: postgres
+  newTag: "16"
+- name: valkey/valkey
+  newTag: 8.1-alpine
+
 patches:
-- path: ./patch-helmrelease.yaml
+- path: ./patch-storage-class.yaml
   target:
-    kind: HelmRelease
+    kind: PersistentVolumeClaim
+- path: ./deployment-api-ca-patch.yaml
+  target:
+    kind: Deployment
+    name: optio-api

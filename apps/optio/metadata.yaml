@@ -9,10 +9,12 @@ spec:
   category: "AI"
   website: "https://github.com/jonwiggins/optio"
 
-  # The upstream app version. The vendor chart is OCI-published in lockstep
-  # (chart N.N.N = app N.N.N) but defaults every image to `latest`; the pins
-  # in base/ocirepository.yaml and base/helmrelease.yaml carry this version.
-  # All four move together in one commit.
+  # The upstream app version, carried by the vendored manifests (rendered
+  # from the vendor chart — see base/kustomization.yaml). Pinned by the
+  # overlay images[].newTag entries, PLUS base/optio.env
+  # OPTIO_AGENT_IMAGE(_TAG) for the runtime-created agent pods, which no
+  # renovate manager reaches — a bump PR must move those by hand.
+  # renovate: datasource=docker depName=ghcr.io/jonwiggins/optio-api
   version: "0.18.2"
 
   source:
@@ -20,14 +22,12 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/optio"
     path: ./overlays/librepod
 
-  # Both items are machine-generated. allowCustom opens the free-form env-var
-  # section of the install dialog: Optio has env-only knobs with no chart
-  # values equivalent worth committing (webhook signing secrets, GitHub App
-  # credentials, OPTIO_DEPLOYMENT_ADMINS), so power users can set them at
-  # install or later in the settings editor. Custom vars reach the api
-  # container through envFrom on the settings Secret (postRenderer patch in
-  # base/helmrelease.yaml — the chart has no env passthrough) and override
-  # chart-configured env of the same name.
+  # All items are machine-generated. allowCustom opens the free-form env-var
+  # section of the install dialog: Optio has env-only knobs worth setting at
+  # install or later in the settings editor (webhook signing secrets, GitHub
+  # App credentials, OPTIO_DEPLOYMENT_ADMINS). Custom vars reach the api
+  # container through envFrom on the settings Secret (base/deployment-api.yaml,
+  # listed after the ConfigMap) and override .env defaults of the same name.
   settings:
     allowCustom: true
     items:
@@ -40,6 +40,12 @@ spec:
       - name: DB_PASSWORD
         label: "Database password"
         description: "PostgreSQL password for the bundled database (auto-generated)"
+        sensitive: true
+        generate:
+          length: 64
+      - name: REDIS_PASSWORD
+        label: "Redis password"
+        description: "Password for the bundled Valkey cache/queue (auto-generated)"
         sensitive: true
         generate:
           length: 64

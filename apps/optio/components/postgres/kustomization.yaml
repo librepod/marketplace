@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Bundled PostgreSQL for Optio (skill: "Bundled PostgreSQL" convention).
+# The password comes from the app settings Secret (key DB_PASSWORD, generated
+# in OpenBao), so the Deployment carries the required converge-db-password
+# sidecar that re-aligns a rebound NFS data dir to the declared password.
+# Included unconditionally from base/kustomization.yaml — Optio cannot run
+# without its database.
+
+configMapGenerator:
+- name: postgres
+  envs:
+  - postgres.env
+
+resources:
+- pvc.yaml
+- service.yaml
+- deployment.yaml
