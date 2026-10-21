@@ -22,17 +22,6 @@ spec:
     spec:
       terminationGracePeriodSeconds: 60
       serviceAccountName: optio
-      affinity:
-        # Soft anti-affinity: spread api replicas across nodes when there
-        # are several (harmless on a single-node cluster).
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector:
-                  matchLabels:
-                    app: optio-api
-                topologyKey: kubernetes.io/hostname
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -124,13 +113,11 @@ spec:
             httpGet:
               path: /api/health
               port: http
-            initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /api/health
               port: http
-            initialDelaySeconds: 15
             periodSeconds: 20
         - name: web
           image: ghcr.io/jonwiggins/optio-web

@@ -1067,8 +1067,6 @@ configMapGenerator:
   - myapp.env
 ```
 
-**Exception:** a ConfigMap the app reads BY EXACT NAME at runtime (not via envFrom) must stay a plain resource — the generator's hash suffix breaks the lookup (optio's `optio-agent-pvc-template`).
-
 ### Environment variables — envFrom from a generated ConfigMap, never inline literals
 
 Non-secret app config MUST live in a `.env` file consumed by a `configMapGenerator`, and the Deployment loads it via `envFrom`. Inline `env:` with literal `value:`s is non-standard: it hides config from the generated ConfigMap, scatters values across the Deployment, and (for `${VAR}` placeholders) leans on Flux substitution reaching inline values rather than ConfigMap `data`, where it is guaranteed. Flux `postBuild.substitute` DOES reach ConfigMap data, so `${BASE_DOMAIN}` etc. belong in the `.env`.

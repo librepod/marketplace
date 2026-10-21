@@ -16,6 +16,9 @@ kind: Kustomization
 #   - Valkey instead of the redis image (licensing), with --save "" fixing the
 #     read-only-rootfs MISCONF bug the chart ships
 #   - config lives in optio.env + settings Secret instead of a chart Secret
+#   - no agent-pvc ConfigMap: the chart ships one, but no API code reads it
+#     (verified at v0.18.2) — agent PVC params come from OPTIO_HOME_PVC_* env;
+#     don't port it back on a bump
 #
 # BUMP PROCEDURE (all in ONE commit):
 #   1. helm template the new chart and diff against these files; port
@@ -47,7 +50,6 @@ resources:
 - serviceaccount.yaml
 - agent-serviceaccount.yaml
 - rbac.yaml
-- configmap-agent-pvc.yaml
 - service-api.yaml
 - service-web.yaml
 - deployment-api.yaml

@@ -1,6 +1,6 @@
-# Optio natively handles OIDC sign-in (wired via SSOClient + auth.oidc.* in
-# patch-helmrelease.yaml), so there are NO oauth2-proxy forward-auth
-# middlewares here — the app validates sessions itself.
+# Optio natively handles OIDC sign-in (SSOClient + OIDC_* in
+# base/optio.env and deployment-api.yaml), so there are NO oauth2-proxy
+# forward-auth middlewares here — the app validates sessions itself.
 #
 # Routing mirrors the vendor chart's ingress model: / and the app shell come
 # from the web container, /api and /ws go straight to the API. /api/internal/*
