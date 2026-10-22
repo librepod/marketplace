@@ -33,19 +33,61 @@ spec:
                           claimName: superplane-blobs
           # The chart hardcodes OTEL_ENABLED=yes regardless of
           # telemetry.opentelemetry.enabled, so every pod exports to an absent
-          # localhost collector and logs errors. Duplicate env names are legal
-          # and the runtime resolves the LAST occurrence, so appending "no"
-          # after the chart's "yes" wins. containers/0 is the app container —
-          # the sole container in all three Deployments.
+          # localhost collector and logs errors. Strategic merge replaces the
+          # entry in place by env merge key. Do NOT append a JSON6902 add /-
+          # duplicate (runtime last-one-wins): helm-controller applies via
+          # server-side apply, which rejects duplicate merge-key entries
+          # ("duplicate entries for key") and the install fails. One patch per
+          # Deployment — container names differ, and a shared patch would add
+          # rogue containers.
           - target:
               kind: Deployment
-              name: superplane-(api|workers|websocket)
+              name: superplane-api
             patch: |
-              - op: add
-                path: /spec/template/spec/containers/0/env/-
-                value:
-                  name: OTEL_ENABLED
-                  value: "no"
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: superplane-api
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: superplane-api
+                        env:
+                          - name: OTEL_ENABLED
+                            value: "no"
+          - target:
+              kind: Deployment
+              name: superplane-workers
+            patch: |
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: superplane-workers
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: superplane-workers
+                        env:
+                          - name: OTEL_ENABLED
+                            value: "no"
+          - target:
+              kind: Deployment
+              name: superplane-websocket
+            patch: |
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: superplane-websocket
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: superplane-websocket
+                        env:
+                          - name: OTEL_ENABLED
+                            value: "no"
           # The bundled Postgres/RabbitMQ volumeClaimTemplates have no class value.
           - target:
               kind: StatefulSet
