@@ -15,7 +15,7 @@ spec:
   # OPTIO_AGENT_IMAGE(_TAG) for the runtime-created agent pods, which no
   # renovate manager reaches — a bump PR must move those by hand.
   # renovate: datasource=docker depName=ghcr.io/jonwiggins/optio-api
-  version: "0.18.2"
+  version: "0.19.0"
 
   source:
     type: oci-kustomize

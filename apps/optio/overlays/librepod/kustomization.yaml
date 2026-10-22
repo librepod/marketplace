@@ -13,9 +13,9 @@ resources:
 # base/optio.env OPTIO_AGENT_IMAGE(_TAG) and metadata.yaml spec.version.
 images:
 - name: ghcr.io/jonwiggins/optio-api
-  newTag: "0.18.2"
+  newTag: "0.19.0"
 - name: ghcr.io/jonwiggins/optio-web
-  newTag: "0.18.2"
+  newTag: "0.19.0"
 - name: postgres
   newTag: "16"
 - name: valkey/valkey
