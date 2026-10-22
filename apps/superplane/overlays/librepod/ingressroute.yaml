@@ -1,0 +1,23 @@
+# No oauth2-proxy middlewares: SuperPlane authenticates itself (password login,
+# API tokens), and webhooks, the CLI and the OIDC JWKS endpoint must be reachable
+# without a browser session. Its community edition has no generic OIDC for Casdoor.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: superplane
+spec:
+  entryPoints:
+  - web
+  - websecure
+  routes:
+  - kind: Rule
+    match: Host(`superplane.${BASE_DOMAIN:=libre.pod}`) && PathPrefix(`/ws`)
+    services:
+    - name: superplane-websocket
+      port: 8000
+  - kind: Rule
+    match: Host(`superplane.${BASE_DOMAIN:=libre.pod}`)
+    priority: 1
+    services:
+    - name: superplane-api
+      port: 8000
