@@ -21,7 +21,7 @@ namespace: remnawave
 
 images:
 - name: remnawave/backend
-  newTag: "3.4.3"
+  newTag: "3.4.7"
 - name: postgres
   newTag: "18.4-alpine"
 - name: valkey/valkey
