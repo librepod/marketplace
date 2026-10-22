@@ -19,7 +19,7 @@ images:
 - name: postgres
   newTag: "16"
 - name: valkey/valkey
-  newTag: 8.1-alpine
+  newTag: 9.2-alpine
 
 patches:
 - path: ./patch-storage-class.yaml
