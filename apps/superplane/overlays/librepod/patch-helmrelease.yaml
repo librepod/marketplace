@@ -1,0 +1,148 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: superplane
+spec:
+  values:
+    domain:
+      name: superplane.${BASE_DOMAIN:=libre.pod}
+    # ingressroute.yaml routes traffic; the chart's Ingress targets GCE.
+    ingress:
+      enabled: false
+  postRenderers:
+    - kustomize:
+        patches:
+          # The chart hardcodes an emptyDir for filesystem blob storage, per pod.
+          # Back it with one shared PVC so blobs survive restarts and every pod
+          # sees the same files.
+          - target:
+              kind: Deployment
+              name: superplane-(api|workers|websocket)
+            patch: |
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: superplane
+              spec:
+                template:
+                  spec:
+                    volumes:
+                      - name: blob-data
+                        emptyDir: null
+                        persistentVolumeClaim:
+                          claimName: superplane-blobs
+          # The chart hardcodes OTEL_ENABLED=yes regardless of
+          # telemetry.opentelemetry.enabled, so every pod exports to an absent
+          # localhost collector and logs errors. One patch per Deployment:
+          # containers merge by name, which differs per Deployment.
+          - target:
+              kind: Deployment
+              name: superplane-api
+            patch: |
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: superplane-api
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: superplane-api
+                        env:
+                          - name: OTEL_ENABLED
+                            value: "no"
+          - target:
+              kind: Deployment
+              name: superplane-workers
+            patch: |
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: superplane-workers
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: superplane-workers
+                        env:
+                          - name: OTEL_ENABLED
+                            value: "no"
+          - target:
+              kind: Deployment
+              name: superplane-websocket
+            patch: |
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: superplane-websocket
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: superplane-websocket
+                        env:
+                          - name: OTEL_ENABLED
+                            value: "no"
+          # The bundled Postgres/RabbitMQ volumeClaimTemplates have no class value.
+          - target:
+              kind: StatefulSet
+              name: postgres|rabbitmq
+            patch: |
+              - op: add
+                path: /spec/volumeClaimTemplates/0/spec/storageClassName
+                value: nfs-client
+          # Chart Services are NodePort (GKE NEG); keep them off the node ports.
+          - target:
+              kind: Service
+              name: superplane-(api|websocket)
+            patch: |
+              apiVersion: v1
+              kind: Service
+              metadata:
+                name: superplane
+              spec:
+                type: ClusterIP
+          # A rebound NFS volume keeps the password set at initdb; converge it to
+          # the declared DB_PASSWORD on every boot (librepod-app skill: Bundled
+          # PostgreSQL). Image must match the chart's database.local.version.
+          - target:
+              kind: StatefulSet
+              name: postgres
+            patch: |
+              apiVersion: apps/v1
+              kind: StatefulSet
+              metadata:
+                name: postgres
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: converge-db-password
+                        image: postgres:14.15-alpine3.21
+                        imagePullPolicy: IfNotPresent
+                        env:
+                          - name: POSTGRES_USER
+                            valueFrom:
+                              secretKeyRef:
+                                name: superplane-database
+                                key: DB_USERNAME
+                          - name: POSTGRES_DB
+                            valueFrom:
+                              secretKeyRef:
+                                name: superplane-database
+                                key: DB_NAME
+                          - name: POSTGRES_PASSWORD
+                            valueFrom:
+                              secretKeyRef:
+                                name: superplane-settings
+                                key: DB_PASSWORD
+                        command: ["/bin/sh", "-c"]
+                        args:
+                          - |
+                            until psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c '\q' 2>/dev/null; do
+                              sleep 1
+                            done
+                            printf "ALTER USER %s PASSWORD :'pw';\n" "$POSTGRES_USER" | \
+                              psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+                                -v on_error_stop=1 -v pw="$POSTGRES_PASSWORD"
+                            while sleep 3600; do :; done

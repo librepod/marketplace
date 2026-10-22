@@ -1,0 +1,16 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: superplane-helm-charts
+spec:
+  interval: 24h
+  url: oci://ghcr.io/superplanehq/superplane-chart
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy
+  ref:
+    # Pin the EXACT chart version. Not a ~semver range: chart patch releases can
+    # change the chart's baked appVersion, which would silently roll clusters to
+    # app versions metadata.yaml doesn't advertise. Every bump must be a repo
+    # change that moves spec.version (and any cross-renderer newTag) with it.
+    tag: "1.0.0-rc3"
