@@ -1,0 +1,46 @@
+# v3 stores Telegram sessions in Redis and exits at startup when it is
+# unreachable, so the app bundles its own valkey (Redis-compatible). Sessions
+# are ephemeral (24h TTL per upstream compose), so there is no PVC and RDB
+# persistence is disabled (--save "").
+#
+# Component labels are hardcoded on both name AND component: the base labels
+# transformer stamps the same app.kubernetes.io/name onto every selector, which
+# would make this Deployment's selector identical to the bot's.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valkey
+  labels:
+    app.kubernetes.io/name: firefly-iii-telegram-bot
+    app.kubernetes.io/component: valkey
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: firefly-iii-telegram-bot
+      app.kubernetes.io/component: valkey
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: firefly-iii-telegram-bot
+        app.kubernetes.io/component: valkey
+    spec:
+      containers:
+        - name: valkey
+          image: valkey/valkey
+          imagePullPolicy: IfNotPresent
+          args:
+            - redis-server
+            - --save
+            - ""
+            - --requirepass
+            - $(REDIS_PASSWORD)
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: firefly-iii-telegram-bot-settings
+                  key: REDIS_PASSWORD
+          ports:
+            - name: redis
+              containerPort: 6379

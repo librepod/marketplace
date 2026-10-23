@@ -10,7 +10,7 @@ spec:
   website: "https://github.com/cyxou/firefly-iii-telegram-bot"
 
   # renovate: datasource=docker depName=ghcr.io/cyxou/firefly-iii-telegram-bot extractVersion=^v(?<version>.+)$
-  version: "2.5.2"
+  version: "3.0.0"
 
   source:
     type: oci-kustomize
@@ -32,11 +32,22 @@ spec:
         type: string
         required: false
         sensitive: false
-
-  dependencies:
-    required:
-      - kind: StorageClass
-        description: "nfs-client (provided by nfs-provisioner app)"
+      - name: FIREFLY_URL
+        label: "Firefly III URL"
+        description: "Public URL of your Firefly III instance (e.g. https://firefly-iii.example.com). Leave empty to use the Firefly III app installed on this device"
+        type: string
+        required: false
+        sensitive: false
+      - name: FIREFLY_ACCESS_TOKEN
+        label: "Firefly III access token"
+        description: "Personal access token (Firefly III → Options → OAuth → Personal Access Tokens). Pre-configures the bot for every user; users can still save their own via /settings in Telegram"
+        type: string
+        required: false
+        sensitive: true
+      - name: REDIS_PASSWORD
+        sensitive: true
+        generate:
+          length: 32
 
   templates:
     source: |
@@ -52,7 +63,10 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/firefly-iii-telegram-bot
         ref:
-          tag: "2.5.2"
+          # __VERSION__ is the generate-catalog.sh sentinel — replaced by
+          # spec.version when catalog.yaml is built. A literal tag here would
+          # pin the catalog to that version even after a version bump.
+          tag: "__VERSION__"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization
@@ -63,8 +77,6 @@ spec:
           marketplace.io/managed: "true"
           marketplace.io/app: "firefly-iii-telegram-bot"
       spec:
-        dependsOn:
-          - name: storage
         force: true
         interval: 1h
         retryInterval: 2m

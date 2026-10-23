@@ -8,9 +8,6 @@ resources:
 
 images:
 - name: ghcr.io/cyxou/firefly-iii-telegram-bot
-  newTag: v2.5.2
-
-patches:
-- path: ./patch-storage-class.yaml
-  target:
-    kind: PersistentVolumeClaim
+  newTag: v3.0.0
+- name: valkey/valkey
+  newTag: 8.1-alpine
