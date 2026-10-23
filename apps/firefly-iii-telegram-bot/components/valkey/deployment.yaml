@@ -3,10 +3,10 @@
 # are ephemeral (24h TTL per upstream compose), so there is no PVC and RDB
 # persistence is disabled (--save "").
 #
-# The component label is hardcoded (the base labels transformer stamps the
-# same app.kubernetes.io/name onto every selector, so without this pair the
-# selectors of this Deployment and the bot's would be identical); the name
-# label itself comes from that transformer.
+# The component label is required here (unlike the bot's Deployment, which is
+# bare): the Service's selector matches pods by label with no pod-template-hash
+# to discriminate, so without component: valkey it would also match the bot's
+# pods. The name label comes from the base labels transformer.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
