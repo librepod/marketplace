@@ -16,6 +16,11 @@ configMapGenerator:
 
 resources:
 - namespace.yaml
-- pvc.yaml
 - deployment.yaml
 - externalsecret.yaml
+
+# v3 requires Redis for session storage; component at app root, included from
+# base because it is mandatory (skill: overlay-level components are for
+# optional features)
+components:
+- ../components/valkey
