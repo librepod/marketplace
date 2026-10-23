@@ -1,7 +1,7 @@
 apiVersion: marketplace/v1
 kind: Catalog
 metadata:
-  generatedAt: "2026-06-11T07:25:53Z"
+  generatedAt: "2026-10-23T23:24:06Z"
 apps:
   - name: baikal
     version: "0.11.1-nginx"
@@ -43,14 +43,6 @@ apps:
     icon: "https://raw.githubusercontent.com/fluxcd/flux/main/docs/_static/img/flux-logo.png"
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/flux-operator-mcp"
-  - name: frp-operator
-    version: "v0.7.0"
-    displayName: "FRP Operator"
-    description: "Kubernetes operator for managing FRP clients via CRDs"
-    category: "Networking"
-    icon: ""
-    sourceType: oci-kustomize
-    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/frp-operator"
   - name: frpc
     version: "v0.65.0"
     displayName: "FRP Client"
@@ -59,6 +51,14 @@ apps:
     icon: "https://raw.githubusercontent.com/fatedier/frp/main/doc/pic/frp.png"
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/frpc"
+  - name: frp-operator
+    version: "v0.7.0"
+    displayName: "FRP Operator"
+    description: "Kubernetes operator for managing FRP clients via CRDs"
+    category: "Networking"
+    icon: ""
+    sourceType: oci-kustomize
+    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/frp-operator"
   - name: gogs
     version: "next-0.14"
     displayName: "Gogs"
@@ -83,6 +83,14 @@ apps:
     icon: "https://raw.githubusercontent.com/juanfont/headscale/main/docs/logo.png"
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/headscale"
+  - name: kata-containers
+    version: "4.3.1"
+    displayName: "Kata Containers"
+    description: "Secure container runtime with hardware-enforced isolation using lightweight VMs"
+    category: "Infrastructure"
+    icon: "https://raw.githubusercontent.com/kata-containers/kata-containers/main/docs/markdown/kata-container-logo.png"
+    sourceType: oci-kustomize
+    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/kata-containers"
   - name: litellm
     version: "v1.81.9-stable.patch.1"
     displayName: "LiteLLM"
