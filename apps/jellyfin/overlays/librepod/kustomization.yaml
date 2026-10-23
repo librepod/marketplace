@@ -9,7 +9,7 @@ resources:
 
 images:
 - name: jellyfin/jellyfin
-  newTag: "12.2"
+  newTag: "12.3"
 
 # Multi-document patch: each document self-identifies by metadata.name, so no
 # target selector (kustomize rejects a target on a multi-document patch entry).
