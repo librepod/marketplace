@@ -9,7 +9,7 @@ spec:
   category: "Infrastructure"
   website: "https://katacontainers.io/"
 
-  version: "3.31.0"
+  version: "4.3.1"
 
   source:
     type: oci-kustomize
@@ -35,7 +35,7 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/kata-containers
         ref:
-          tag: "3.31.0"
+          tag: "4.3.1"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization

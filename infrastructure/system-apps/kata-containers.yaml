@@ -7,7 +7,7 @@ spec:
   interval: 10m
   url: oci://ghcr.io/librepod/marketplace/apps/kata-containers
   ref:
-    tag: "3.31.0"
+    tag: "4.3.1"
   verify:
     provider: cosign
     secretRef:

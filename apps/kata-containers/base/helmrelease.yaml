@@ -5,6 +5,9 @@ metadata:
   namespace: kata-containers
 spec:
   interval: 12h
+  # First install pulls a ~1.9 GB image before the DaemonSet can go Ready;
+  # give slow pulls headroom over helm-controller's 5m default.
+  timeout: 15m
   install:
     remediation:
       retries: 3
@@ -16,6 +19,10 @@ spec:
     name: kata-deploy
   values:
     k8sDistribution: k3s
+    # The 4.x default (job) preflight requires host modprobe in standard paths
+    # (/usr/sbin, /sbin, ...), which NixOS nodes don't have. DaemonSet mode skips
+    # that stage (nodes must load kvm modules themselves) and keeps the 3.x shape.
+    deploymentMode: daemonset
     snapshotter:
       setup: []
     shims:
