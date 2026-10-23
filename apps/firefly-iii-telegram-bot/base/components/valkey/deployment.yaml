@@ -3,21 +3,20 @@
 # are ephemeral (24h TTL per upstream compose), so there is no PVC and RDB
 # persistence is disabled (--save "").
 #
-# Component labels are hardcoded on both name AND component: the base labels
-# transformer stamps the same app.kubernetes.io/name onto every selector, which
-# would make this Deployment's selector identical to the bot's.
+# The component label is hardcoded (the base labels transformer stamps the
+# same app.kubernetes.io/name onto every selector, so without this pair the
+# selectors of this Deployment and the bot's would be identical); the name
+# label itself comes from that transformer.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: valkey
   labels:
-    app.kubernetes.io/name: firefly-iii-telegram-bot
     app.kubernetes.io/component: valkey
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: firefly-iii-telegram-bot
       app.kubernetes.io/component: valkey
   template:
     metadata:

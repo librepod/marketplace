@@ -3,12 +3,10 @@ kind: Service
 metadata:
   name: valkey
   labels:
-    app.kubernetes.io/name: firefly-iii-telegram-bot
     app.kubernetes.io/component: valkey
 spec:
   type: ClusterIP
   selector:
-    app.kubernetes.io/name: firefly-iii-telegram-bot
     app.kubernetes.io/component: valkey
   ports:
     - name: redis
