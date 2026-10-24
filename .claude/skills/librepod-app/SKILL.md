@@ -407,7 +407,9 @@ spec:
 
 By default the marketplace's "My Apps" launch link points at the app's front-door IngressRoute host with no path. Two independent mechanisms refine this:
 
-**Axis A — opt-in path via annotation.** Add `librepod.org/launch: "<path>"` to the `metadata.annotations` of the IngressRoute that should serve as the app's front door:
+**Axis A — opt-in path via annotation.** Add `librepod.org/launch: "<path>"` to the `metadata.annotations` of the IngressRoute that should serve as the app's front door.
+
+> **Policy: host root is the default; a path annotation is a liability.** A subpath is app-internal routing — an app update can move or change it at any time, and the annotation pins the marketplace to it silently (litellm's `/ui` broke exactly this way: an app-side redirect update turned the launch link into a dead hop). Declare a path only when `/` is genuinely the wrong door, and treat every app-version bump of a path-annotated app as a "re-check the path still serves" step.
 
 ```yaml
 metadata:
@@ -417,8 +419,9 @@ metadata:
 ```
 
 The value is always a **path** (`/`, `/ui`, `/admin`) — never an absolute or external URL. The launch host comes from that specific route's own `Host(...)` rule, so annotating a *different* IngressRoute changes which host gets launched, not just the path. Worked examples:
-- **litellm** (`apps/litellm/overlays/librepod/ingressroute.yaml`) — `librepod.org/launch: "/ui"`, same host, subpath.
 - **headscale → headplane** (`apps/headscale/components/headplane/ingressroute.yaml`) — `librepod.org/launch: "/admin"`. This is annotated on the *headplane* route, not the `headscale` API route — headplane serves its admin UI under `/admin`, so the launch link lands on headplane's host at `/admin`, bypassing the app's own `/` → `/admin` redirect middleware.
+
+> **Prefer launching at the host root when the app serves something useful at `/`.** litellm originally used `librepod.org/launch: "/ui"` and was moved back to the bare host: its `/` serves the API docs page, and launching straight at a subpath meant depending on the app's own `/ui` → `/ui/` redirect — which uvicorn built with a downgraded `http://` Location (untrusted `X-Forwarded-Proto`; fixed app-side via `FORWARDED_ALLOW_IPS=*` in litellm's `.env`). A launch path is only worth declaring when `/` is genuinely the wrong door.
 
 **Axis B — non-launchable, two ways.** An app is treated as non-launchable when *either*:
 - It has **no IngressRoute at all** — the marketplace infers "no web UI" from live cluster state, no annotation needed. Its "My Apps" tile still shows, but routes to the detail page (Manage) instead of a launch link. Example: `rustdesk-server-oss` has zero IngressRoutes and needs no changes.

@@ -21,8 +21,9 @@ spec:
             # Settings Secret synced by ESO from OpenBao (externalsecret.yaml):
             # non-optional — the pod waits (CreateContainerConfigError) until it
             # exists. LAST in envFrom so its values override the .env defaults.
-            # Supplies LITELLM_SALT_KEY (name matches) and DB_PASSWORD, which the
-            # DATABASE_URL env below expands via kubelet $(VAR) substitution.
+            # Supplies LITELLM_MASTER_KEY and LITELLM_SALT_KEY (names match) and
+            # DB_PASSWORD, which the DATABASE_URL env below expands via kubelet
+            # $(VAR) substitution.
             - secretRef:
                 name: litellm-settings
           env:
