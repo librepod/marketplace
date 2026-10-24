@@ -60,8 +60,9 @@ cat >> "$REPORT" <<'NOTES'
 
 ## Renovate datasource notes
 
-- nfs-provisioner: github-tags, depName=kubernetes-sigs/nfs-subdir-external-provisioner,
-  extractVersion prefix "nfs-subdir-external-provisioner-" (the ?ref= tag in base/kustomization.yaml)
+- nfs-provisioner: github-releases, depName=kubernetes-sigs/nfs-subdir-external-provisioner,
+  extractVersion prefix "nfs-subdir-external-provisioner-" (spec.version; bump moves the
+  vendored base/upstream/ files and overlays images[].newTag — see base/kustomization.yaml)
 - immich: docker, depName=<immich app image> for spec.version; chart tracked natively via base/ocirepository.yaml
 - step-certificates: annotate spec.version to the step-certificates image, not a sidecar
 - marketplace-ui: docker, depName=<marketplace-ui image>; spec.version annotation drives it (inline-image base, no images: transformer)

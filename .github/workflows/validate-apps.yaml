@@ -10,6 +10,27 @@ on:
       - 'apps/*/components/**'
 
 jobs:
+  # Remote http(s) kustomize bases resolve live inside kustomize-controller on
+  # every reconcile, bypassing Flux source caching — slow egress to the base's
+  # host then stalls the app's Kustomization and its whole dependsOn tree (#311).
+  # Apps must vendor upstream manifests into the artifact instead (pattern:
+  # apps/nfs-provisioner/base/upstream/, apps/external-secrets-reloader/base/bundle.yaml).
+  no-remote-bases:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Fail on remote http(s) kustomize bases
+        run: |
+          set -euo pipefail
+          hits=$(grep -rnE '^[[:space:]]*-[[:space:]]*["'"'"']?https?://' \
+            apps --include='kustomization*.yaml' || true)
+          if [ -n "$hits" ]; then
+            echo "::error::Remote http(s) kustomize bases are forbidden — vendor the manifests into the app instead (see apps/nfs-provisioner/base/upstream/)."
+            echo "$hits"
+            exit 1
+          fi
+          echo "No remote http(s) bases under apps/."
+
   detect-changes:
     runs-on: ubuntu-latest
     outputs:

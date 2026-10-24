@@ -5,4 +5,21 @@ namespace: nfs-provisioner
 
 resources:
 - namespace.yaml
-- https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner//deploy/?timeout=120&ref=nfs-subdir-external-provisioner-4.0.18
+# Vendored VERBATIM from the upstream release tag — resolves inside the OCI
+# artifact, never at reconcile time. A remote base is fetched live by
+# kustomize-controller on every reconcile (bypassing Flux source caching), so
+# slow GitHub egress stalls this Kustomization and the whole dependsOn tree
+# (#311). Longer-term: migrate to the upstream Helm chart (#312).
+# To bump to <X.Y.Z>:
+#   git clone --depth 1 --branch nfs-subdir-external-provisioner-<X.Y.Z> \
+#     https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner /tmp/nfsp
+#   cp /tmp/nfsp/deploy/{kustomization,deployment,rbac,class}.yaml \
+#     apps/nfs-provisioner/base/upstream/
+# then move the version pins in the same commit:
+#   - metadata.yaml spec.version (<X.Y.Z>, the release tag)
+#   - overlays/librepod/kustomization.yaml images[].newTag — set it to the
+#     release's appVersion, NOT the release tag: upstream publishes GitHub
+#     releases without matching container images (4.0.18 bundles appVersion
+#     v4.0.2; nothing newer than v4.0.2 exists on registry.k8s.io). The
+#     overlay pin overrides the tag baked in the vendored deployment.yaml.
+- upstream/
