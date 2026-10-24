@@ -4,7 +4,7 @@ metadata:
   name: kata-containers
 spec:
   displayName: "Kata Containers"
-  description: "Secure container runtime with hardware-enforced isolation using lightweight VMs"
+  description: "Secure container runtime with hardware-enforced isolation using lightweight VMs. Requires a node with KVM: the host must have /dev/kvm and load the kvm modules itself"
   icon: "https://raw.githubusercontent.com/kata-containers/kata-containers/main/docs/markdown/kata-container-logo.png"
   category: "Infrastructure"
   website: "https://katacontainers.io/"
