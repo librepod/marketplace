@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
-import { render, screen, fireEvent } from "@testing-library/react"
+import { render, screen, fireEvent, within } from "@testing-library/react"
 import type { OnboardingStatus } from "@librepod/shared"
 import {
-  ACCOUNT, CLAIM, CONNECT, GRADUATE, OnboardingPage, TRUST, VPN, deriveStep,
+  ACCOUNT, CLAIM, CONNECT, GRADUATE, OnboardingPage, VPN, deriveStep,
 } from "@/pages/onboarding/OnboardingPage"
 
 const open: OnboardingStatus = {
@@ -22,22 +22,19 @@ const vpnHeading = () => screen.getByRole("heading", { name: /reach your librepo
 
 describe("deriveStep — cluster truth decides the step", () => {
   it.each([
-    ["open", open, false, CLAIM],
-    ["claimed, no account confirmed", { ...claimed, account: null }, false, ACCOUNT],
-    ["VPN not installed", claimed, false, VPN],
-    ["VPN status unknown", { ...claimed, vpnStatus: null }, false, VPN],
-    ["installing, CA not confirmed", { ...claimed, vpnStatus: "installing" as const, peerCount: 0 }, false, TRUST],
-    ["running, no peers, CA not confirmed", { ...claimed, vpnStatus: "running" as const, peerCount: 0 }, false, TRUST],
-    ["error, no peers, CA not confirmed", { ...claimed, vpnStatus: "error" as const, peerCount: 0 }, false, TRUST],
-    // The CA checkbox is this browser's record of Trust: with it, a reload between
-    // the install and the first peer lands back on Connect, not Trust again.
-    ["running, no peers, CA confirmed", { ...claimed, vpnStatus: "running" as const, peerCount: 0 }, true, CONNECT],
-    // A fresh browser after a reset (peers exist, but this one never saw Trust) must not skip the CA.
-    ["a peer, no handshake, CA not confirmed", { ...claimed, vpnStatus: "running" as const, peerCount: 1 }, false, TRUST],
-    ["a peer, no handshake, CA confirmed", { ...claimed, vpnStatus: "running" as const, peerCount: 1 }, true, CONNECT],
-    ["a handshake", { ...claimed, vpnStatus: "running" as const, peerCount: 1, lastHandshakeAt: "2026-10-14T10:00:00Z" }, false, GRADUATE],
-  ])("%s", (_name, status, caInstalled, step) => {
-    expect(deriveStep(status, caInstalled)).toBe(step)
+    ["open", open, CLAIM],
+    ["claimed, no account confirmed", { ...claimed, account: null }, ACCOUNT],
+    ["VPN not installed", claimed, VPN],
+    ["VPN status unknown", { ...claimed, vpnStatus: null }, VPN],
+    // Any status past not_installed goes straight to Connect — certificate trust
+    // is no longer a wizard step; the app's banner teaches it after sign-in.
+    ["installing", { ...claimed, vpnStatus: "installing" as const, peerCount: 0 }, CONNECT],
+    ["running, no peers", { ...claimed, vpnStatus: "running" as const, peerCount: 0 }, CONNECT],
+    ["error, no peers", { ...claimed, vpnStatus: "error" as const, peerCount: 0 }, CONNECT],
+    ["a peer, no handshake", { ...claimed, vpnStatus: "running" as const, peerCount: 1 }, CONNECT],
+    ["a handshake", { ...claimed, vpnStatus: "running" as const, peerCount: 1, lastHandshakeAt: "2026-10-14T10:00:00Z" }, GRADUATE],
+  ])("%s", (_name, status, step) => {
+    expect(deriveStep(status)).toBe(step)
   })
 })
 
@@ -63,25 +60,29 @@ describe("OnboardingPage", () => {
     expect(screen.getByLabelText(/keep alex/i)).toBeChecked()
   })
 
-  it("WireGuard path: VPN → Trust → Connect", async () => {
+  it("WireGuard path: VPN → Connect", async () => {
     mockApi()
     const onRefresh = vi.fn()
     page(claimed, onRefresh)
     fireEvent.click(screen.getByRole("button", { name: /set up wireguard/i }))
-    await screen.findByRole("heading", { name: /trust your device/i })
+    await screen.findByRole("heading", { name: /connect your first device/i })
     expect(onRefresh).toHaveBeenCalled()
-    fireEvent.click(screen.getByLabelText(/i installed the certificate/i))
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }))
-    expect(screen.getByRole("heading", { name: /connect your first device/i })).toBeVisible()
   })
 
-  it("bring-my-own path: VPN → Trust → Graduate checklist, no Connect", () => {
+  it("bring-my-own path: VPN → Graduate checklist, no Connect", () => {
     page(claimed)
     fireEvent.click(screen.getByRole("button", { name: /i'll bring my own/i }))
-    fireEvent.click(screen.getByLabelText(/i installed the certificate/i))
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }))
     expect(screen.getByRole("list", { name: /before you sign in/i })).toBeVisible()
     expect(screen.queryByRole("heading", { name: /connect your first device/i })).toBeNull()
+  })
+
+  it("bring-my-own: the rail never marks the skipped Connect step done", () => {
+    page(claimed)
+    fireEvent.click(screen.getByRole("button", { name: /i'll bring my own/i }))
+    const connectItem = within(screen.getByRole("list", { name: /setup progress/i }))
+      .getByText("Connect")
+      .closest("li")
+    expect(connectItem).not.toHaveTextContent("✓")
   })
 
   it("the path is page state: a reload asks again", () => {
@@ -95,8 +96,6 @@ describe("OnboardingPage", () => {
   it("WireGuard couldn't start: Connect falls back to the bring-my-own Graduate", () => {
     mockApi()
     page({ ...claimed, vpnStatus: "error", peerCount: 0 })
-    fireEvent.click(screen.getByLabelText(/i installed the certificate/i))
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }))
     fireEvent.click(screen.getByRole("button", { name: /use my own connectivity instead/i }))
     expect(screen.getByRole("list", { name: /before you sign in/i })).toBeVisible()
   })
@@ -105,20 +104,17 @@ describe("OnboardingPage", () => {
     ["Claim", open],
     ["Account", { ...claimed, account: null }],
     ["Reach", claimed],
-    ["Trust", { ...claimed, vpnStatus: "running" as const, peerCount: 0 }],
     ["Connect", { ...claimed, vpnStatus: "running" as const, peerCount: 1 }],
   ])("%s has no Back: the device's state decides the step, and a reload is the way back", (_step, status) => {
     localStorage.setItem("librepod-onboarding-welcome", "1")
-    localStorage.setItem("librepod-onboarding-ca", "1")
     mockApi()
     page(status)
     expect(screen.queryByRole("button", { name: /^back$/i })).toBeNull()
   })
 
-  it("a reload between install and the first peer resumes at Connect, not Trust again", () => {
+  it("a reload between install and the first peer resumes at Connect", () => {
     mockApi()
     localStorage.setItem("librepod-onboarding-welcome", "1")
-    localStorage.setItem("librepod-onboarding-ca", "1")
     page({ ...claimed, vpnStatus: "running", peerCount: 0 })
     expect(screen.getByRole("heading", { name: /connect your first device/i })).toBeVisible()
   })
