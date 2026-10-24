@@ -11,8 +11,7 @@ import { ConnectStep, GraduateStep, VpnStep, type ConnectivityPath } from "./Con
  * restarts resume for free. Page memory holds only the connectivity path ("bring
  * my own" — a reload asks again) and a step the owner moved ahead to. There is no
  * Back: a step the device has done can't be undone from here, and a reload returns
- * to the first one it hasn't. Certificate trust is not a step: the app's banner
- * teaches it after the first sign-in, and Graduate sets the warning expectation.
+ * to the first one it hasn't.
  */
 const STEPS = ["Welcome", "Claim", "Account", "Reach", "Connect", "Graduate"] as const
 export const WELCOME = 0
