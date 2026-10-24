@@ -31,3 +31,5 @@ spec:
         enabled: true
       qemu-runtime-rs:
         enabled: true
+    runtimeClasses:
+      createDefault: true   # adds RuntimeClass "kata" -> the default shim (qemu-runtime-rs on amd64)
