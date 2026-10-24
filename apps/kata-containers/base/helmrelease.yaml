@@ -1,0 +1,35 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kata-deploy
+  namespace: kata-containers
+spec:
+  interval: 12h
+  # First install pulls a ~1.9 GB image before the DaemonSet can go Ready;
+  # give slow pulls headroom over helm-controller's 5m default.
+  timeout: 15m
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  chartRef:
+    kind: OCIRepository
+    name: kata-deploy
+  values:
+    k8sDistribution: k3s
+    # The 4.x default (job) preflight requires host modprobe in standard paths
+    # (/usr/sbin, /sbin, ...), which NixOS nodes don't have. DaemonSet mode skips
+    # that stage (nodes must load kvm modules themselves) and keeps the 3.x shape.
+    deploymentMode: daemonset
+    snapshotter:
+      setup: []
+    shims:
+      disableAll: true
+      qemu:
+        enabled: true
+      qemu-runtime-rs:
+        enabled: true
+    runtimeClasses:
+      createDefault: true   # adds RuntimeClass "kata" -> the default shim (qemu-runtime-rs on amd64)
