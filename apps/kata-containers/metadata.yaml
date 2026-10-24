@@ -35,7 +35,10 @@ spec:
         interval: 10m
         url: oci://ghcr.io/librepod/marketplace/apps/kata-containers
         ref:
-          tag: "4.3.1"
+          # __VERSION__ is the generate-catalog.sh sentinel — filled from
+          # spec.version at catalog build. A literal tag here would silently
+          # ship a stale artifact on the next version bump.
+          tag: "__VERSION__"
     release: |
       apiVersion: kustomize.toolkit.fluxcd.io/v1
       kind: Kustomization

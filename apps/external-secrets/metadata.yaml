@@ -6,7 +6,7 @@ spec:
   displayName: "External Secrets Operator"
   description: "Kubernetes operator that synchronizes secrets from external secret stores (such as OpenBao) into native Kubernetes Secrets"
   icon: "https://raw.githubusercontent.com/external-secrets/external-secrets/main/assets/eso-logo-large.png"
-  category: "Infrastructure"
+  category: "System"
   website: "https://external-secrets.io"
 
   # renovate: datasource=helm depName=external-secrets registryUrl=https://charts.external-secrets.io

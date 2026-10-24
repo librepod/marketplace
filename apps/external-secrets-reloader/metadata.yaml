@@ -6,7 +6,7 @@ spec:
   displayName: "External Secrets Reloader"
   description: "Rolls out Deployments automatically when their ESO-synced Kubernetes Secrets change"
   icon: "https://raw.githubusercontent.com/external-secrets/external-secrets/main/assets/eso-logo-large.png"
-  category: "Infrastructure"
+  category: "System"
   website: "https://github.com/external-secrets/reloader"
 
   # Upstream tags are v-prefixed; extractVersion strips the v so this pin and

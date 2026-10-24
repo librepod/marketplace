@@ -6,7 +6,7 @@ spec:
   displayName: "OpenBao"
   description: "Open source secrets management (Vault-compatible) with auto-unseal, Kubernetes auth and External Secrets integration"
   icon: "https://raw.githubusercontent.com/openbao/artwork/refs/heads/main/color/openbao-color.svg"
-  category: "Security"
+  category: "System"
   website: "https://openbao.org"
 
   # App version baked into the pinned chart (its appVersion / default image

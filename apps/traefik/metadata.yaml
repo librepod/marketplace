@@ -6,7 +6,7 @@ spec:
   displayName: "Traefik"
   description: "Cloud-native edge router and load balancer with automatic SSL/TLS certificate management"
   icon: "https://doc.traefik.io/traefik/assets/img/traefik-logo.png"
-  category: "Infrastructure"
+  category: "System"
   website: "https://traefik.io/"
 
   # renovate: datasource=docker depName=traefik

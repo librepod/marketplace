@@ -45,16 +45,22 @@ describe('CatalogService', () => {
   });
 
   describe('findAll()', () => {
-    it('returns only user-facing apps (no Infrastructure category)', () => {
+    it('returns only user-facing apps (no System category)', () => {
+      const apps = service.findAll();
+      const systemApps = apps.filter((app) => app.category === 'System');
+      expect(systemApps).toHaveLength(0);
+    });
+
+    it('returns Infrastructure-category apps (user-facing category, #314)', () => {
       const apps = service.findAll();
       const infraApps = apps.filter((app) => app.category === 'Infrastructure');
-      expect(infraApps).toHaveLength(0);
+      expect(infraApps.map((a) => a.name)).toContain('kata-containers');
     });
 
     it('returns the correct number of user-facing apps from fixture', () => {
-      // fixture has 6 apps, 3 are Infrastructure => 3 user-facing
+      // fixture has 7 apps, 3 are System => 4 user-facing
       const apps = service.findAll();
-      expect(apps).toHaveLength(3);
+      expect(apps).toHaveLength(4);
     });
 
     it('returns apps with all required fields', () => {
@@ -77,9 +83,10 @@ describe('CatalogService', () => {
       expect(names).toContain('vaultwarden');
       expect(names).toContain('gogs');
       expect(names).toContain('litellm');
+      expect(names).toContain('kata-containers');
     });
 
-    it('does not return infrastructure apps from fixture', () => {
+    it('does not return system apps from fixture', () => {
       const apps = service.findAll();
       const names = apps.map((a) => a.name);
       expect(names).not.toContain('traefik');
@@ -101,8 +108,8 @@ describe('CatalogService', () => {
       expect(result).toBeUndefined();
     });
 
-    it('returns undefined for infrastructure app names (filtered out)', () => {
-      // Even if you ask for an infrastructure app by name, it should not be found
+    it('returns undefined for system app names (filtered out)', () => {
+      // Even if you ask for a system app by name, it should not be found
       const result = service.findOne('traefik');
       expect(result).toBeUndefined();
     });
@@ -143,7 +150,7 @@ describe('CatalogService', () => {
 
     it('keeps the last-good app list when a reload fails', () => {
       const before = tmpService.findAll();
-      expect(before).toHaveLength(3);
+      expect(before).toHaveLength(4);
 
       fs.writeFileSync(catalogPath, 'apps: [unclosed\n');
       (tmpService as unknown as { loadCatalog: () => void }).loadCatalog();
@@ -174,19 +181,19 @@ describe('CatalogService', () => {
       };
 
       internal.loadCatalog();
-      expect(retryService.findAll()).toHaveLength(3);
+      expect(retryService.findAll()).toHaveLength(4);
 
       fs.writeFileSync(catalogPath, 'apps: [unclosed\n');
       internal.loadCatalog();
       // First failure arms the bounded retry; catalog stays last-good.
       expect(internal.retryTimer).not.toBeNull();
-      expect(retryService.findAll()).toHaveLength(3);
+      expect(retryService.findAll()).toHaveLength(4);
 
       // Past the retry window the timer has fired (and, with the file still
       // broken, escalated) — retry no longer armed, list still last-good.
       await new Promise((resolve) => setTimeout(resolve, 1200));
       expect(internal.retryTimer).toBeNull();
-      expect(retryService.findAll()).toHaveLength(3);
+      expect(retryService.findAll()).toHaveLength(4);
 
       await retryModule.close();
     });
@@ -265,7 +272,7 @@ describe('CatalogService', () => {
       }).compile();
       kubeletService = kubeletModule.get<CatalogService>(CatalogService);
       await kubeletModule.init();
-      expect(kubeletService.findAll()).toHaveLength(3);
+      expect(kubeletService.findAll()).toHaveLength(4);
 
       kubeletUpdate(
         ['apiVersion: marketplace/v1', 'kind: Catalog', 'apps: []'].join('\n'),

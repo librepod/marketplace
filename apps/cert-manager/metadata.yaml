@@ -6,7 +6,7 @@ spec:
   displayName: "Cert-Manager"
   description: "Cloud-native certificate management for Kubernetes with ACME protocol support"
   icon: "https://raw.githubusercontent.com/cert-manager/cert-manager/master/logo/logo-small.png"
-  category: "Infrastructure"
+  category: "System"
   website: "https://cert-manager.io/"
 
   # renovate: datasource=docker depName=quay.io/jetstack/charts/cert-manager

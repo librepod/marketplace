@@ -6,7 +6,7 @@ spec:
   displayName: "Netronome"
   description: "Network speed tests and server monitoring dashboard"
   icon: "https://raw.githubusercontent.com/autobrr/netronome/develop/web/public/pwa-512x512.png"
-  category: "Networking"
+  category: "Monitoring"
   website: "https://github.com/autobrr/netronome"
 
   version: "0.15.0"

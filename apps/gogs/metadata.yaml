@@ -6,7 +6,7 @@ spec:
   displayName: "Gogs"
   description: "Lightweight self-hosted Git service with built-in issue tracking and wiki"
   icon: "https://raw.githubusercontent.com/gogs/gogs/master/public/img/gogs-lg.png"
-  category: "Development"
+  category: "System"
   website: "https://gogs.io/"
 
   # renovate: datasource=docker depName=gogs/gogs

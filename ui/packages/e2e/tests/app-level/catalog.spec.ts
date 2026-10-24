@@ -2,12 +2,13 @@ import { test, expect } from "@playwright/test";
 import { CatalogPage } from "../../support/pages/CatalogPage";
 
 test.describe("Catalog page", () => {
-  test("renders all user-facing apps and filters out Infrastructure", async ({ page }) => {
+  test("renders all user-facing apps and filters out System", async ({ page }) => {
     const catalog = new CatalogPage(page);
     await catalog.goto();
     await expect(catalog.card("Vaultwarden")).toBeVisible();
     await expect(catalog.card("Gogs")).toBeVisible();
     await expect(catalog.card("LiteLLM")).toBeVisible();
+    await expect(catalog.card("Kata Containers")).toBeVisible();
     await expect(catalog.card("Traefik")).toHaveCount(0);
   });
 

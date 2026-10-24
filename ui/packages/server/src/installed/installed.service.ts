@@ -223,7 +223,10 @@ export class InstalledService {
           `${app.displayName} is managed by the platform and cannot be installed`,
         );
       }
-      if (!app.templates) throw new InternalServerErrorException(`App "${appName}" has no install templates`);
+      // 400, not 500: the request names an app the API itself lists (#46) —
+      // a template-less catalog entry is a data bug, but the client did
+      // nothing wrong.
+      if (!app.templates) throw new BadRequestException(`App "${appName}" has no install templates`);
 
       // 2. Check not already installed
       const installed = await this.repo.listInstalledApps();

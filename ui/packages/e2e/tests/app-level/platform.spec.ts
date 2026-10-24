@@ -30,7 +30,11 @@ test.describe("Platform / system apps", () => {
     // The managed app row, with its System tag
     await expect(page.getByText("FRP Operator")).toBeVisible();
     await expect(page.getByText("System")).toBeVisible();
-    // No install button on the home for it
-    await expect(page.getByRole("button", { name: /install/i })).toHaveCount(0);
+    // No install button for it in the panel. Scoped to the Platform region:
+    // the page-level TrustBanner (#288) renders "Install the root certificate"
+    // once its async trust check resolves, which matches a page-wide /install/i
+    // locator — a race the assertion sometimes loses.
+    const panel = page.getByRole("region", { name: /Platform/ });
+    await expect(panel.getByRole("button", { name: /install/i })).toHaveCount(0);
   });
 });

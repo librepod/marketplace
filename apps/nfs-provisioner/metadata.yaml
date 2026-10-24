@@ -6,7 +6,7 @@ spec:
   displayName: "NFS Provisioner"
   description: "Kubernetes dynamic provisioner for NFS storage using subdirectory support"
   icon: "https://raw.githubusercontent.com/kubernetes/community/master/icons/logo/kubernetes.png"
-  category: "Infrastructure"
+  category: "System"
   website: "https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner"
 
   # renovate: datasource=github-releases depName=kubernetes-sigs/nfs-subdir-external-provisioner extractVersion=^nfs-subdir-external-provisioner-(?<version>.+)$

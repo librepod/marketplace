@@ -6,7 +6,7 @@ spec:
   displayName: "Step Certificates"
   description: "Certificate Authority (CA) and step-ca certificate management for Kubernetes"
   icon: "https://smallstep.com/assets/images/step-icon.png"
-  category: "Infrastructure"
+  category: "System"
   website: "https://smallstep.com/docs/step-ca"
 
   # renovate: datasource=docker depName=cr.smallstep.com/smallstep/step-ca
