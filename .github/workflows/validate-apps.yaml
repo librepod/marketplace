@@ -23,14 +23,12 @@ jobs:
           ALLOWED="AI Development Finance Infrastructure Media Monitoring Network Productivity Security System Testing"
           status=0
           for m in apps/*/metadata.yaml; do
-            app=$(basename "$(dirname "$m")")
             category=$(grep -m1 '^  category:' "$m" | sed 's/.*category: *//' | tr -d '"')
             if [ -z "$category" ] || ! grep -qw "$category" <<<"$ALLOWED"; then
-              echo "::error file=$m::apps/$app: category \"$category\" is not in the allowlist: $ALLOWED"
+              echo "::error file=$m::$m: category \"$category\" is not in the allowlist: $ALLOWED"
               status=1
             fi
           done
-          if [ "$status" -eq 0 ]; then echo "All app categories within the allowlist."; fi
           exit $status
 
   # Remote http(s) kustomize bases resolve live inside kustomize-controller on
