@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import { act, render, screen, fireEvent } from "@testing-library/react"
 import type { OnboardingStatus } from "@librepod/shared"
-import { ConnectStep, GraduateStep, STUCK_AFTER_MS, TrustStep, VpnStep } from "@/pages/onboarding/ConnectivitySteps"
+import { ConnectStep, GraduateStep, STUCK_AFTER_MS, VpnStep } from "@/pages/onboarding/ConnectivitySteps"
 
 const status: OnboardingStatus = {
   state: "claimed", arrival: "ip", baseDomain: "libre.pod", session: true, account: "alex",
@@ -88,21 +88,6 @@ describe("VpnStep", () => {
     render(<VpnStep status={status} onWireguard={noop} onOwn={noop} onSessionLost={onSessionLost} />)
     fireEvent.click(screen.getByRole("button", { name: /set up wireguard/i }))
     await vi.waitFor(() => expect(onSessionLost).toHaveBeenCalled())
-  })
-})
-
-describe("TrustStep", () => {
-  beforeEach(() => localStorage.clear())
-
-  it("offers the root CA and continues once installed", () => {
-    const onDone = vi.fn()
-    render(<TrustStep onDone={onDone} />)
-    expect(screen.getByRole("link", { name: /download root certificate/i })).toHaveAttribute("href", "/api/bootstrap/ca")
-    const go = screen.getByRole("button", { name: /continue/i })
-    expect(go).toBeDisabled()
-    fireEvent.click(screen.getByLabelText(/i installed the certificate/i))
-    fireEvent.click(go)
-    expect(onDone).toHaveBeenCalled()
   })
 })
 
@@ -223,6 +208,12 @@ describe("GraduateStep", () => {
     expect(screen.queryByRole("button")).toBeNull()
   })
 
+  it("WireGuard path: sets the browser-warning expectation and offers the root CA", () => {
+    render(<GraduateStep status={status} path="wireguard" />)
+    expect(screen.getByText(/browser will warn you/i)).toBeVisible()
+    expect(screen.getByRole("link", { name: /download root certificate/i })).toHaveAttribute("href", "/api/bootstrap/ca")
+  })
+
   it("bring-my-own path: the checklist", () => {
     render(<GraduateStep status={status} path="own" />)
     const list = screen.getByRole("list", { name: /before you sign in/i })
@@ -230,5 +221,10 @@ describe("GraduateStep", () => {
     expect(list).toHaveTextContent(/root certificate/i)
     expect(list).toHaveTextContent("alex@libre.pod")
     expect(screen.getByRole("link", { name: /open libre\.pod/i })).toHaveAttribute("href", "https://libre.pod")
+  })
+
+  it("bring-my-own path: the root CA is a download away", () => {
+    render(<GraduateStep status={status} path="own" />)
+    expect(screen.getByRole("link", { name: /download root certificate/i })).toHaveAttribute("href", "/api/bootstrap/ca")
   })
 })

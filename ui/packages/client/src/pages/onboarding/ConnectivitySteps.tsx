@@ -13,11 +13,6 @@ const VPN_APP = "wg-easy"
 /** Installing longer than this on this page means WireGuard isn't coming up here. */
 export const STUCK_AFTER_MS = 5 * 60 * 1000
 
-/** This browser has marked the root certificate installed (the Trust checkbox).
- *  Trust is the one step whose done-ness the device cannot know, so the wizard
- *  derives it per-browser — see deriveStep. */
-export const CA_INSTALLED_KEY = "librepod-onboarding-ca"
-
 /** "Reach your LibrePod by name": WireGuard (recommended) or "I'll bring my own".
  *  The server answers wg-easy's admin-password question itself; the browser sends
  *  only the endpoint the owner confirmed. */
@@ -124,29 +119,6 @@ export function TrustSheet() {
         </ul>
       </details>
     </div>
-  )
-}
-
-export function TrustStep({ onDone }: { onDone: () => void }) {
-  const [installed, setInstalled] = useState(localStorage.getItem(CA_INSTALLED_KEY) === "1")
-  return (
-    <section>
-      <h1 className="text-2xl font-semibold">Trust your device</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Your device issues its own certificates. Installing this root certificate on your
-        phone and laptop now means every address ends in a clean padlock, starting with the
-        next step.
-      </p>
-      <div className="mt-6">
-        <TrustSheet />
-      </div>
-      <label className="mt-6 flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={installed}
-          onChange={(e) => { setInstalled(e.target.checked); localStorage.setItem(CA_INSTALLED_KEY, e.target.checked ? "1" : "0") }} />
-        I installed the certificate
-      </label>
-      <Button className="mt-4" disabled={!installed} onClick={onDone}>Continue</Button>
-    </section>
   )
 }
 
@@ -328,7 +300,10 @@ function KeyPanel({ peer }: { peer: Pick<WgPeer, "clientId" | "name"> }) {
 }
 
 /** The hand-off to the domain. The first sign-in there finishes onboarding; the page
- *  notices (status polling) and RootGate switches to UseDomainScreen. */
+ *  notices (status polling) and RootGate switches to UseDomainScreen. Trust is not a
+ *  step before this: the browser will show its certificate warning at the domain, so
+ *  the copy sets that expectation and offers the root CA — the app's banner (post
+ *  sign-in) is where installation is actually taught. */
 export function GraduateStep({ status, path }: { status: OnboardingStatus; path: ConnectivityPath }) {
   const url = `https://${status.baseDomain}`
   const signIn = `${status.account ?? "your account"}@${status.baseDomain}`
@@ -345,8 +320,15 @@ export function GraduateStep({ status, path }: { status: OnboardingStatus; path:
           <li>☐ The root certificate is trusted on those devices.</li>
           <li>☐ Open <span className="font-mono">{url}</span> and sign in as <span className="font-mono">{signIn}</span>.</li>
         </ul>
+        <p className="mt-4 text-xs text-muted-foreground">
+          Browsers warn about this device's certificates until the root is installed — the page
+          after sign-in shows how.
+        </p>
         <p className="mt-4 text-xs text-muted-foreground">This page notices your first sign-in and finishes setup.</p>
-        <Button className="mt-6" render={<a href={url} />}>Open {status.baseDomain}</Button>
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <Button render={<a href={url} />}>Open {status.baseDomain}</Button>
+          <Button variant="ghost" render={<a href="/api/bootstrap/ca" download />}>Download root certificate</Button>
+        </div>
       </section>
     )
   }
@@ -359,7 +341,14 @@ export function GraduateStep({ status, path }: { status: OnboardingStatus; path:
         <span className="font-mono">{signIn}</span>. That first sign-in finishes setup — from then on,
         this raw address only points you to your device's name.
       </p>
-      <Button className="mt-6" render={<a href={url} />}>Open {status.baseDomain}</Button>
+      <p className="mt-3 text-sm text-muted-foreground">
+        Your browser will warn you the first time — this device issues its own certificates.
+        Choose "proceed"; once you're in, the app shows how to make the padlock clean for good.
+      </p>
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+        <Button render={<a href={url} />}>Open {status.baseDomain}</Button>
+        <Button variant="ghost" render={<a href="/api/bootstrap/ca" download />}>Download root certificate</Button>
+      </div>
       <p className="mt-4 text-xs text-muted-foreground">
         More devices? Once you're signed in, add them on WireGuard's page,{" "}
         <span className="font-mono">wg-easy.{status.baseDomain}</span>.
