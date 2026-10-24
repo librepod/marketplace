@@ -4,6 +4,15 @@ kind: Kustomization
 resources:
 - ../../base
 
+# Authoritative image pin. Upstream's release tags (4.0.x) version the bundle;
+# the image inside lags — release 4.0.18 bundles appVersion v4.0.2, and no
+# image newer than v4.0.2 exists on registry.k8s.io. Pin the IMAGE version
+# here, deliberately; move it only when upstream actually publishes one
+# (spec.version in metadata.yaml tracks the release tag and may move first).
+images:
+- name: registry.k8s.io/sig-storage/nfs-subdir-external-provisioner
+  newTag: v4.0.2
+
 patches:
 - path: patch-deployment.yaml
 - path: patch-storageclass.yaml
