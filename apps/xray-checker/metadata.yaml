@@ -6,7 +6,7 @@ spec:
   displayName: "Xray Checker"
   description: "Prometheus exporter and status dashboard for monitoring Xray VPN proxies (VLESS, VMess, Trojan, Shadowsocks)"
   icon: "https://xray-checker.kutovoy.dev/favicon.svg"
-  category: "Networking"
+  category: "Monitoring"
   website: "https://github.com/kutovoys/xray-checker"
 
   version: "1.3.1"

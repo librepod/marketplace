@@ -56,8 +56,13 @@ export class CatalogService implements OnModuleInit, OnModuleDestroy {
         throw new Error('Invalid catalog.yaml: expected a YAML mapping at root');
       }
       const catalog = raw as CatalogFile;
+      // `System` marks platform components managed by the system-apps Flux
+      // Kustomization — hidden from the user catalog. The runtime
+      // SystemAppsService derivation is the authoritative layer; this static
+      // filter is its cold-start fallback, so the category must mirror it.
+      // `Infrastructure` is a regular user-facing category.
       this.apps = (catalog.apps ?? []).filter(
-        (app) => app.category !== 'Infrastructure',
+        (app) => app.category !== 'System',
       );
       this.loadedOnce = true;
       this.reloadFailed = false;

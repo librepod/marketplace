@@ -9,8 +9,9 @@ test("catalog renders against the live cluster", async ({ page, request }) => {
   }[];
   expect(Array.isArray(apps)).toBeTruthy();
   expect(apps.length).toBeGreaterThan(0);
-  // CatalogService filters out Infrastructure apps (system apps, not user-installable).
-  expect(apps.every((a) => a.category !== "Infrastructure")).toBeTruthy();
+  // CatalogService filters out System-category apps (platform components,
+  // not user-installable). Infrastructure is a user-facing category (#314).
+  expect(apps.every((a) => a.category !== "System")).toBeTruthy();
 
   // The catalog moved to /catalog; / is the installed-apps control plane.
   await page.goto("/catalog");

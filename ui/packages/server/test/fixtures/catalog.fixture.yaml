@@ -11,11 +11,19 @@ apps:
     icon: "https://example.com/vaultwarden.png"
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/vaultwarden"
+  - name: kata-containers
+    version: "4.3.1"
+    displayName: "Kata Containers"
+    description: "Secure container runtime with hardware-enforced isolation"
+    category: "Infrastructure"
+    icon: "https://example.com/kata.png"
+    sourceType: oci-kustomize
+    sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/kata-containers"
   - name: traefik
     version: "1.0.0"
     displayName: "Traefik"
     description: "Cloud-native edge router and load balancer"
-    category: "Infrastructure"
+    category: "System"
     icon: "https://example.com/traefik.png"
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/traefik"
@@ -31,7 +39,7 @@ apps:
     version: "1.0.0"
     displayName: "Cert-Manager"
     description: "Cloud-native certificate management"
-    category: "Infrastructure"
+    category: "System"
     icon: "https://example.com/cert-manager.png"
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/cert-manager"
@@ -47,7 +55,7 @@ apps:
     version: "1.0.0"
     displayName: "NFS Provisioner"
     description: "Kubernetes dynamic provisioner for NFS storage"
-    category: "Infrastructure"
+    category: "System"
     icon: "https://example.com/nfs.png"
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/nfs-provisioner"

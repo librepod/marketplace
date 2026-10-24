@@ -10,6 +10,29 @@ on:
       - 'apps/*/components/**'
 
 jobs:
+  # Closed category vocabulary gate (#314): a category outside this list is
+  # either a typo (the Network/Networking split) or an undeclared new bucket.
+  # Adding a category is a deliberate edit to the list below.
+  catalog-categories:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Fail on app category outside the allowlist
+        run: |
+          set -uo pipefail
+          ALLOWED="AI Development Finance Infrastructure Media Monitoring Network Productivity Security System Testing"
+          status=0
+          for m in apps/*/metadata.yaml; do
+            app=$(basename "$(dirname "$m")")
+            category=$(grep -m1 '^  category:' "$m" | sed 's/.*category: *//' | tr -d '"')
+            if [ -z "$category" ] || ! grep -qw "$category" <<<"$ALLOWED"; then
+              echo "::error file=$m::apps/$app: category \"$category\" is not in the allowlist: $ALLOWED"
+              status=1
+            fi
+          done
+          if [ "$status" -eq 0 ]; then echo "All app categories within the allowlist."; fi
+          exit $status
+
   # Remote http(s) kustomize bases resolve live inside kustomize-controller on
   # every reconcile, bypassing Flux source caching — slow egress to the base's
   # host then stalls the app's Kustomization and its whole dependsOn tree (#311).

@@ -8,8 +8,9 @@ test("app boots and catalog API returns seeded apps", async ({ page, request }) 
   expect(res.ok()).toBeTruthy();
   const apps = await res.json();
   const names = (apps as { name: string }[]).map((a) => a.name);
-  // Infrastructure apps are filtered out server-side.
-  expect(names).toEqual(expect.arrayContaining(["vaultwarden", "gogs", "litellm"]));
+  // System-category apps are filtered out server-side; Infrastructure is a
+  // user-facing category (#314).
+  expect(names).toEqual(expect.arrayContaining(["vaultwarden", "gogs", "litellm", "kata-containers"]));
   expect(names).not.toContain("traefik");
 
   // The catalog moved to /catalog; / is now the installed-apps control plane.

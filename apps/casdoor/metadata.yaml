@@ -6,7 +6,7 @@ spec:
   displayName: "Casdoor"
   description: "Open-source identity and access management (IAM) / Single-Sign-On (SSO) platform"
   icon: "https://raw.githubusercontent.com/casdoor/casdoor/master/web/src/assets/logo.png"
-  category: "Security"
+  category: "System"
   website: "https://casdoor.org/"
 
   # renovate: datasource=docker depName=registry-1.docker.io/casbin/casdoor-helm-charts

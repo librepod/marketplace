@@ -6,7 +6,7 @@ spec:
   displayName: "Flux Operator MCP"
   description: "FluxCD operator for MCP (Model Context Protocol) integration"
   icon: "https://raw.githubusercontent.com/fluxcd/flux/main/docs/_static/img/flux-logo.png"
-  category: "Infrastructure"
+  category: "System"
   website: "https://fluxoperator.dev"
 
   # renovate: datasource=docker depName=ghcr.io/controlplaneio-fluxcd/charts/flux-operator-mcp

@@ -6,7 +6,7 @@ spec:
   displayName: "Step Issuer"
   description: "Cert-Manager issuer for Step CA certificate authority"
   icon: "https://smallstep.com/assets/images/step-icon.png"
-  category: "Infrastructure"
+  category: "System"
   website: "https://smallstep.com/docs/step-ca/certmanager"
 
   # renovate: datasource=github-releases depName=smallstep/step-issuer

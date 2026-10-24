@@ -6,7 +6,7 @@ spec:
   displayName: "OAuth2 Proxy"
   description: "Reverse proxy and static file server that provides authentication using Google, GitHub or other providers"
   icon: "https://raw.githubusercontent.com/oauth2-proxy/oauth2-proxy/master/docs/static/img/logos/oauth2-proxy-icon.png"
-  category: "Security"
+  category: "System"
   website: "https://oauth2-proxy.github.io/oauth2-proxy/"
 
   # renovate: datasource=docker depName=quay.io/oauth2-proxy/oauth2-proxy
