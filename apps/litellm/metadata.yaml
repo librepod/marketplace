@@ -11,7 +11,7 @@ spec:
 
   # renovate: datasource=docker depName=litellm/litellm
   # serge: notesRepo=BerriAI/litellm
-  version: "v1.95.0"
+  version: "v1.106.3"
 
   source:
     type: oci-kustomize
@@ -19,12 +19,18 @@ spec:
     path: ./overlays/librepod
 
   # Closed settings (no allowCustom): litellm's config is file/salt-driven and
-  # env override semantics are unclear — only the two machine secrets flow here.
-  # Both are generate-only (never shown in the install dialog); on reinstall the
+  # env override semantics are unclear — only the machine secrets flow here.
+  # All are generate-only (never shown in the install dialog); on reinstall the
   # stored values are reused, so DB credentials keep working against the
   # NFS-surviving postgres data.
   settings:
     items:
+      - name: LITELLM_MASTER_KEY
+        label: "Master key"
+        description: "Bootstrap admin credential for the proxy API (Authorization: Bearer sk-…). Generated once per install; UI admin is via SSO — mint per-client keys there."
+        sensitive: true
+        generate:
+          length: 64
       - name: LITELLM_SALT_KEY
         label: "Salt key"
         description: "Salt key LiteLLM uses to encrypt credentials stored in its DB (e.g. provider API keys). Generated once per install."
