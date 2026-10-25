@@ -24,6 +24,7 @@ describe("deriveStep — cluster truth decides the step", () => {
   it.each([
     ["open", open, CLAIM],
     ["claimed, no account confirmed", { ...claimed, account: null }, ACCOUNT],
+    ["claimed, this browser has no setup session", { ...claimed, session: false }, CLAIM],
     ["VPN not installed", claimed, VPN],
     ["VPN status unknown", { ...claimed, vpnStatus: null }, VPN],
     // Any status past not_installed goes straight to Connect — certificate trust
@@ -50,9 +51,18 @@ describe("OnboardingPage", () => {
     expect(screen.getByRole("heading", { name: /claim your device/i })).toBeVisible()
   })
 
-  it("claimed, but this browser has no setup session → Resume", () => {
+  it("claimed, but this browser has no setup session → the code step", () => {
     page({ ...claimed, session: false })
-    expect(screen.getByRole("heading", { name: /continue setting up/i })).toBeVisible()
+    expect(screen.getByText(/setup has started/i)).toBeVisible()
+  })
+
+  it("a lost session after moving ahead shows the code step, not the later step", () => {
+    mockApi()
+    const { rerender } = page(claimed)
+    fireEvent.click(screen.getByRole("button", { name: /i'll bring my own/i }))
+    expect(screen.getByRole("list", { name: /before you sign in/i })).toBeVisible()
+    rerender(<OnboardingPage status={{ ...claimed, session: false }} onRefresh={vi.fn()} />)
+    expect(screen.getByText(/setup has started/i)).toBeVisible()
   })
 
   it("after a reset the Account step offers to keep the old account", () => {

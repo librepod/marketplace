@@ -269,7 +269,7 @@ function usePeers(enabled: boolean): { peers?: WgPeer[]; error?: string } {
         const body = (await res.json().catch(() => ({}))) as { peers?: WgPeer[]; message?: string }
         if (!alive) return
         if (res.ok) setResult({ peers: body.peers })
-        // 401 = the session ended: the status poll takes the wizard to Resume.
+        // 401 = the session ended: the status poll takes the wizard back to the code step.
         else if (res.status !== 401) setResult((r) => ({ ...r, error: body.message ?? `listing keys failed (${res.status})` }))
       } catch { /* transient — next tick retries */ }
     }
