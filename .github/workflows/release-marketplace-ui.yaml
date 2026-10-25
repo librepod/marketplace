@@ -1,15 +1,15 @@
 name: Release Marketplace UI
 
-# One-click release: pick a bump level, get a full cut. Bumps the five pin
-# spots (ui/package.json + package-lock.json via `npm version`,
+# One-click release, PR edition: pick a bump level, get a release PR. Bumps
+# the five pin spots (ui/package.json + package-lock.json via `npm version`,
 # apps/marketplace-ui/metadata.yaml, infrastructure system-apps ref.tag,
-# overlay newTag), commits, tags marketplace-ui-vX.Y.Z, pushes, and dispatches
-# the publishes the bump implies — a GITHUB_TOKEN push fires no on:push
-# workflows, so the image (publish-marketplace-ui), the app artifact
-# (publish-apps), and the bootstrap artifact (publish-bootstrap — carries the
-# infra ref.tag) are dispatched explicitly. publish-catalog follows on its
-# own via workflow_run. Major releases stay manual (local checkout + edit),
-# as with release-bootstrap.
+# overlay newTag), commits on a release/marketplace-ui-vX.Y.Z branch, tags,
+# and opens a PR — master is protected, so the merge IS the release: it fires
+# the image (publish-marketplace-ui), app artifact (publish-apps), and
+# bootstrap artifact (publish-bootstrap — carries the infra ref.tag)
+# workflows through their on:push path triggers. publish-catalog follows on
+# its own via workflow_run. Major releases stay manual (local checkout +
+# edit), as with release-bootstrap.
 on:
   workflow_dispatch:
     inputs:
@@ -22,16 +22,17 @@ on:
           - patch
           - minor
 
-# Serialize double-taps: a queued second run re-reads the bumped
-# package.json from fresh master instead of racing the first to the same
-# version. A collision that still slips through dies in the tag guard below.
+# Serialize double-taps: a queued second run re-reads master fresh, and its
+# supersede step closes the first run's still-open release PR and re-cuts —
+# converging on one release PR instead of racing. The tag guard is the last
+# resort for a version already released.
 concurrency:
   group: marketplace-ui-release
   cancel-in-progress: false
 
 permissions:
-  contents: write # push the bump commit + tag (via the checkout's credentials)
-  actions: write # dispatch the publish workflows
+  contents: write # push the release branch + tag (via the checkout's credentials)
+  pull-requests: write # open the release PR
 
 jobs:
   release:
@@ -40,26 +41,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Bump the five version pins, commit, tag, push
+      - name: Bump the five version pins and open the release PR
         env:
           BUMP: ${{ inputs.bump }}
-        run: bash scripts/release-marketplace-ui.sh "$BUMP" --push
-
-      - name: Dispatch the publishes the bump implies
-        env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          gh workflow run publish-marketplace-ui.yaml --ref master
-          gh workflow run publish-bootstrap.yaml --ref master
-
-          # The app artifact pins image:<version>, so wait for the image
-          # build to finish before dispatching publish-apps — its own
-          # image-existence guard only polls for ~3 minutes, and a failed
-          # image build should stop the release here, not downstream.
-          sleep 15
-          RUN_ID=$(gh run list --workflow=publish-marketplace-ui.yaml \
-            --event workflow_dispatch --branch master --limit 1 \
-            --json databaseId --jq '.[0].databaseId')
-          gh run watch "$RUN_ID" --exit-status
-
-          gh workflow run publish-apps.yaml --ref master -f apps='["marketplace-ui"]'
+        run: bash scripts/release-marketplace-ui.sh "$BUMP" --pr
