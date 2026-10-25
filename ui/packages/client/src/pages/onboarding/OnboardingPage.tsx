@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react"
 import type { OnboardingStatus } from "@librepod/shared"
+import { PodFieldBackground } from "@/components/PodFieldBackground"
 import { Separator } from "@/components/ui/separator"
 import { AccountStep, ClaimStep, ResumeScreen, WelcomeStep } from "./AccessSteps"
 import { ConnectStep, GraduateStep, VpnStep, type ConnectivityPath } from "./ConnectivitySteps"
@@ -83,8 +84,11 @@ export function OnboardingPage({ status, onRefresh, reconnecting = false }: {
 
 function Frame({ children, reconnecting }: { children: ReactNode; reconnecting: boolean }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
-      <div className="w-full max-w-lg">
+    // The pod field is the page background; the scene layer carries its own
+    // near-black base, so the page background must stay transparent here.
+    <div className="relative flex min-h-screen items-center justify-center px-6 text-foreground">
+      <PodFieldBackground />
+      <div className="relative z-10 w-full max-w-lg">
         {reconnecting && (
           <p role="status" className="mb-6 rounded-md border border-border px-3 py-2 text-xs text-muted-foreground">
             Your LibrePod is busy for a moment — reconnecting. What you've entered here is kept.
