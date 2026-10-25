@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react"
  * The onboarding wizard's animated ASCII "pod field" (GH #318): a dim monospace
  * glyph scene — stickman with phone, wireless claim arc, hub, pods, wires with
  * traveling signals, a house with wifi arcs, radio rings — behind the wizard.
- * Ported as-is from the approved standalone prototype (variant 5 "everything"),
+ * Scene ported from the approved standalone prototype (variant 5 "everything"),
  * so it stays visually diffable against it. Vanilla canvas, no dependencies.
  *
  * Behavior contract (issue #318): DPR-aware; one static frame under
@@ -20,12 +20,13 @@ const SMALL_FONT = "13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospac
 const BIG_FONT = "26px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
 const BIG = 2
 
-// Variant 5 "everything" from the prototype: man + phone, hub, 6 pods, a house,
-// every signal type. Rates tuned there; density/speed tweaks are in-bounds.
+// Variant 5 "everything" from the prototype: man + phone, hub, 6 pods, one
+// house, every signal type. Rates tuned there; density/speed tweaks are in-bounds.
 const CFG = {
-  dots: 1.1, pods: 6, houses: [{ fx: 0.82, fy: 0.6 }], man: { fx: 0.18, fy: 0.5 },
-  hub: { fx: 0.5, fy: 0.32 }, wifi: true, phoneLink: true, houseWires: true, ringRate: 7, sigRate: 1.6,
+  dots: 1.1, pods: 6, man: { fx: 0.18, fy: 0.5 },
+  hub: { fx: 0.5, fy: 0.32 }, ringRate: 7, sigRate: 1.6,
 }
+const HOUSE = { fx: 0.82, fy: 0.6 }
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a)
 const ri = (a: number, b: number) => Math.floor(rnd(a, b + 1))
@@ -113,17 +114,17 @@ export function PodFieldBackground() {
     const wires: Wire[] = []
     const signals: Signal[] = []
     const rings: Ring[] = []
-    const links: Link[] = []
+    let link: Link
     let dots: Dot[] = []
-    let man: Sprite | null = null
-    let phone: Sprite | null = null
-    let houses: (Sprite & { antenna: Cell; w: number })[] = []
+    let man: Sprite
+    let phone: Sprite
+    let house: Sprite & { antenna: Cell; w: number }
     let hub: { pos: Cell }
     const pointer = { x: -999, y: -999 }
 
     function build() {
-      devices.length = 0; wires.length = 0; signals.length = 0; rings.length = 0; links.length = 0
-      dots = []; houses = []
+      devices.length = 0; wires.length = 0; signals.length = 0; rings.length = 0
+      dots = []
       const mx = Math.max(8, Math.floor(cols * .14)), my = Math.max(5, Math.floor(rows * .14))
 
       hub = { pos: cellPos(CFG.hub.fx, CFG.hub.fy) }
@@ -133,27 +134,24 @@ export function PodFieldBackground() {
       man = { x: p.x, y: p.y, s: BIG }
       phone = { x: p.x + 8 * BIG, y: p.y + BIG, s: 1 } // in the outstretched hand
 
-      for (const h of CFG.houses) {
-        const hp = cellPos(h.fx, h.fy)
-        const hs = { x: hp.x, y: hp.y, s: BIG, w: 7 * BIG, antenna: { x: hp.x + 3 * BIG, y: hp.y - 2 } }
-        houses.push(hs)
-      }
+      const hp = cellPos(HOUSE.fx, HOUSE.fy)
+      house = { x: hp.x, y: hp.y, s: BIG, w: 7 * BIG, antenna: { x: hp.x + 3 * BIG, y: hp.y - 2 } }
 
       let guard = 0
       while (devices.length < CFG.pods && guard++ < 300) {
         const x = ri(mx, cols - mx), y = ri(my, rows - my)
         let ok = Math.abs(x - hub.pos.x) > cols * .14 || Math.abs(y - hub.pos.y) > rows * .2
         for (const d of devices) if (Math.abs(d.x - x) < 10 && Math.abs(d.y - y) < 6) ok = false
-        if (phone && Math.abs(x - phone.x) < 8 && Math.abs(y - phone.y) < 7) ok = false
+        if (Math.abs(x - phone.x) < 8 && Math.abs(y - phone.y) < 7) ok = false
         if (ok) devices.push({ x, y })
       }
       for (const d of devices) wires.push(mkPath(d, hub.pos))
-      for (const hs of houses) wires.push(mkPath({ x: hs.x + hs.w + 1, y: hs.y + 3 * BIG }, hub.pos))
+      wires.push(mkPath({ x: house.x + house.w + 1, y: house.y + 3 * BIG }, hub.pos))
 
       const p0 = { x: phone.x + 3, y: phone.y - 1 }
       const p2 = { x: hub.pos.x, y: hub.pos.y }
       const p1 = { x: (p0.x + p2.x) >> 1, y: Math.min(p0.y, p2.y) - Math.max(6, Math.floor(rows * .18)) }
-      links.push({ pts: bez(p0, p1, p2, 34), signals: [] })
+      link = { pts: bez(p0, p1, p2, 34), signals: [] }
 
       const density = Math.floor(cols * rows / 110) * CFG.dots
       for (let i = 0; i < density; i++)
@@ -190,13 +188,12 @@ export function PodFieldBackground() {
       }
       if (now - lastPulse > rnd(500, 1100) / CFG.sigRate) {
         lastPulse = now
-        for (const L of links) L.signals.push({ t: 0, v: rnd(.25, .45) })
+        link.signals.push({ t: 0, v: rnd(.25, .45) })
       }
-      for (const L of links)
-        for (let i = L.signals.length - 1; i >= 0; i--) {
-          L.signals[i].t += L.signals[i].v * dt
-          if (L.signals[i].t > 1) L.signals.splice(i, 1)
-        }
+      for (let i = link.signals.length - 1; i >= 0; i--) {
+        link.signals[i].t += link.signals[i].v * dt
+        if (link.signals[i].t > 1) link.signals.splice(i, 1)
+      }
       if (now - lastRing > 5000 / CFG.ringRate) {
         lastRing = now
         const emitters = devices.map(d => ({ x: d.x, y: d.y }))
@@ -204,10 +201,9 @@ export function PodFieldBackground() {
         const e = emitters[ri(0, emitters.length - 1)]
         rings.push({ x: e.x, y: e.y, r: 1.5, life: 1 })
       }
-      if (CFG.wifi && houses.length && now - lastWifi > 2200) {
+      if (now - lastWifi > 2200) {
         lastWifi = now
-        const hs = houses[ri(0, houses.length - 1)]
-        rings.push({ x: hs.antenna.x, y: hs.antenna.y, r: 1, life: 1, up: true, wifi: true })
+        rings.push({ x: house.antenna.x, y: house.antenna.y, r: 1, life: 1, up: true, wifi: true })
       }
       for (let i = rings.length - 1; i >= 0; i--) {
         const r = rings[i]
@@ -240,15 +236,13 @@ export function PodFieldBackground() {
       }
       for (const w of wires)
         for (const c of w.cells) glyph(c.g, c.x, c.y, DIM(.10 + nearPointer(c.x, c.y)))
-      for (const L of links) {
-        L.pts.forEach((p, i) => { if (i % 2 === 0) glyph("˙", p.x, p.y, DIM(.08 + nearPointer(p.x, p.y))) })
-        for (const s of L.signals) {
-          const idx = Math.floor(s.t * (L.pts.length - 1))
-          for (let k = 0; k <= 4; k++) {
-            const j = idx - k
-            if (j < 0 || j >= L.pts.length) continue
-            glyph(k === 0 ? "•" : k < 2 ? "·" : "˙", L.pts[j].x, L.pts[j].y, CYAN(.85 - k * .18))
-          }
+      link.pts.forEach((p, i) => { if (i % 2 === 0) glyph("˙", p.x, p.y, DIM(.08 + nearPointer(p.x, p.y))) })
+      for (const s of link.signals) {
+        const idx = Math.floor(s.t * (link.pts.length - 1))
+        for (let k = 0; k <= 4; k++) {
+          const j = idx - k
+          if (j < 0 || j >= link.pts.length) continue
+          glyph(k === 0 ? "•" : k < 2 ? "·" : "˙", link.pts[j].x, link.pts[j].y, CYAN(.85 - k * .18))
         }
       }
       for (const r of rings) {
@@ -288,25 +282,21 @@ export function PodFieldBackground() {
         glyph(pon ? "o" : "·", d.x, d.y - 2, pon ? GREEN(.6) : DIM(.15))
         ;["[", "▪", "]"].forEach((ch, i) => glyph(ch, d.x - 1 + i, d.y, DIM(.5)))
       }
-      // houses + antenna + beacon
-      for (const hs of houses) {
-        const flick = Math.sin(now / 1300 + hs.x) > .55
-        for (const c of spriteCells(hs, SPRITES.house)) {
-          const bright = "[,],_,/,\\".includes(c.ch) ? .45 : .32
-          glyph(c.ch, c.cx, c.cy, DIM(bright + (flick && c.ch === "]" ? .15 : 0)), true)
-        }
-        glyph("|", hs.antenna.x, hs.antenna.y, DIM(.4))
-        const bon = Math.sin(now / 700 + hs.y) > 0
-        glyph(bon ? "o" : "·", hs.antenna.x, hs.antenna.y - 1, bon ? AMBER(.8) : DIM(.2))
+      // house + antenna + beacon
+      const flick = Math.sin(now / 1300 + house.x) > .55
+      for (const c of spriteCells(house, SPRITES.house)) {
+        const bright = "[,],_,/,\\".includes(c.ch) ? .45 : .32
+        glyph(c.ch, c.cx, c.cy, DIM(bright + (flick && c.ch === "]" ? .15 : 0)), true)
       }
+      glyph("|", house.antenna.x, house.antenna.y, DIM(.4))
+      const bon = Math.sin(now / 700 + house.y) > 0
+      glyph(bon ? "o" : "·", house.antenna.x, house.antenna.y - 1, bon ? AMBER(.8) : DIM(.2))
       // man + phone (arm is part of the sprite)
-      if (man) for (const c of spriteCells(man, SPRITES.man)) glyph(c.ch, c.cx, c.cy, DIM(.55), true)
-      if (phone) {
-        const glow = Math.sin(now / 650) > 0
-        for (const c of spriteCells(phone, SPRITES.phone)) {
-          if (c.ch === ":") glyph(glow ? "▮" : "▪", c.cx, c.cy, CYAN(.7))
-          else glyph(c.ch, c.cx, c.cy, DIM(.6), phone.s === BIG)
-        }
+      for (const c of spriteCells(man, SPRITES.man)) glyph(c.ch, c.cx, c.cy, DIM(.55), true)
+      const glow = Math.sin(now / 650) > 0
+      for (const c of spriteCells(phone, SPRITES.phone)) {
+        if (c.ch === ":") glyph(glow ? "▮" : "▪", c.cx, c.cy, CYAN(.7))
+        else glyph(c.ch, c.cx, c.cy, DIM(.6), phone.s === BIG)
       }
     }
 
