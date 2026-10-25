@@ -90,7 +90,7 @@ describe('CasdoorAdminService', () => {
     expect(calls[0]).toMatchObject({ url: '/api/set-password', method: 'POST', cookie: 'casdoor_session_id=abc' });
     const form = new URLSearchParams(calls[0].body);
     expect(Object.fromEntries(form)).toEqual({
-      userOwner: 'built-in', userName: 'admin', oldPassword: 'admin-password-12', newPassword: 'new-password-12',
+      userOwner: 'built-in', userName: 'admin', oldPassword: '', newPassword: 'new-password-12',
     });
   });
 

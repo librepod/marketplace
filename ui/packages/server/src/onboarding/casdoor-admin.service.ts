@@ -75,8 +75,10 @@ export class CasdoorAdminService {
     return null;
   }
 
+  /** Verified against Casdoor 3.106: a signed-in admin needs no old password, and a stale
+   * one counts toward the sign-in lockout when two first runs race to set the same value. */
   async setAdminPassword(session: CasdoorSession, newPassword: string): Promise<void> {
-    await this.setPassword(session, 'built-in', 'admin', session.password, newPassword);
+    await this.setPassword(session, 'built-in', 'admin', '', newPassword);
   }
 
   /** The platform org. Nothing else creates it on a fresh device (casdoor-sso-controller
