@@ -43,6 +43,27 @@ cp -rf source dest          # NOT: cp -r source dest
 - `apt-get` - use `-y` flag
 - `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
 
+## CI Scripts: No Long Bash in Workflow YAML
+
+Each `run: |` step is a **fresh shell process** — variables do not cross step
+boundaries, and inline bash cannot be tested without pushing to CI.
+
+**The pattern:**
+- Multi-line logic lives in `scripts/<name>.sh`: `set -euo pipefail`, a usage
+  line, and `cd "$(dirname "$0")/.."` so it runs from anywhere.
+- The workflow step is one call: `run: bash scripts/<name>.sh "$ARG"`, with
+  workflow inputs passed via `env:` (not inline `${{ }}`).
+- Non-trivial scripts get `scripts/test-<name>.sh` — self-contained, builds a
+  throwaway fixture tree, `fail()` helper, `trap rm`. Run: `bash scripts/test-<name>.sh`.
+- Destructive actions (push, dispatch, publish) are opt-in flags (`--push`) so
+  the default invocation is a safe local dry run.
+
+Existing examples: `release-marketplace-ui.sh` + `test-release-marketplace-ui.sh`,
+`generate-catalog.sh` + `test-generate-catalog.sh`.
+
+Keep in YAML only what YAML must hold: step names, `env:` wiring, permissions,
+and one-line `run:` calls.
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:46cd31e7 -->
 ## Beads Issue Tracker
 
