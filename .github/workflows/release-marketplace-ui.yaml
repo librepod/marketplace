@@ -1,0 +1,129 @@
+name: Release Marketplace UI
+
+# One-click release: pick a bump level, get a full cut. Bumps the five pin
+# spots (ui/package.json + package-lock.json via `npm version`,
+# apps/marketplace-ui/metadata.yaml, infrastructure system-apps ref.tag,
+# overlay newTag), commits, tags marketplace-ui-vX.Y.Z, pushes, and dispatches
+# the publishes the bump implies — a GITHUB_TOKEN push fires no on:push
+# workflows, so the image (publish-marketplace-ui), the app artifact
+# (publish-apps), and the bootstrap artifact (publish-bootstrap — carries the
+# infra ref.tag) are dispatched explicitly. publish-catalog follows on its
+# own via workflow_run. Major releases stay manual (local checkout + edit),
+# as with release-bootstrap.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump level
+        type: choice
+        required: true
+        default: patch
+        options:
+          - patch
+          - minor
+
+# Serialize double-taps: a queued second run re-reads the bumped
+# package.json from fresh master instead of racing the first to the same
+# version. A collision that still slips through dies in the tag guard below.
+concurrency:
+  group: marketplace-ui-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write # push the bump commit + tag (via the checkout's credentials)
+  actions: write # dispatch the publish workflows
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Bump the five version pins
+        id: bump
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          CURRENT=$(node -p "require('./ui/package.json').version")
+          if ! [[ "$CURRENT" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::ui/package.json version '$CURRENT' is not bare X.Y.Z"; exit 1
+          fi
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+          NEXT="$MAJOR.$MINOR.$PATCH"
+
+          if git ls-remote --tags origin "refs/tags/marketplace-ui-v$NEXT" | grep -q .; then
+            echo "::error::Refusing to release: tag marketplace-ui-v$NEXT already exists"; exit 1
+          fi
+
+          # Pins 1+2: package.json and package-lock.json. npm keeps both
+          # lockfile version fields in sync — sed on a lockfile risks hitting
+          # dependency versions.
+          (cd ui && npm version "$NEXT" --no-git-tag-version)
+
+          # Pins 3-5: each pattern matches exactly one line in its file.
+          sed -i -E '0,/^  version:/s/^  version:.*/  version: "'"$NEXT"'"/' \
+            apps/marketplace-ui/metadata.yaml
+          sed -i -E 's/^    tag: ".*"/    tag: "'"$NEXT"'"/' \
+            infrastructure/system-apps/marketplace-ui.yaml
+          sed -i -E 's/newTag: ".*"/newTag: "'"$NEXT"'"/' \
+            apps/marketplace-ui/overlays/librepod/kustomization.yaml
+
+          # Drift guard: a pin missed here ships pins that disagree — the
+          # failure mode that wedges fresh bootstraps on an old UI. Require
+          # the new version in each YAML and exactly five changed files.
+          for f in apps/marketplace-ui/metadata.yaml \
+                   infrastructure/system-apps/marketplace-ui.yaml \
+                   apps/marketplace-ui/overlays/librepod/kustomization.yaml; do
+            grep -q "\"$NEXT\"" "$f" || { echo "::error::$f did not pick up $NEXT"; exit 1; }
+          done
+          EXPECTED=$(printf '%s\n' ui/package.json ui/package-lock.json \
+            apps/marketplace-ui/metadata.yaml \
+            infrastructure/system-apps/marketplace-ui.yaml \
+            apps/marketplace-ui/overlays/librepod/kustomization.yaml | sort)
+          ACTUAL=$(git status --porcelain | cut -c4- | sort)
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::Bump must modify exactly the five pin files; got:"
+            printf '%s\n' "$ACTUAL"
+            exit 1
+          fi
+
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+
+      - name: Commit, tag, push
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ui/package.json ui/package-lock.json apps/marketplace-ui/metadata.yaml \
+            infrastructure/system-apps/marketplace-ui.yaml \
+            apps/marketplace-ui/overlays/librepod/kustomization.yaml
+          git commit -m "release(marketplace-ui): v$VERSION"
+          git push origin master
+          git tag -a "marketplace-ui-v$VERSION" -m "marketplace-ui v$VERSION"
+          git push origin "marketplace-ui-v$VERSION"
+
+      - name: Dispatch the publishes the bump implies
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run publish-marketplace-ui.yaml --ref master
+          gh workflow run publish-bootstrap.yaml --ref master
+
+          # The app artifact pins image:<version>, so wait for the image
+          # build to finish before dispatching publish-apps — its own
+          # image-existence guard only polls for ~3 minutes, and a failed
+          # image build should stop the release here, not downstream.
+          sleep 15
+          RUN_ID=$(gh run list --workflow=publish-marketplace-ui.yaml \
+            --event workflow_dispatch --branch master --limit 1 \
+            --json databaseId --jq '.[0].databaseId')
+          gh run watch "$RUN_ID" --exit-status
+
+          gh workflow run publish-apps.yaml --ref master -f apps='["marketplace-ui"]'
