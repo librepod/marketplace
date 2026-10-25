@@ -174,6 +174,15 @@ describe('OnboardingService', () => {
       expect(t.kv.get('system', 'admin')?.password).toBe(first);
     });
 
+    it("startCasdoor stops retrying when Casdoor's admin password was changed outside: retries would trip its lockout", async () => {
+      vi.useFakeTimers();
+      const t = make('someone-elses-pw');
+      await t.kv.writeEntry('system', 'admin', { password: 'stored-0123456789' });
+      await t.service.startCasdoor();
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(t.casdoor.signIn).toHaveBeenCalledTimes(1);
+    });
+
     it('prepareCasdoor: org, group, and the recorded account joins admins', async () => {
       const t = await claimedWithAccount('owner');
       t.state.admins.clear();

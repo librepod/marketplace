@@ -186,7 +186,8 @@ export class BootstrapController {
         errors: [{ name: 'INIT_HOST', message: 'Only a host name or IPv4 address — no port, no http://' }],
       });
     }
-    return this.installed.install(app, { settings: answers });
+    // The wizard asks one question; INIT_PASSWORD is generated, never taken from the browser.
+    return this.installed.install(app, { settings: typeof host === 'string' ? { INIT_HOST: host } : {} });
   }
 
   @Get('ca')

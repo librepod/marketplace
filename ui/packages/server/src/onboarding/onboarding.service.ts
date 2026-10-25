@@ -66,6 +66,12 @@ export class OnboardingService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.prepareCasdoor();
     } catch (err) {
+      if (err instanceof ConflictException) {
+        // Retrying can't fix a password changed by hand, and each try's wrong sign-ins count
+        // toward Casdoor's lockout. The Account step reports it; a restart tries again.
+        this.logger.error(`${err.message}; not retrying`);
+        return;
+      }
       this.logger.warn(`Casdoor not ready (${(err as Error).message}); retrying in ${delayMs / 1000}s`);
       this.retry = setTimeout(() => void this.startCasdoor(Math.min(delayMs * 2, RETRY_MAX_MS)), delayMs);
       this.retry.unref();

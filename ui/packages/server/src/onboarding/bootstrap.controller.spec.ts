@@ -241,6 +241,12 @@ describe('BootstrapController.account', () => {
 });
 
 describe('BootstrapController.install', () => {
+  it('forwards only INIT_HOST: a browser-sent INIT_PASSWORD never reaches the installer', async () => {
+    const { controller, installed } = make();
+    await controller.install({ app: 'wg-easy', settings: { INIT_HOST: '203.0.113.7', INIT_PASSWORD: 'short' } });
+    expect(installed.install).toHaveBeenCalledWith('wg-easy', { settings: { INIT_HOST: '203.0.113.7' } });
+  });
+
   it('forwards the answers unchanged: no INIT_PASSWORD is injected', async () => {
     const { controller, installed } = make();
     await controller.install({ app: 'wg-easy', settings: { INIT_HOST: '203.0.113.7' } });
