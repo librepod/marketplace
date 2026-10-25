@@ -35,7 +35,7 @@ export function checkPassword(value: unknown): string {
   return value;
 }
 
-/** Claim, resume and account (spec §8). HTTP lives in BootstrapController. */
+/** Claim, account and the Casdoor sync behind them (spec §8). HTTP lives in BootstrapController. */
 @Injectable()
 export class OnboardingService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OnboardingService.name);
@@ -113,38 +113,20 @@ export class OnboardingService implements OnModuleInit, OnModuleDestroy {
     return session;
   }
 
-  /** Every step is idempotent, so a failed claim is simply retried. */
-  async claim(input: { code: unknown; password: unknown }, source: string): Promise<OnboardingRecord> {
+  /** The setup code is the only claim credential. Open → claimed; on a claimed device
+   * the right code lets another browser in without a write. */
+  async claim(input: { code: unknown }, source: string): Promise<OnboardingRecord> {
     const record = await this.stored(this.store.record());
-    if (record.state === 'claimed') {
-      throw new ConflictException('This device is already claimed — enter the setup code to continue');
-    }
     if (record.state === 'finished') throw new ConflictException('This device is already set up');
     this.checkCode(input.code, record, source);
-    const password = checkPassword(input.password);
-
-    // The stored admin password (present after a reset), the factory one, or the new
-    // one itself — the last makes a retry after a crash between set-password and the
-    // OpenBao write below succeed.
-    const stored = await this.stored(this.store.adminPassword());
-    const session = await this.casdoor.signIn([stored ?? '', this.casdoor.factoryPassword, password]);
-    if (!session) throw new ConflictException(CHANGED_OUTSIDE);
-    if (session.password !== password) await this.casdoor.setAdminPassword(session, password);
-    await this.stored(this.store.saveAdminPassword(password));
-    await this.casdoor.ensureOrganization(session);
-
+    if (record.state === 'claimed') {
+      this.logger.log(`setup resumed from ${source}`);
+      return record;
+    }
     const claimed: OnboardingRecord = { ...record, state: 'claimed', claimedAt: new Date().toISOString() };
     await this.stored(this.store.save(claimed));
     this.logger.log(`device claimed from ${source}`);
     return claimed;
-  }
-
-  async resume(code: unknown, source: string): Promise<OnboardingRecord> {
-    const record = await this.stored(this.store.record());
-    if (record.state === 'open') throw new ConflictException('This device is not claimed yet — claim it with the setup code');
-    if (record.state === 'finished') throw new ConflictException('This device is already set up');
-    this.checkCode(code, record, source);
-    return record;
   }
 
   /** Creates the personal user, or keeps the recorded one (after a reset), setting a
@@ -177,13 +159,6 @@ export class OnboardingService implements OnModuleInit, OnModuleDestroy {
     const next: OnboardingRecord = { ...record, account: username, accountGeneration: record.generation };
     await this.stored(this.store.save(next));
     return next;
-  }
-
-  /** The admin password from system/admin. */
-  async adminPassword(): Promise<string> {
-    const password = await this.stored(this.store.adminPassword());
-    if (!password) throw new ServiceUnavailableException("The admin password isn't available — try again in a minute.");
-    return password;
   }
 
   private checkCode(code: unknown, record: OnboardingRecord, source: string): void {

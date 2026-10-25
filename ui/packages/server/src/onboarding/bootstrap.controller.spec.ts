@@ -55,7 +55,6 @@ function make(o: {
   };
   const onboarding = {
     claim: vi.fn(async () => claimed),
-    resume: vi.fn(async () => claimed),
     account: vi.fn(async () => claimed),
   };
   const casdoor = { reachable: vi.fn(async () => o.reachable ?? true) };
@@ -204,12 +203,12 @@ describe('BootstrapController.status', () => {
   });
 });
 
-describe('BootstrapController.claim / resume', () => {
+describe('BootstrapController.claim', () => {
   it('claim sets the onboarding cookie for the record\'s generation — httpOnly, lax, not Secure', async () => {
     const { controller, onboarding } = make();
     const res = fakeRes();
-    await expect(controller.claim({ code: 'c', password: 'p' }, req('192.168.1.50'), res)).resolves.toEqual({ ok: true });
-    expect(onboarding.claim).toHaveBeenCalledWith({ code: 'c', password: 'p' }, '10.0.0.9');
+    await expect(controller.claim({ code: 'c' }, req('192.168.1.50'), res)).resolves.toEqual({ ok: true });
+    expect(onboarding.claim).toHaveBeenCalledWith({ code: 'c' }, '10.0.0.9');
     const [name, token, opts] = res.cookie.mock.calls[0];
     expect(name).toBe('mp_onboarding');
     expect(session.verify(token)).toMatchObject({ sub: 'onboarding', generation: 3 });
@@ -219,25 +218,17 @@ describe('BootstrapController.claim / resume', () => {
   it('logs the first X-Forwarded-For address as the source', async () => {
     const { controller, onboarding } = make();
     await controller.claim({}, req('192.168.1.50', {}, { 'x-forwarded-for': '192.168.1.20, 10.42.0.1' }), fakeRes());
-    expect(onboarding.claim).toHaveBeenCalledWith({ code: undefined, password: undefined }, '192.168.1.20');
+    expect(onboarding.claim).toHaveBeenCalledWith({ code: undefined }, '192.168.1.20');
   });
 
   it('a refused claim sets no cookie', async () => {
     const { controller, onboarding } = make();
     onboarding.claim.mockRejectedValueOnce(new ConflictException('already claimed'));
     const res = fakeRes();
-    await expect(controller.claim({ code: 'c', password: 'p' }, req('192.168.1.50'), res)).rejects.toThrow(
+    await expect(controller.claim({ code: 'c' }, req('192.168.1.50'), res)).rejects.toThrow(
       ConflictException,
     );
     expect(res.cookie).not.toHaveBeenCalled();
-  });
-
-  it('resume sets the cookie when the code is right', async () => {
-    const { controller, onboarding } = make();
-    const res = fakeRes();
-    await controller.resume({ code: 'c' }, req('192.168.1.50'), res);
-    expect(onboarding.resume).toHaveBeenCalledWith('c', '10.0.0.9');
-    expect(res.cookie).toHaveBeenCalledWith('mp_onboarding', expect.any(String), expect.anything());
   });
 });
 

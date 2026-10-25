@@ -145,26 +145,15 @@ export class BootstrapController {
     return status;
   }
 
+  /** The setup code claims an open device and lets another browser into a claimed one. */
   @Post('claim')
   @HttpCode(200)
   async claim(
-    @Body() body: { code?: unknown; password?: unknown } | undefined,
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<{ ok: true }> {
-    const record = await this.onboarding.claim({ code: body?.code, password: body?.password }, sourceOf(req));
-    this.setOnboardingCookie(res, record.generation);
-    return { ok: true };
-  }
-
-  @Post('resume')
-  @HttpCode(200)
-  async resume(
     @Body() body: { code?: unknown } | undefined,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<{ ok: true }> {
-    const record = await this.onboarding.resume(body?.code, sourceOf(req));
+    const record = await this.onboarding.claim({ code: body?.code }, sourceOf(req));
     this.setOnboardingCookie(res, record.generation);
     return { ok: true };
   }

@@ -25,7 +25,7 @@ export function isOnboardingSession(
 
 /**
  * Gates the wizard's account, VPN install and WireGuard endpoints. The cookie is set
- * only by the claim and by resume (both need the setup code); it is bound to the
+ * only by the claim (which needs the setup code); it is bound to the
  * record's generation, so `reset-onboarding` retires every cookie issued before it.
  * Fails closed: no answer from OpenBao is a 503.
  */
