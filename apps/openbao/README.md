@@ -53,7 +53,7 @@ idempotently:
      `marketplace-ui` (SA `marketplace-ui`, ns `marketplace-ui`):
      **create/update** `apps/*`, and **create/update/read**
      `system/marketplace-ui/*` (the first-run onboarding record) and
-     `system/admin` (the admin password)
+     `system/admin` (Casdoor's machine-generated admin password)
    - `step-certificates-write-apps` + `step-ca-backup` ← role
      `step-certificates` (SA `step-ca-bootstrap-step-issuer`, ns `step-ca`):
      **create/update** `apps/step-ca` (public certs) and `system/step-ca`

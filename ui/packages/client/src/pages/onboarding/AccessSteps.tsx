@@ -16,7 +16,7 @@ export function WelcomeStep({ onBegin }: { onBegin: () => void }) {
         and laptop to reach it by name.
       </p>
       <ul className="mt-4 space-y-1 text-sm text-muted-foreground">
-        <li>1 · Claim it — the setup code and an admin password</li>
+        <li>1 · Claim it — with the setup code</li>
         <li>2 · Your account — the sign-in you use every day</li>
         <li>3 · Reach it — WireGuard, or your own connectivity</li>
         <li>4 · Trust it — install its root certificate</li>
@@ -70,20 +70,18 @@ function PasswordFields({ idPrefix, label, password, confirm, setPassword, setCo
   )
 }
 
-/** The setup code proves ownership; the admin password becomes the device's master key. */
-export function ClaimStep({ onClaimed }: { onClaimed: () => void }) {
+/** The setup code is the only claim credential. On a claimed device (another browser,
+ *  or an expired setup cookie) the same code lets this browser back in. */
+export function ClaimStep({ resuming, onClaimed }: { resuming: boolean; onClaimed: () => void }) {
   const [code, setCode] = useState("")
-  const [password, setPassword] = useState("")
-  const [confirm, setConfirm] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const ready = code.trim() !== "" && validPassword(password) && password === confirm
 
   async function submit(e: FormEvent) {
     e.preventDefault()
     setBusy(true); setError(null)
     try {
-      const res = await postJson("/api/bootstrap/claim", { code, password })
+      const res = await postJson("/api/bootstrap/claim", { code })
       if (res.ok) {
         onClaimed()
         return
@@ -98,58 +96,18 @@ export function ClaimStep({ onClaimed }: { onClaimed: () => void }) {
 
   return (
     <section>
-      <h1 className="text-2xl font-semibold">Claim your device</h1>
+      <h1 className="text-2xl font-semibold">{resuming ? "Continue setting up" : "Claim your device"}</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        The setup code proves this device is yours. Then set the admin password — the master
-        key for this device, and the default admin password of apps that ship one. Keep it
-        somewhere safe.
+        {resuming
+          ? "Setup has started on this device. Enter the setup code to continue in this browser."
+          : "The setup code proves this device is yours."}
       </p>
       <form className="mt-6 space-y-4" onSubmit={submit}>
         <SetupCodeField id="claim-code" value={code} onChange={setCode} />
-        <PasswordFields idPrefix="claim" label="Admin password" password={password} confirm={confirm}
-          setPassword={setPassword} setConfirm={setConfirm} />
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        <Button type="submit" disabled={busy || !ready}>{busy ? "Claiming…" : "Claim this device"}</Button>
-      </form>
-    </section>
-  )
-}
-
-/** Claimed, but this browser isn't part of the setup yet (a new browser, or its
- *  setup cookie expired): the setup code lets it back in. */
-export function ResumeScreen({ onResumed }: { onResumed: () => void }) {
-  const [code, setCode] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  async function submit(e: FormEvent) {
-    e.preventDefault()
-    setBusy(true); setError(null)
-    try {
-      const res = await postJson("/api/bootstrap/resume", { code })
-      if (res.ok) {
-        onResumed()
-        return
-      }
-      setError(res.message ?? `checking the code failed (${res.status})`)
-    } catch (err) {
-      setError(errorText(err))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <section>
-      <h1 className="text-2xl font-semibold">Continue setting up</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        This device is claimed, but setup isn't finished — and this browser isn't part of it
-        yet. Enter the setup code to pick up where you left off.
-      </p>
-      <form className="mt-6 space-y-4" onSubmit={submit}>
-        <SetupCodeField id="resume-code" value={code} onChange={setCode} />
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        <Button type="submit" disabled={busy || code.trim() === ""}>{busy ? "Checking…" : "Continue"}</Button>
+        <Button type="submit" disabled={busy || code.trim() === ""}>
+          {busy ? "Checking…" : resuming ? "Continue" : "Claim this device"}
+        </Button>
       </form>
     </section>
   )
@@ -173,6 +131,7 @@ export function AccountStep({ baseDomain, previousAccount, onDone, onSessionLost
   const keeping = mode === "keep" && previousAccount != null
   const name = keeping ? (previousAccount ?? "") : username
   const needsPassword = !keeping || changePassword
+  const retypedKept = !keeping && previousAccount != null && username === previousAccount
   const ready =
     USERNAME.test(name) && name !== "admin" && (!needsPassword || (validPassword(password) && password === confirm))
 
@@ -201,8 +160,8 @@ export function AccountStep({ baseDomain, previousAccount, onDone, onSessionLost
     <section>
       <h1 className="text-2xl font-semibold">Create your account</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        This is how you sign in every day — here and in every app you install. Keep{" "}
-        <span className="font-mono">admin</span> for emergencies.
+        This is how you sign in every day — here and in every app you install. It's the only
+        password you'll need.
       </p>
       {previousAccount && (
         <fieldset className="mt-4 space-y-2 text-sm">
@@ -232,6 +191,11 @@ export function AccountStep({ baseDomain, previousAccount, onDone, onSessionLost
               Lowercase letters and digits, joined by single dots or dashes. You will sign in as{" "}
               <span className="font-mono">{username || "name"}@{baseDomain}</span>.
             </p>
+            {retypedKept && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {username} is your existing account — this sets a new password for it.
+              </p>
+            )}
           </div>
         )}
         {needsPassword && (
@@ -240,7 +204,7 @@ export function AccountStep({ baseDomain, previousAccount, onDone, onSessionLost
         )}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <Button type="submit" disabled={busy || !ready}>
-          {busy ? "Saving…" : keeping ? "Continue" : "Create account"}
+          {busy ? "Saving…" : keeping ? "Continue" : retypedKept ? "Set new password" : "Create account"}
         </Button>
       </form>
     </section>

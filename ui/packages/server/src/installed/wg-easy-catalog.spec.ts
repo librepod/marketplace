@@ -7,8 +7,8 @@ import { resolveSettings } from './install-settings';
 
 /**
  * wg-easy's catalog entry is a contract with the first-run wizard: the wizard
- * answers INIT_PASSWORD (server-side, from OpenBao system/admin) and INIT_HOST
- * (the endpoint the owner confirmed), and the release must substitute only
+ * answers only INIT_HOST (the endpoint the owner confirmed); INIT_PASSWORD is
+ * generated at install, and the release must substitute only
  * the two platform variables the installer fills. The app lives in the
  * marketplace repo, five levels up from packages/server/src/installed.
  */
@@ -20,10 +20,13 @@ const settings = metadata.spec.settings;
 const item = (name: string) => settings.items?.find((i) => i.name === name);
 
 describe('wg-easy catalog entry', () => {
-  it('asks for the admin password with no default — master\'s "change-me" was too short to ever log in', () => {
-    expect(item('INIT_PASSWORD')).toMatchObject({ required: true, sensitive: true });
-    expect(item('INIT_PASSWORD')?.default).toBeUndefined();
-    expect(item('INIT_PASSWORD')?.description).toMatch(/12 characters/);
+  it('generates the admin password: never asked, 32 characters, kept across reinstalls', () => {
+    expect(item('INIT_PASSWORD')).toMatchObject({ sensitive: true, generate: { length: 32 } });
+    expect(item('INIT_PASSWORD')?.required).toBeFalsy();
+    const fresh = resolveSettings(settings, { settings: { INIT_HOST: '' } });
+    expect(fresh.ok && fresh.values.INIT_PASSWORD).toMatch(/^[0-9a-f]{32}$/);
+    const again = resolveSettings(settings, { settings: {} }, { INIT_PASSWORD: 'stored-value-123456' });
+    expect(again).toEqual({ ok: true, values: { INIT_PASSWORD: 'stored-value-123456' } });
   });
 
   it('asks for an optional endpoint host with no default', () => {
@@ -33,20 +36,13 @@ describe('wg-easy catalog entry', () => {
   });
 
   it('an empty endpoint answer never becomes an empty key in the settings Secret', () => {
-    const resolved = resolveSettings(settings, { settings: { INIT_PASSWORD: 'correct-horse-12', INIT_HOST: '' } });
-    expect(resolved).toEqual({ ok: true, values: { INIT_PASSWORD: 'correct-horse-12' } });
+    const resolved = resolveSettings(settings, { settings: { INIT_HOST: '' } }, { INIT_PASSWORD: 'stored-value-123456' });
+    expect(resolved).toEqual({ ok: true, values: { INIT_PASSWORD: 'stored-value-123456' } });
   });
 
   it('a non-empty endpoint answer is stored, so it overrides the ConfigMap default', () => {
-    const resolved = resolveSettings(settings, { settings: { INIT_PASSWORD: 'correct-horse-12', INIT_HOST: '203.0.113.7' } });
-    expect(resolved).toEqual({ ok: true, values: { INIT_PASSWORD: 'correct-horse-12', INIT_HOST: '203.0.113.7' } });
-  });
-
-  it('no admin password is an error, not a fallback', () => {
-    expect(resolveSettings(settings, { settings: {} })).toEqual({
-      ok: false,
-      errors: [{ name: 'INIT_PASSWORD', message: 'Required' }],
-    });
+    const resolved = resolveSettings(settings, { settings: { INIT_HOST: '203.0.113.7' } }, { INIT_PASSWORD: 'stored-value-123456' });
+    expect(resolved).toEqual({ ok: true, values: { INIT_PASSWORD: 'stored-value-123456', INIT_HOST: '203.0.113.7' } });
   });
 
   it('the release substitutes exactly BASE_DOMAIN and DEVICE_IP', () => {

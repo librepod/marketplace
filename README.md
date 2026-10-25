@@ -173,12 +173,11 @@ system apps are up, open `http://<device-ip>`.
    kubectl -n marketplace-ui logs deploy/marketplace-ui | grep "setup code"
    ```
 
-2. **Claim the device** with the code and an admin password (at least 12
-   characters, no spaces). `admin` is the device's master account: its password
-   is also the default admin password of apps that ship one (e.g. wg-easy), and
-   it is kept in OpenBao at `system/admin`.
+2. **Claim the device** with the code. That is all it takes.
 3. **Create your account** — the one you sign in with every day
-   (`<name>@<your-domain>`).
+   (`<name>@<your-domain>`). Its password is the only one you need; the
+   machine-generated admin credentials stay inside the device. You become a
+   member of the `librepod/admins` group.
 4. **Choose how your devices reach it by name:** set up WireGuard (the wizard
    installs it and gives you a QR code), or bring your own (Tailscale/Headscale,
    a tunnel, or your own DNS for `<your-domain>` and `*.<your-domain>`).
@@ -192,8 +191,8 @@ warning — the root CA isn't trusted yet), or an SSH tunnel:
 `ssh -L 8080:<device-private-ip>:80 you@<device-public-ip>`, then open
 `http://127.0.0.1:8080`.
 
-**Lost a password or a VPN key, or abandoned setup?** Reopen onboarding with a
-new setup code. Apps, data, users and VPN peers stay:
+**Lost a password or a VPN key, or abandoned setup?** `reset-onboarding` gives a new setup code and reopens the wizard. It keeps your account, apps, app data, VPN peers and every machine credential. To recover a forgotten password: run it, enter the new code, keep your username, and set a new password.
+
 
 ```bash
 kubectl -n marketplace-ui exec deploy/marketplace-ui -- reset-onboarding

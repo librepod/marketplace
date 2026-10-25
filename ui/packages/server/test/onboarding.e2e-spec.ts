@@ -24,8 +24,6 @@ import { fakeCasdoor } from './fixtures/fake-casdoor';
 // and SessionService; OpenBao, Casdoor, the installer and wg-easy are faked.
 process.env.SESSION_SECRET = 'onboarding-e2e-secret';
 
-const ADMIN = 'admin-password-12';
-
 async function boot() {
   const kv = new FakeKv();
   const { casdoor, state } = fakeCasdoor();
@@ -54,6 +52,8 @@ async function boot() {
   const app = moduleRef.createNestApplication();
   app.use(cookieParser());
   await app.init();
+  // init starts the Casdoor sync in the background; a test's first claim must not race it.
+  await vi.waitFor(() => expect(state.groupExists).toBe(true));
   const store = app.get(OnboardingStore);
   return { app, server: app.getHttpServer(), kv, casdoor, state, installed, store };
 }
@@ -85,17 +85,16 @@ describe('Onboarding API (e2e)', () => {
     expect(fresh.headers['set-cookie']).toBeUndefined();
 
     const { code } = await t.store.record();
-    await request(t.server).post('/bootstrap/claim').send({ code: 'AAAA-BBBB-CCCC', password: ADMIN }).expect(403);
+    await request(t.server).post('/bootstrap/claim').send({ code: 'AAAA-BBBB-CCCC' }).expect(403);
     const claim = await request(t.server)
       .post('/bootstrap/claim')
-      .send({ code: formatSetupCode(code).toLowerCase(), password: ADMIN })
+      .send({ code: formatSetupCode(code).toLowerCase() })
       .expect(200);
     const setCookie = (claim.headers['set-cookie'] as unknown as string[]).find((c) => c.startsWith('mp_onboarding='))!;
     expect(setCookie).toMatch(/HttpOnly/i);
     expect(setCookie).toMatch(/SameSite=Lax/i);
     expect(setCookie).not.toMatch(/Secure/i);
     const cookie = onboardingCookie(claim);
-    expect(t.state.adminPassword).toBe(ADMIN);
 
     const mine = await request(t.server).get('/bootstrap/status').set('Cookie', cookie).expect(200);
     // supertest's Host is 127.0.0.1 — loopback, so the endpoint falls back to DEVICE_IP
@@ -112,33 +111,36 @@ describe('Onboarding API (e2e)', () => {
       .send({ username: 'alex', password: 'personal-pass-12' })
       .expect(200);
     expect(t.state.users.get('alex')).toBe('personal-pass-12');
+    expect(t.state.admins.has('alex')).toBe(true);
+    expect(t.state.adminPassword).toBe(t.kv.get('system', 'admin')?.password);
 
     await request(t.server)
       .post('/bootstrap/install')
       .set('Cookie', cookie)
-      .send({ app: 'wg-easy', settings: { INIT_HOST: '203.0.113.7', INIT_PASSWORD: 'not-from-the-browser' } })
+      .send({ app: 'wg-easy', settings: { INIT_HOST: '203.0.113.7' } })
       .expect(200);
     expect(t.installed.install).toHaveBeenCalledWith('wg-easy', {
-      settings: { INIT_HOST: '203.0.113.7', INIT_PASSWORD: ADMIN },
+      settings: { INIT_HOST: '203.0.113.7' },
     });
     expect((await request(t.server).get('/bootstrap/status').set('Cookie', cookie)).body.account).toBe('alex');
 
     // What the SSO callback runs (AuthController): the first sign-in since the claim.
-    expect(await t.store.finishIfClaimed()).toBe(true);
+    expect(await t.store.finishIfClaimed('alex')).toBe(true);
     expect((await request(t.server).get('/bootstrap/status').set('Cookie', cookie)).body).toMatchObject({
       state: 'finished', session: false, account: null,
     });
     await request(t.server).post('/bootstrap/account').set('Cookie', cookie).send({ username: 'alex' }).expect(401);
     await request(t.server).post('/bootstrap/install').set('Cookie', cookie).send({ app: 'wg-easy' }).expect(401);
     await request(t.server).get('/bootstrap/wireguard').set('Cookie', cookie).expect(401);
-    await request(t.server).post('/bootstrap/claim').send({ code, password: ADMIN }).expect(409);
-    await request(t.server).post('/bootstrap/resume').send({ code }).expect(409);
+    await request(t.server).post('/bootstrap/claim').send({ code }).expect(409);
+    await request(t.server).post('/bootstrap/claim').send({ code }).expect(409);
+    await request(t.server).post('/bootstrap/resume').send({ code }).expect(404);
   });
 
   it('a reset reopens onboarding with a new code and retires every older cookie', async () => {
     const first = (await t.store.record()).code;
     const cookie = onboardingCookie(
-      await request(t.server).post('/bootstrap/claim').send({ code: first, password: ADMIN }).expect(200),
+      await request(t.server).post('/bootstrap/claim').send({ code: first }).expect(200),
     );
     await request(t.server)
       .post('/bootstrap/account')
@@ -152,12 +154,11 @@ describe('Onboarding API (e2e)', () => {
       state: 'open', session: false,
     });
     await request(t.server).post('/bootstrap/account').set('Cookie', cookie).send({ username: 'alex' }).expect(401);
-    await request(t.server).post('/bootstrap/claim').send({ code: first, password: 'new-admin-pass-12' }).expect(403);
+    await request(t.server).post('/bootstrap/claim').send({ code: first }).expect(403);
 
     const fresh = onboardingCookie(
-      await request(t.server).post('/bootstrap/claim').send({ code: second, password: 'new-admin-pass-12' }).expect(200),
+      await request(t.server).post('/bootstrap/claim').send({ code: second }).expect(200),
     );
-    expect(t.state.adminPassword).toBe('new-admin-pass-12');
     expect((await request(t.server).get('/bootstrap/status').set('Cookie', fresh)).body).toMatchObject({
       state: 'claimed', session: true, account: null, previousAccount: 'alex',
     });
@@ -170,24 +171,24 @@ describe('Onboarding API (e2e)', () => {
     expect(t.state.users.get('alex')).toBe('brand-new-pass-12');
   });
 
-  it('resume: the right code brings another browser back into a claimed setup', async () => {
+  it('claimed: the right code gives another browser its own cookie; the first keeps working', async () => {
     const { code } = await t.store.record();
-    await request(t.server).post('/bootstrap/claim').send({ code, password: ADMIN }).expect(200);
-    await request(t.server).post('/bootstrap/resume').send({ code: 'AAAA-BBBB-CCCC' }).expect(403);
-    const cookie = onboardingCookie(await request(t.server).post('/bootstrap/resume').send({ code }).expect(200));
-    expect((await request(t.server).get('/bootstrap/status').set('Cookie', cookie)).body.session).toBe(true);
+    const first = onboardingCookie(await request(t.server).post('/bootstrap/claim').send({ code }).expect(200));
+    await request(t.server).post('/bootstrap/claim').send({ code: 'AAAA-BBBB-CCCC' }).expect(403);
+    const second = onboardingCookie(await request(t.server).post('/bootstrap/claim').send({ code }).expect(200));
+    for (const cookie of [first, second]) {
+      expect((await request(t.server).get('/bootstrap/status').set('Cookie', cookie)).body.session).toBe(true);
+    }
   });
 
   it('malformed or missing bodies are 4xx, never 500', async () => {
     const { code } = await t.store.record();
     await request(t.server).post('/bootstrap/claim').expect(403);
-    await request(t.server).post('/bootstrap/claim').send({ code: 42, password: ADMIN }).expect(403);
-    await request(t.server).post('/bootstrap/claim').send({ code, password: 123456789012 }).expect(400);
-    await request(t.server).post('/bootstrap/claim').send({ code, password: 'elevenchars' }).expect(400);
+    await request(t.server).post('/bootstrap/claim').send({ code: 42 }).expect(403);
     const cookie = onboardingCookie(
-      await request(t.server).post('/bootstrap/claim').send({ code, password: ADMIN }).expect(200),
+      await request(t.server).post('/bootstrap/claim').send({ code }).expect(200),
     );
-    await request(t.server).post('/bootstrap/resume').expect(403);
+    await request(t.server).post('/bootstrap/claim').expect(403);
     await request(t.server).post('/bootstrap/account').set('Cookie', cookie).expect(400);
     await request(t.server).post('/bootstrap/account').set('Cookie', cookie).send({ username: ['alex'] }).expect(400);
     await request(t.server).post('/bootstrap/install').set('Cookie', cookie).expect(400);
@@ -196,16 +197,16 @@ describe('Onboarding API (e2e)', () => {
     expect(t.installed.install).not.toHaveBeenCalled();
   });
 
-  it('OpenBao down: status says waiting; resume and cookie-gated calls are 503', async () => {
+  it('OpenBao down: status says waiting; claim and cookie-gated calls are 503', async () => {
     const { code } = await t.store.record();
     const cookie = onboardingCookie(
-      await request(t.server).post('/bootstrap/claim').send({ code, password: ADMIN }).expect(200),
+      await request(t.server).post('/bootstrap/claim').send({ code }).expect(200),
     );
     t.kv.failWith = new OpenBaoUnavailableError('sealed');
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(Date.now() + 6_000); // past the store's 5-second cache
     expect((await request(t.server).get('/bootstrap/status')).body.state).toBe('waiting');
-    await request(t.server).post('/bootstrap/resume').send({ code }).expect(503);
+    await request(t.server).post('/bootstrap/claim').send({ code }).expect(503);
     await request(t.server)
       .post('/bootstrap/account')
       .set('Cookie', cookie)

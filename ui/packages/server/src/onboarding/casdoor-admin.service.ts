@@ -12,6 +12,9 @@ export interface CasdoorSession {
   password: string;
 }
 
+/** The org's group whose members administer the platform. */
+const ADMINS_GROUP = 'admins';
+
 /** Upper bound on one Casdoor call: a hung Casdoor must not hang the wizard. */
 const TIMEOUT_MS = 10_000;
 
@@ -28,7 +31,8 @@ export class CasdoorAdminService {
   private readonly org = process.env.CASDOOR_ORG_NAME ?? 'librepod';
   private readonly baseDomain = process.env.BASE_DOMAIN ?? 'libre.pod';
 
-  /** Casdoor's factory admin password; the casdoor-sso-controller env carries the same value. */
+  /** Casdoor's factory admin password, replaced at marketplace-ui's first start. The
+   * casdoor-sso-controller still uses it for its first key mint. */
   get factoryPassword(): string {
     return process.env.CASDOOR_ADMIN_DEFAULT_PASSWORD ?? '123';
   }
@@ -71,8 +75,10 @@ export class CasdoorAdminService {
     return null;
   }
 
+  /** Verified against Casdoor 3.106: a signed-in admin needs no old password, and a stale
+   * one counts toward the sign-in lockout when two first runs race to set the same value. */
   async setAdminPassword(session: CasdoorSession, newPassword: string): Promise<void> {
-    await this.setPassword(session, 'built-in', 'admin', session.password, newPassword);
+    await this.setPassword(session, 'built-in', 'admin', '', newPassword);
   }
 
   /** The platform org. Nothing else creates it on a fresh device (casdoor-sso-controller
@@ -90,13 +96,48 @@ export class CasdoorAdminService {
     });
   }
 
+  /** Group ids in `user.groups` and the token's `groups` claim are `<org>/<name>`. */
+  get adminsGroupId(): string {
+    return `${this.org}/${ADMINS_GROUP}`;
+  }
+
+  /** The top-level `admins` group of the platform org; nothing else creates it. */
+  async ensureGroup(session: CasdoorSession): Promise<void> {
+    if (await this.getJson(session, `/api/get-group?id=${this.adminsGroupId}`)) return;
+    await this.postJson(session, '/api/add-group', {
+      owner: this.org,
+      name: ADMINS_GROUP,
+      displayName: 'Admins',
+      type: 'Virtual',
+      parentId: this.org,
+      isTopGroup: true,
+      isEnabled: true,
+    });
+  }
+
+  /** Adds an existing user to `admins`; false = no such user. Posts the user as fetched with
+   * columns=groups, so Casdoor rewrites only the memberships, not the password or profile. */
+  async ensureInGroup(session: CasdoorSession, name: string): Promise<boolean> {
+    const id = `${encodeURIComponent(this.org)}/${encodeURIComponent(name)}`;
+    const user = (await this.getJson(session, `/api/get-user?id=${id}`)) as { groups?: string[] } | null;
+    if (!user) return false;
+    const groups = user.groups ?? [];
+    if (!groups.includes(this.adminsGroupId)) {
+      await this.postJson(session, `/api/update-user?id=${id}&columns=groups`, {
+        ...user,
+        groups: [...groups, this.adminsGroupId],
+      });
+    }
+    return true;
+  }
+
   async getUser(session: CasdoorSession, name: string): Promise<{ name: string } | null> {
     const id = `${encodeURIComponent(this.org)}/${encodeURIComponent(name)}`;
     return (await this.getJson(session, `/api/get-user?id=${id}`)) as { name: string } | null;
   }
 
   /** A personal user, `<name>@<base-domain>`: admin of the platform org, not of Casdoor. */
-  async addUser(session: CasdoorSession, name: string, password: string): Promise<void> {
+  async addUser(session: CasdoorSession, name: string, password: string, groups: string[] = []): Promise<void> {
     await this.postJson(session, '/api/add-user', {
       owner: this.org,
       name,
@@ -105,6 +146,7 @@ export class CasdoorAdminService {
       password,
       isAdmin: true,
       type: 'normal-user',
+      groups,
     });
   }
 

@@ -7,11 +7,11 @@ import { OpenBaoClient } from '../installed/openbao.client';
  * route accepts `Authorization: Basic admin:<password>` (verified against
  * v15.4.0), so this is stateless.
  *
- * wg-easy is a regular catalog app that sets itself up: its install answer
- * INIT_PASSWORD (OpenBao apps/wg-easy, written by InstalledService.install)
+ * wg-easy is a regular catalog app that sets itself up: its generated install
+ * setting INIT_PASSWORD (OpenBao apps/wg-easy, written by InstalledService.install)
  * plus INIT_HOST/INIT_PORT from its rendered ConfigMap complete its own
- * unattended first-boot setup. So the API credential is simply that answer,
- * read on every request — no copy is kept, and a reinstall with a new answer
+ * unattended first-boot setup. So the API credential is simply that setting,
+ * read on every request — no copy is kept, and a reinstall that regenerates it
  * is picked up at once. If the owner later changes the password in wg-easy's
  * own UI, this copy goes stale and the wizard's peer calls fail with the 401
  * message below.

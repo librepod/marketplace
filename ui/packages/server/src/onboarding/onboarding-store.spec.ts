@@ -167,20 +167,42 @@ describe('OnboardingStore', () => {
     it('finishIfClaimed() finishes a claimed record once, and is a no-op otherwise', async () => {
       const { store, kv } = makeStore();
       const open = await store.record();
-      expect(await store.finishIfClaimed()).toBe(false);
-      await store.save({ ...open, state: 'claimed', claimedAt: '2026-10-14T10:00:00.000Z' });
-      expect(await store.finishIfClaimed()).toBe(true);
+      expect(await store.finishIfClaimed('owner')).toBe(false);
+      await store.save({ ...open, state: 'claimed', account: 'owner', claimedAt: '2026-10-14T10:00:00.000Z' });
+      expect(await store.finishIfClaimed('owner')).toBe(true);
       expect(kv.get('system', RECORD)).toMatchObject({ state: 'finished', finishedAt: expect.any(String) });
-      expect(await store.finishIfClaimed()).toBe(false);
+      expect(await store.finishIfClaimed('owner')).toBe(false);
+    });
+
+    it('finishIfClaimed() finishes only for the recorded account', async () => {
+      const { store } = makeStore();
+      const open = await store.record();
+      await store.save({ ...open, state: 'claimed', account: 'owner', claimedAt: '2026-10-14T10:00:00.000Z' });
+      expect(await store.finishIfClaimed('someone-else')).toBe(false);
+      expect(await store.finishIfClaimed('owner')).toBe(true);
+    });
+
+    it('finishIfClaimed() never finishes a claimed record with no account yet', async () => {
+      const { store } = makeStore();
+      const open = await store.record();
+      await store.save({ ...open, state: 'claimed', account: null, claimedAt: '2026-10-14T10:00:00.000Z' });
+      expect(await store.finishIfClaimed('owner')).toBe(false);
+    });
+
+    it('saveAdminPassword() with cas 0 refuses to overwrite an existing password', async () => {
+      const { store } = makeStore();
+      await store.saveAdminPassword('first-0123456789', { cas: 0 });
+      await expect(store.saveAdminPassword('second-012345678', { cas: 0 })).rejects.toThrow(OpenBaoCasMismatchError);
+      expect(await store.adminPassword()).toBe('first-0123456789');
     });
 
     it('only a sign-in since the claim finishes — an older session must not end a reopened wizard', async () => {
       const { store } = makeStore();
       const open = await store.record();
       const claimedAt = Date.parse('2026-10-14T10:00:00.000Z');
-      await store.save({ ...open, state: 'claimed', claimedAt: new Date(claimedAt).toISOString() });
-      expect(await store.finishIfClaimed(claimedAt - 1_000)).toBe(false);
-      expect(await store.finishIfClaimed(claimedAt + 1_000)).toBe(true);
+      await store.save({ ...open, state: 'claimed', account: 'owner', claimedAt: new Date(claimedAt).toISOString() });
+      expect(await store.finishIfClaimed('owner', claimedAt - 1_000)).toBe(false);
+      expect(await store.finishIfClaimed('owner', claimedAt + 1_000)).toBe(true);
     });
 
     it('reset() reopens: a new code, open, generation + 1, the account kept, timestamps cleared', async () => {

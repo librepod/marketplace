@@ -90,7 +90,7 @@ describe('CasdoorAdminService', () => {
     expect(calls[0]).toMatchObject({ url: '/api/set-password', method: 'POST', cookie: 'casdoor_session_id=abc' });
     const form = new URLSearchParams(calls[0].body);
     expect(Object.fromEntries(form)).toEqual({
-      userOwner: 'built-in', userName: 'admin', oldPassword: 'admin-password-12', newPassword: 'new-password-12',
+      userOwner: 'built-in', userName: 'admin', oldPassword: '', newPassword: 'new-password-12',
     });
   });
 
@@ -152,6 +152,52 @@ describe('CasdoorAdminService', () => {
       await expect(new CasdoorAdminService().addUser(session, 'alex', 'personal-pass-12')).rejects.toThrow(
         /Casdoor refused \/api\/add-user: the user already exists/,
       );
+    });
+  });
+
+  describe('groups', () => {
+    it('adminsGroupId is <org>/admins', () => {
+      expect(new CasdoorAdminService().adminsGroupId).toBe('librepod/admins');
+    });
+
+    it('ensureGroup adds the top-level admins group only when get-group finds none', async () => {
+      const calls = recordFetch((url) => jsonRes({ status: 'ok', data: url.includes('get-group') ? null : undefined }));
+      await new CasdoorAdminService().ensureGroup(session);
+      expect(calls.map((c) => c.url)).toEqual(['/api/get-group?id=librepod/admins', '/api/add-group']);
+      expect(JSON.parse(calls[1].body!)).toMatchObject({
+        owner: 'librepod', name: 'admins', displayName: 'Admins', parentId: 'librepod', isTopGroup: true, isEnabled: true,
+      });
+      expect(calls[1].cookie).toBe(session.cookie);
+    });
+
+    it('ensureGroup does nothing when the group exists', async () => {
+      const calls = recordFetch(() => jsonRes({ status: 'ok', data: { owner: 'librepod', name: 'admins' } }));
+      await new CasdoorAdminService().ensureGroup(session);
+      expect(calls).toHaveLength(1);
+    });
+
+    it('ensureInGroup appends the group via update-user columns=groups, keeping the fetched user', async () => {
+      const user = { owner: 'librepod', name: 'owner', email: 'owner@libre.pod', groups: ['librepod/family'] };
+      const calls = recordFetch((url) => jsonRes({ status: 'ok', data: url.includes('get-user') ? user : undefined }));
+      expect(await new CasdoorAdminService().ensureInGroup(session, 'owner')).toBe(true);
+      expect(calls[1].url).toBe('/api/update-user?id=librepod/owner&columns=groups');
+      expect(JSON.parse(calls[1].body!)).toEqual({ ...user, groups: ['librepod/family', 'librepod/admins'] });
+    });
+
+    it('ensureInGroup makes no update when already a member, and is false for a missing user', async () => {
+      let calls = recordFetch(() => jsonRes({ status: 'ok', data: { name: 'owner', groups: ['librepod/admins'] } }));
+      expect(await new CasdoorAdminService().ensureInGroup(session, 'owner')).toBe(true);
+      expect(calls).toHaveLength(1);
+      vi.restoreAllMocks();
+      calls = recordFetch(() => jsonRes({ status: 'ok', data: null }));
+      expect(await new CasdoorAdminService().ensureInGroup(session, 'ghost')).toBe(false);
+      expect(calls).toHaveLength(1);
+    });
+
+    it('addUser sends the given groups', async () => {
+      const calls = recordFetch(() => jsonRes({ status: 'ok' }));
+      await new CasdoorAdminService().addUser(session, 'owner', 'pw-123456789012', ['librepod/admins']);
+      expect(JSON.parse(calls[0].body!)).toMatchObject({ owner: 'librepod', name: 'owner', groups: ['librepod/admins'], isAdmin: true });
     });
   });
 });

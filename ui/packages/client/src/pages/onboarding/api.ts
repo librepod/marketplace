@@ -1,5 +1,5 @@
-/** The admin and personal password rule, mirrored from the server: 12+ characters,
- *  no whitespace (wg-easy rejects shorter admin passwords; Casdoor rejects spaces). */
+/** The account password rule, mirrored from the server: 12+ characters, no whitespace
+ *  (Casdoor's set-password rejects spaces). */
 export const MIN_PASSWORD = 12
 
 export function validPassword(p: string): boolean {

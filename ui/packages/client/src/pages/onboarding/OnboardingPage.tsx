@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react"
 import type { OnboardingStatus } from "@librepod/shared"
 import { PodFieldBackground } from "@/components/PodFieldBackground"
 import { Separator } from "@/components/ui/separator"
-import { AccountStep, ClaimStep, ResumeScreen, WelcomeStep } from "./AccessSteps"
+import { AccountStep, ClaimStep, WelcomeStep } from "./AccessSteps"
 import { ConnectStep, GraduateStep, VpnStep, type ConnectivityPath } from "./ConnectivitySteps"
 
 /**
@@ -25,7 +25,9 @@ export const GRADUATE = 5
 const WELCOME_KEY = "librepod-onboarding-welcome"
 
 export function deriveStep(s: OnboardingStatus): number {
-  if (s.state !== "claimed") return CLAIM
+  // A claimed device whose setup cookie this browser lacks (lost, expired, another browser)
+  // starts over at the code: later steps would only answer 401.
+  if (s.state !== "claimed" || !s.session) return CLAIM
   if (!s.account) return ACCOUNT
   // An unknown VPN status counts as not installed: a repeat install is harmless
   // (409 counts as success). Past that, Connect until a handshake ends setup.
@@ -40,18 +42,13 @@ export function OnboardingPage({ status, onRefresh, reconnecting = false }: {
   onRefresh: () => void
   reconnecting?: boolean
 }) {
-  // Hooks first — the early return below must never skip them.
   const [userStep, setUserStep] = useState<number | null>(null)
   const [path, setPath] = useState<ConnectivityPath>("wireguard")
 
-  if (status.state === "claimed" && !status.session) {
-    return <Frame reconnecting={reconnecting}><ResumeScreen onResumed={onRefresh} /></Frame>
-  }
-
   const derived = deriveStep(status)
   const seenWelcome = localStorage.getItem(WELCOME_KEY) === "1"
-  const floor = derived === CLAIM && !seenWelcome ? WELCOME : derived
-  const step = Math.max(floor, userStep ?? 0)
+  const floor = derived === CLAIM && !seenWelcome && status.state !== "claimed" ? WELCOME : derived
+  const step = status.session ? Math.max(floor, userStep ?? 0) : floor
   const go = setUserStep
   // Steps the device has done, not steps jumped over on the way to a later one
   // (bring-my-own skips Connect — it must not show a checkmark).
@@ -62,7 +59,7 @@ export function OnboardingPage({ status, onRefresh, reconnecting = false }: {
       <StepRail current={step} done={done} />
       <Separator className="my-6" />
       {step === WELCOME && <WelcomeStep onBegin={() => { localStorage.setItem(WELCOME_KEY, "1"); go(CLAIM) }} />}
-      {step === CLAIM && <ClaimStep onClaimed={onRefresh} />}
+      {step === CLAIM && <ClaimStep resuming={status.state === "claimed"} onClaimed={onRefresh} />}
       {step === ACCOUNT && (
         <AccountStep baseDomain={status.baseDomain} previousAccount={status.previousAccount}
           onDone={() => { onRefresh(); go(VPN) }} onSessionLost={onRefresh} />

@@ -40,6 +40,7 @@ describe('AuthController.callback', () => {
     await controller.callback(req, res, 'code-1', 'state-1');
     expect(res.cookie).toHaveBeenCalledWith('mp_session', 'session-token', expect.anything());
     expect(finishIfClaimed).toHaveBeenCalledOnce();
+    expect(finishIfClaimed).toHaveBeenCalledWith('alex');
     expect(res.redirect).toHaveBeenCalledWith(302, '/');
   });
 

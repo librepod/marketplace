@@ -57,7 +57,7 @@ export class AuthController {
     // for it, and a failed write is retried by the next authenticated
     // GET /api/bootstrap/status.
     void this.onboarding
-      .finishIfClaimed()
+      .finishIfClaimed(identity.name)
       .catch((err: Error) => this.logger.warn(`finishing onboarding failed: ${err.message}`));
     res.clearCookie(OAUTH_STATE_COOKIE);
     const rd = safeRelativeRd(req.cookies?.[OAUTH_RD_COOKIE]);

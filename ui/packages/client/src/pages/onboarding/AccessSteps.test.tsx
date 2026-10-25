@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { render, screen, fireEvent } from "@testing-library/react"
-import { AccountStep, ClaimStep, ResumeScreen, WelcomeStep } from "@/pages/onboarding/AccessSteps"
+import { AccountStep, ClaimStep, WelcomeStep } from "@/pages/onboarding/AccessSteps"
 
 function jsonResponse(status: number, body: unknown) {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as Response
@@ -26,84 +26,69 @@ describe("WelcomeStep", () => {
     fireEvent.click(screen.getByRole("button", { name: /begin/i }))
     expect(onBegin).toHaveBeenCalled()
   })
+
+  it("claims with the setup code alone — no admin password in the story", () => {
+    render(<WelcomeStep onBegin={vi.fn()} />)
+    expect(screen.queryByText(/admin password/i)).toBeNull()
+  })
 })
 
 describe("ClaimStep", () => {
   beforeEach(() => vi.restoreAllMocks())
 
-  it("needs a setup code and a valid, confirmed admin password", () => {
-    render(<ClaimStep onClaimed={vi.fn()} />)
+  it("needs only the setup code and posts { code }", async () => {
+    const fetchMock = mockApi()
+    const onClaimed = vi.fn()
+    render(<ClaimStep resuming={false} onClaimed={onClaimed} />)
+    expect(screen.queryByLabelText(/password/i)).toBeNull()
     const claim = screen.getByRole("button", { name: /claim this device/i })
-    type("Admin password", "correct-horse-12")
-    type("Confirm admin password", "correct-horse-12")
-    expect(claim).toBeDisabled() // no code yet
-    type("Setup code", "7KQM-X3RT-9VHC")
-    expect(claim).toBeEnabled()
-    type("Admin password", "elevenchars")
-    type("Confirm admin password", "elevenchars")
     expect(claim).toBeDisabled()
-    type("Admin password", "correct horse12")
-    type("Confirm admin password", "correct horse12")
-    expect(claim).toBeDisabled()
+    type("Setup code", "7kqm-x3rt-9vhc")
+    fireEvent.click(claim)
+    await vi.waitFor(() => expect(onClaimed).toHaveBeenCalled())
+    expect(bodyOf(fetchMock, "/api/bootstrap/claim")).toEqual({ code: "7kqm-x3rt-9vhc" })
+  })
+
+  it("on a claimed device says setup has started and continues", () => {
+    render(<ClaimStep resuming onClaimed={vi.fn()} />)
+    expect(screen.getByText(/setup has started/i)).toBeVisible()
+    expect(screen.getByRole("button", { name: /continue/i })).toBeVisible()
   })
 
   it("says where the code is", () => {
-    render(<ClaimStep onClaimed={vi.fn()} />)
+    render(<ClaimStep resuming={false} onClaimed={vi.fn()} />)
     expect(screen.getByText('kubectl -n marketplace-ui logs deploy/marketplace-ui | grep "setup code"')).toBeInTheDocument()
     // reset-onboarding prints its code to the exec stream, not the log the command above reads
     expect(screen.getByText(/use the code it printed instead/)).toBeInTheDocument()
   })
 
-  it("posts the code and password, then hands over", async () => {
-    const fetchMock = mockApi()
-    const onClaimed = vi.fn()
-    render(<ClaimStep onClaimed={onClaimed} />)
-    type("Setup code", "7kqm-x3rt-9vhc")
-    type("Admin password", "correct-horse-12")
-    type("Confirm admin password", "correct-horse-12")
-    fireEvent.click(screen.getByRole("button", { name: /claim this device/i }))
-    await vi.waitFor(() => expect(onClaimed).toHaveBeenCalled())
-    expect(bodyOf(fetchMock, "/api/bootstrap/claim")).toEqual({ code: "7kqm-x3rt-9vhc", password: "correct-horse-12" })
-  })
-
-  it("shows the server's reason and stays", async () => {
+  it("a wrong code shows the server's reason and stays", async () => {
     mockApi({ "/api/bootstrap/claim": jsonResponse(403, { message: "That setup code isn't right" }) })
     const onClaimed = vi.fn()
-    render(<ClaimStep onClaimed={onClaimed} />)
+    render(<ClaimStep resuming onClaimed={onClaimed} />)
     type("Setup code", "AAAA-BBBB-CCCC")
-    type("Admin password", "correct-horse-12")
-    type("Confirm admin password", "correct-horse-12")
-    fireEvent.click(screen.getByRole("button", { name: /claim this device/i }))
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }))
     expect(await screen.findByRole("alert")).toHaveTextContent("That setup code isn't right")
     expect(onClaimed).not.toHaveBeenCalled()
   })
 })
 
-describe("ResumeScreen", () => {
-  beforeEach(() => vi.restoreAllMocks())
-
-  it("posts the code and resumes", async () => {
-    const fetchMock = mockApi()
-    const onResumed = vi.fn()
-    render(<ResumeScreen onResumed={onResumed} />)
-    expect(screen.getByRole("heading", { name: /continue setting up/i })).toBeVisible()
-    type("Setup code", "7KQM-X3RT-9VHC")
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }))
-    await vi.waitFor(() => expect(onResumed).toHaveBeenCalled())
-    expect(bodyOf(fetchMock, "/api/bootstrap/resume")).toEqual({ code: "7KQM-X3RT-9VHC" })
-  })
-
-  it("a wrong code shows the reason", async () => {
-    mockApi({ "/api/bootstrap/resume": jsonResponse(403, { message: "That setup code isn't right" }) })
-    render(<ResumeScreen onResumed={vi.fn()} />)
-    type("Setup code", "AAAA-BBBB-CCCC")
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }))
-    expect(await screen.findByRole("alert")).toHaveTextContent("That setup code isn't right")
-  })
-})
-
 describe("AccountStep", () => {
   beforeEach(() => vi.restoreAllMocks())
+
+  it("no 'keep admin for emergencies' — this is the only password", () => {
+    render(<AccountStep baseDomain="libre.pod" previousAccount={null} onDone={vi.fn()} onSessionLost={vi.fn()} />)
+    expect(screen.queryByText(/emergencies/i)).toBeNull()
+    expect(screen.getByText(/only password you'll need/i)).toBeVisible()
+  })
+
+  it("typing the recorded name under 'create a different account' warns it re-passwords that account", () => {
+    render(<AccountStep baseDomain="libre.pod" previousAccount="owner" onDone={vi.fn()} onSessionLost={vi.fn()} />)
+    fireEvent.click(screen.getByLabelText(/create a different account/i))
+    type("Username", "owner")
+    expect(screen.getByText(/your existing account/i)).toBeVisible()
+    expect(screen.getByRole("button", { name: /set new password/i })).toBeVisible()
+  })
 
   it("a new account: lowercase username and a confirmed password", async () => {
     const fetchMock = mockApi()

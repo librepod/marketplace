@@ -29,8 +29,8 @@ const RECORD_PATH = 'marketplace-ui/onboarding';
 const ADMIN_PATH = 'admin';
 /** reset-onboarding is another process: the server sees its write within this. */
 const CACHE_TTL_MS = 5_000;
-const RETRY_MIN_MS = 5_000;
-const RETRY_MAX_MS = 60_000;
+export const RETRY_MIN_MS = 5_000;
+export const RETRY_MAX_MS = 60_000;
 const STATES: readonly StoredState[] = ['open', 'claimed', 'finished'];
 
 const text = (value: unknown): string | null => (typeof value === 'string' ? value : null);
@@ -58,7 +58,7 @@ export function parseRecord(data: Record<string, unknown>, version: number): Onb
 
 /**
  * First-run onboarding state in OpenBao `system/` (spec §6–§7): the onboarding
- * record, and the admin password stored readable by design (LibrePod is a trusted
+ * record, and Casdoor's machine-generated admin password stored readable by design (LibrePod is a trusted
  * perimeter). The record is created on first start with check-and-set, and the
  * setup code is logged on every start until onboarding finishes.
  */
@@ -126,12 +126,14 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
     this.remember({ ...record, version: version + 1 });
   }
 
-  /** The SSO callback's hook (spec §8): the first sign-in since the claim finishes
-   * onboarding. A session from before a reset must not end the reopened wizard, so
-   * the sign-in has to be at or after `claimedAt`. */
-  async finishIfClaimed(signedInAtMs = Date.now()): Promise<boolean> {
+  /** The SSO callback's hook (spec §8): the recorded account's first sign-in since the
+   * claim finishes onboarding. Only that account: once there are more users, any of them
+   * signing in after a reset would otherwise end the reopened wizard. A session from
+   * before a reset must not either, so the sign-in has to be at or after `claimedAt`. */
+  async finishIfClaimed(username: string, signedInAtMs = Date.now()): Promise<boolean> {
     const record = await this.record();
     if (record.state !== 'claimed') return false;
+    if (record.account === null || username !== record.account) return false;
     if (record.claimedAt && signedInAtMs < Date.parse(record.claimedAt)) return false;
     await this.save({ ...record, state: 'finished', finishedAt: new Date().toISOString() });
     this.logger.log('onboarding finished: first single sign-on since the claim');
@@ -162,8 +164,9 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
     return typeof password === 'string' && password !== '' ? password : null;
   }
 
-  async saveAdminPassword(password: string): Promise<void> {
-    await this.bao.writeEntry(this.mount, ADMIN_PATH, { password });
+  /** `cas: 0` creates it only if nothing is stored yet. */
+  async saveAdminPassword(password: string, opts: { cas?: number } = {}): Promise<void> {
+    await this.bao.writeEntry(this.mount, ADMIN_PATH, { password }, opts);
   }
 
   /** Reads the record, creating it when missing: open, a fresh code, generation 1.

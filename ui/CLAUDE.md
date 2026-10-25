@@ -212,8 +212,8 @@ Degradation is layered, and the distinction matters:
   `force-sync` (external-secrets-reloader restarts the app's Deployments). Never touches Gogs.
 - `/api/bootstrap/*` (first-run onboarding, `src/onboarding/`) is exempt from `AuthGuard` — see
   "First-run onboarding" below. `POST /api/bootstrap/install` is a second, session-less entry into
-  `InstalledService.install()`: `OnboardingGuard`-gated, allowlist `{'wg-easy': INIT_PASSWORD}`, settings
-  only (no custom variables); the server fills the admin-password setting from OpenBao `system/admin`.
+  `InstalledService.install()`: `OnboardingGuard`-gated, allowlist `['wg-easy']`, settings
+  only (no custom variables); wg-easy's `INIT_PASSWORD` is a generated setting, so the wizard never sends it.
 - `GET /api/health` → Terminus liveness (empty checks array).
 
 ### Install flow (`InstalledService.install`, behind an `async-mutex`)
@@ -259,7 +259,7 @@ because the provider's contents API has no DELETE route.
 ### First-run onboarding (`src/onboarding/`)
 
 One OpenBao record, `system/marketplace-ui/onboarding` (`OnboardingStore`): `open` (a setup code
-exists) → `claimed` (admin password set with the code) → `finished` (first SSO sign-in since the
+exists) → `claimed` (the setup code, and nothing else) → `finished` (first SSO sign-in since the
 claim). `waiting` is computed: OpenBao unreachable, or Casdoor unreachable before `finished`; a device
 the server last saw `finished` (`OnboardingStore.knownFinished`, kept past the cache) stays `finished`
 while OpenBao is down, so signed-out visitors still reach SSO. The
@@ -267,16 +267,18 @@ store creates the record on start (KV check-and-set, `cas: 0`) and logs `LibrePo
 while open/claimed; reads are cached ≤5 s so `reset-onboarding` (another process) lands without a
 restart. `save()` is check-and-set against the version the record was read at (`OnboardingRecord.version`,
 not stored), so a request holding a cached record can't undo a reset: it fails, the cache drops, and the
-wizard gets a 409 to reload. `reset()` alone writes unconditionally. The admin password lives readable in
-`system/admin`.
+wizard gets a 409 to reload. `reset()` alone writes unconditionally. `system/admin` holds Casdoor's built-in admin password, machine-generated and readable by design;
+`OnboardingService.startCasdoor()` syncs it into Casdoor at every start (backoff retry) along with the
+org and the `librepod/admins` group, and the recorded account joins that group. The owner's SSO
+account password is the only human credential.
 - `GET /status` — public, read-only, never sets a cookie. A valid SSO session short-circuits to
   `finished` (and retries the finish write). Telemetry (account, VPN status, peers, endpoint
   suggestion) only with a valid onboarding cookie.
-- `POST /claim {code,password}` and `/resume {code}` set `mp_onboarding`: HMAC via `SessionService`,
+- `POST /claim {code}` sets `mp_onboarding` (an open device is claimed; on a claimed one the code lets another browser in): HMAC via `SessionService`,
   `sub: 'onboarding'` + the record's `generation`, httpOnly, NOT Secure. `OnboardingGuard` admits it
   only while `claimed` with a matching generation; `AuthGuard` never admits it.
 - `POST /account`, `POST /install`, `/wireguard/*` (wg-easy proxy) — `OnboardingGuard`-gated.
-- The SSO callback calls `OnboardingStore.finishIfClaimed()` without awaiting it: neither a failure nor a
+- The SSO callback calls `OnboardingStore.finishIfClaimed(name)` (only the recorded account finishes) without awaiting it: neither a failure nor a
   slow OpenBao blocks the sign-in.
 - `reset-onboarding` (`/usr/local/bin` in the image) runs `dist/onboarding/reset-onboarding.cli.js`:
   new code, `open`, generation + 1, account kept.
@@ -398,7 +400,7 @@ Restart / Users) marked with `SoonTag`. All status dots read from the single
 | `BASE_DOMAIN` | `libre.pod` | `${BASE_DOMAIN}` substituted into templates |
 | `NODE_NAME` | (empty) | downward API (`spec.nodeName`); `NodeAddressService` reads this Node's InternalIP for `${DEVICE_IP}`. Unset ⇒ installing an app whose templates use `${DEVICE_IP}` returns 503; other apps are unaffected |
 | `CASDOOR_BASE_URL` | (empty) | in-cluster Casdoor (`http://casdoor.casdoor.svc.cluster.local`). Unset ⇒ onboarding status stays `waiting` |
-| `CASDOOR_ADMIN_DEFAULT_PASSWORD` | `123` | Casdoor's factory admin password; the claim replaces it with the owner's admin password |
+| `CASDOOR_ADMIN_DEFAULT_PASSWORD` | `123` | Casdoor's factory admin password; marketplace-ui's first start replaces it with a generated one (`system/admin`) |
 | `WGEASY_BASE_URL` | (empty) | in-cluster wg-easy for the wizard's peer endpoints |
 | `ROOT_CA_PATH` | (empty) | the mounted root CA served by `GET /api/bootstrap/ca` |
 | `OPENBAO_SYSTEM_MOUNT` | `system` | KV v2 mount holding the onboarding record and `admin` |
