@@ -1,3 +1,5 @@
+> §7–§8 credentials and claim superseded by 2026-10-25-onboarding-one-credential-design.md (#319).
+
 # First-Run Onboarding with a Setup Code — Design
 
 **Status:** design approved in brainstorming; written spec awaiting review

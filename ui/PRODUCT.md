@@ -49,12 +49,14 @@ no Docker knowledge, no env vars, no manual volume mounts.
   plain-HTTP raw IP by design; the wizard never attempts SSO over IP, and the AuthGate
   redirect chain must never fire for an un-onboarded or IP-bound visitor.
 - Proof of ownership: a 12-character setup code marketplace-ui creates on first start and
-  prints to its log. Claiming needs it, resuming in another browser needs it, and it dies
-  when onboarding finishes; `reset-onboarding` issues a new one.
-- Identities: `admin` (Casdoor's built-in admin) is the master account — its password is
-  set at the claim, stored readable in OpenBao `system/admin`, and is the default admin
-  password of apps that ship one (wg-easy). The owner then creates a personal account
-  (`<name>@<base-domain>`) for daily SSO.
+  prints to its log. Claiming needs it (and nothing else), so does continuing in another
+  browser, and it dies when onboarding finishes; `reset-onboarding` issues a new one.
+  `reset-onboarding` gives a new setup code and reopens the wizard. It keeps your account, apps, app data, VPN peers and every machine credential. To recover a forgotten password: run it, enter the new code, keep your username, and set a new password.
+- Identities: the owner's SSO account is the only human credential. Casdoor's built-in
+  `admin` password is machine-generated, stored readable in OpenBao `system/admin` and kept
+  in sync at every marketplace-ui start; apps that ship an admin generate their own. The
+  owner creates a personal account (`<name>@<base-domain>`) for daily SSO, and it joins
+  the Casdoor group `librepod/admins`.
 - The first SSO sign-in at the domain finishes onboarding. Until then the wizard is the
   only way in; there is no "set up later".
 - State is durable: one OpenBao record. Live service state (peers, handshakes) only drives

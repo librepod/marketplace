@@ -58,7 +58,7 @@ export function parseRecord(data: Record<string, unknown>, version: number): Onb
 
 /**
  * First-run onboarding state in OpenBao `system/` (spec §6–§7): the onboarding
- * record, and the admin password stored readable by design (LibrePod is a trusted
+ * record, and Casdoor's machine-generated admin password stored readable by design (LibrePod is a trusted
  * perimeter). The record is created on first start with check-and-set, and the
  * setup code is logged on every start until onboarding finishes.
  */
