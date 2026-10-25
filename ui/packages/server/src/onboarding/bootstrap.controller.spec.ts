@@ -43,7 +43,6 @@ function make(o: {
   vpn?: string | Error;
   peers?: WgPeer[] | Error;
   deviceIp?: string | Error;
-  adminPassword?: string | Error;
 } = {}) {
   const value = <T>(v: T | Error): T => {
     if (v instanceof Error) throw v;
@@ -58,7 +57,6 @@ function make(o: {
     claim: vi.fn(async () => claimed),
     resume: vi.fn(async () => claimed),
     account: vi.fn(async () => claimed),
-    adminPassword: vi.fn(async () => value(o.adminPassword ?? 'admin-password-12')),
   };
   const casdoor = { reachable: vi.fn(async () => o.reachable ?? true) };
   const wgEasy = { listClients: vi.fn(async () => value(o.peers ?? [])) };
@@ -252,31 +250,27 @@ describe('BootstrapController.account', () => {
 });
 
 describe('BootstrapController.install', () => {
-  it("fills the admin password from system/admin — the browser's value never reaches the installer", async () => {
+  it('forwards the answers unchanged: no INIT_PASSWORD is injected', async () => {
     const { controller, installed } = make();
-    await controller.install({ app: 'wg-easy', settings: { INIT_HOST: '203.0.113.7', INIT_PASSWORD: 'from-the-browser' } });
-    expect(installed.install).toHaveBeenCalledWith('wg-easy', {
-      settings: { INIT_HOST: '203.0.113.7', INIT_PASSWORD: 'admin-password-12' },
-    });
+    await controller.install({ app: 'wg-easy', settings: { INIT_HOST: '203.0.113.7' } });
+    expect(installed.install).toHaveBeenCalledWith('wg-easy', { settings: { INIT_HOST: '203.0.113.7' } });
   });
 
-  it('only VPN apps, checked before the admin password is read', async () => {
-    const { controller, installed, onboarding } = make();
+  it('only VPN apps', async () => {
+    const { controller, installed } = make();
     for (const body of [{ app: 'vaultwarden' }, { app: '__proto__' }, { app: 'constructor' }, { app: 42 }, {}, undefined]) {
       await expect(controller.install(body as never)).rejects.toThrow(BadRequestException);
     }
-    expect(onboarding.adminPassword).not.toHaveBeenCalled();
     expect(installed.install).not.toHaveBeenCalled();
   });
 
-  it('an endpoint host with a port or a scheme is an INIT_HOST field error, before the admin password is read', async () => {
-    const { controller, installed, onboarding } = make();
+  it('an endpoint host with a port or a scheme is an INIT_HOST field error', async () => {
+    const { controller, installed } = make();
     for (const host of ['203.0.113.5:51820', 'http://vpn.example.com', 'vpn.example.com/', '2001:db8::1']) {
       const err = await controller.install({ app: 'wg-easy', settings: { INIT_HOST: host } }).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(BadRequestException);
       expect((err as BadRequestException).getResponse()).toMatchObject({ errors: [{ name: 'INIT_HOST' }] });
     }
-    expect(onboarding.adminPassword).not.toHaveBeenCalled();
     expect(installed.install).not.toHaveBeenCalled();
     await controller.install({ app: 'wg-easy', settings: { INIT_HOST: 'vpn.example.com' } });
     expect(installed.install).toHaveBeenCalledOnce();
@@ -285,13 +279,7 @@ describe('BootstrapController.install', () => {
   it('settings that are not an object are dropped, never spread', async () => {
     const { controller, installed } = make();
     await controller.install({ app: 'wg-easy', settings: ['x'] as never });
-    expect(installed.install).toHaveBeenCalledWith('wg-easy', { settings: { INIT_PASSWORD: 'admin-password-12' } });
-  });
-
-  it('no readable admin password is a 503 and nothing is installed', async () => {
-    const { controller, installed } = make({ adminPassword: new ServiceUnavailableException('no admin password') });
-    await expect(controller.install({ app: 'wg-easy' })).rejects.toThrow(ServiceUnavailableException);
-    expect(installed.install).not.toHaveBeenCalled();
+    expect(installed.install).toHaveBeenCalledWith('wg-easy', { settings: {} });
   });
 
   it('install errors pass through unchanged (the wizard counts 409 as success)', async () => {

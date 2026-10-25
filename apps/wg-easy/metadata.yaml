@@ -18,19 +18,17 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/wg-easy"
     path: ./overlays/librepod
 
-  # Two install questions. The first-run wizard answers both: INIT_PASSWORD
-  # with the LibrePod admin password (server-side, from OpenBao system/admin)
-  # and INIT_HOST with the endpoint the owner confirmed. wg-easy rejects admin
-  # passwords shorter than 12 characters at login; the settings contract has
-  # no length rule, so the description states it. An empty INIT_HOST answer is
-  # never stored, so the ConfigMap's ${DEVICE_IP} default applies.
+  # The first-run wizard answers one install question, INIT_HOST, with the
+  # endpoint the owner confirmed. INIT_PASSWORD is generated at install: nobody
+  # types it, because the owner signs in with single sign-on. An empty INIT_HOST
+  # answer is never stored, so the ConfigMap's ${DEVICE_IP} default applies.
   settings:
     items:
       - name: INIT_PASSWORD
         label: "Admin password"
-        description: "Password for wg-easy's built-in admin account, applied on first start. Use your LibrePod admin password — at least 12 characters, or wg-easy rejects it at login. Single sign-on is the primary login; this is the fallback."
+        description: "Password for wg-easy's built-in local admin, generated at install. You sign in with single sign-on."
         sensitive: true
-        required: true
+        generate: { length: 32 }
       - name: INIT_HOST
         label: "Endpoint host"
         description: "The address your devices dial to reach this VPN, applied on first start. Leave empty to use this device's IP address."

@@ -32,11 +32,8 @@ const ENDPOINT_HOST = /^[A-Za-z0-9.-]+$/;
 
 /** The VPN app whose state the wizard follows. */
 const VPN_APP = 'wg-easy';
-/** Apps the wizard may install, each with the install question the server answers
- * with the admin password (system/admin): the browser never sends it. */
-const VPN_APPS: Readonly<Record<string, { adminPasswordSetting: string }>> = {
-  'wg-easy': { adminPasswordSetting: 'INIT_PASSWORD' },
-};
+/** Apps the wizard may install. */
+const VPN_APPS: readonly string[] = ['wg-easy'];
 
 /** The bare host the browser used (no port, no IPv6 brackets). */
 function hostOf(req: Request): string {
@@ -188,7 +185,7 @@ export class BootstrapController {
   @UseGuards(OnboardingGuard)
   async install(@Body() body: Partial<BootstrapInstallRequest> | undefined): Promise<InstallResult> {
     const app = body?.app;
-    if (typeof app !== 'string' || !Object.hasOwn(VPN_APPS, app)) {
+    if (typeof app !== 'string' || !VPN_APPS.includes(app)) {
       throw new BadRequestException('Only a VPN app can be installed from setup');
     }
     const settings = body?.settings;
@@ -200,10 +197,7 @@ export class BootstrapController {
         errors: [{ name: 'INIT_HOST', message: 'Only a host name or IPv4 address — no port, no http://' }],
       });
     }
-    const adminPassword = await this.onboarding.adminPassword();
-    return this.installed.install(app, {
-      settings: { ...answers, [VPN_APPS[app].adminPasswordSetting]: adminPassword },
-    });
+    return this.installed.install(app, { settings: answers });
   }
 
   @Get('ca')
