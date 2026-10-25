@@ -2,7 +2,8 @@
 # Tests for scripts/release-marketplace-ui.sh. Run from the repo root:
 #   bash scripts/test-release-marketplace-ui.sh
 # Needs node + npm on PATH; everything else runs in a throwaway git fixture
-# with a bare "origin" so the tag guard and --push never touch the network.
+# with a bare "origin" and a gh shim on PATH so the tag guard and --pr never
+# touch the network.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -52,15 +53,31 @@ grep -q 'newTag: "0.13.0"' "$TMP/apps/marketplace-ui/overlays/librepod/kustomiza
 [ "$(git -C "$TMP" log --oneline | wc -l)" -eq 1 ] || fail "dry run must not commit"
 echo "ok: dry run"
 
-# 2. --push: commit, master push, and annotated tag all land on origin.
+# 2. --pr: release branch + annotated tag land on origin, master stays put,
+#    and a PR is opened via gh (stubbed outside the work tree, like the bare
+#    origin, so the drift guard doesn't count the shim). The shim answers
+#    `pr list` from $TMP.pr-list (empty unless a test seeds it) and logs
+#    every call.
 reset_tree
-bash "$SCRIPT" patch --push >/dev/null || fail "--push exited nonzero"
-[ -z "$(git -C "$TMP" status --porcelain)" ] || fail "--push left a dirty tree"
+mkdir -p "$TMP.bin"
+cat > "$TMP.bin/gh" <<EOF
+#!/usr/bin/env bash
+echo "gh \$*" >> "$TMP.gh-calls"
+[ "\$1 \$2" = "pr list" ] && cat "$TMP.pr-list" 2>/dev/null || true
+exit 0
+EOF
+chmod +x "$TMP.bin/gh"
+PATH="$TMP.bin:$PATH" bash "$SCRIPT" patch --pr >/dev/null || fail "--pr exited nonzero"
+[ -z "$(git -C "$TMP" status --porcelain)" ] || fail "--pr left a dirty tree"
 [ "$(git -C "$TMP" rev-parse master)" = "$(git -C "$TMP.origin.git" rev-parse master)" ] \
-  || fail "master not pushed to origin"
+  || fail "master must not move — releases land via PR"
+git -C "$TMP.origin.git" rev-parse --verify -q refs/heads/release/marketplace-ui-v0.12.1 >/dev/null \
+  || fail "release branch not pushed to origin"
 git -C "$TMP.origin.git" tag | grep -qx marketplace-ui-v0.12.1 || fail "tag not pushed"
 git -C "$TMP" log -1 --format=%s | grep -qx 'release(marketplace-ui): v0.12.1' || fail "commit subject"
-echo "ok: --push"
+grep -q -- '--base master' "$TMP.gh-calls" || fail "gh pr create not called with --base master"
+grep -q -- "--head release/marketplace-ui-v0.12.1" "$TMP.gh-calls" || fail "gh pr create not called with the release branch"
+echo "ok: --pr"
 
 # 3. Tag guard: refuses when the target tag already exists on origin.
 reset_tree
@@ -75,5 +92,24 @@ echo stray > "$TMP/STRAY.md" && git -C "$TMP" add STRAY.md
 if OUT="$(bash "$SCRIPT" minor 2>&1)"; then fail "drift guard did not refuse"; fi
 echo "$OUT" | grep -q "exactly the five pin files" || fail "drift guard message missing"
 echo "ok: drift guard"
+
+# 5. Supersede: a hanging release PR is closed, its branch and tag deleted
+#    from origin, and a fresh PR cut from current master.
+reset_tree
+git -C "$TMP" checkout -qb release/marketplace-ui-v0.12.5
+git -C "$TMP" commit -q --allow-empty -m "release(marketplace-ui): v0.12.5"
+git -C "$TMP" push -q origin release/marketplace-ui-v0.12.5
+git -C "$TMP" tag marketplace-ui-v0.12.5 && git -C "$TMP" push -q origin marketplace-ui-v0.12.5
+git -C "$TMP" checkout -q master
+printf '7 release/marketplace-ui-v0.12.5\n' > "$TMP.pr-list"
+rm -f "$TMP.gh-calls"
+PATH="$TMP.bin:$PATH" bash "$SCRIPT" minor --pr >/dev/null || fail "supersede run exited nonzero"
+grep -q 'pr close 7' "$TMP.gh-calls" || fail "superseded PR not closed"
+git -C "$TMP.origin.git" rev-parse --verify -q refs/heads/release/marketplace-ui-v0.12.5 >/dev/null \
+  && fail "superseded branch not deleted from origin"
+git -C "$TMP.origin.git" rev-parse --verify -q refs/tags/marketplace-ui-v0.12.5 >/dev/null \
+  && fail "superseded tag not deleted from origin"
+grep -q -- '--head release/marketplace-ui-v0.13.0' "$TMP.gh-calls" || fail "fresh release PR not opened"
+echo "ok: supersede"
 
 echo "PASS: release-marketplace-ui.sh"
