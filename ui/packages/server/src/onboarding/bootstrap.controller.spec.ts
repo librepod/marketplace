@@ -105,7 +105,7 @@ describe('BootstrapController.status', () => {
     const { controller, store } = make({ record: new Error('sealed') });
     const sso = { mp_session: session.sign({ sub: 'alex', name: 'alex', email: 'alex@libre.pod' }) };
     expect(await controller.status(req('libre.pod', sso))).toMatchObject({ state: 'finished', arrival: 'domain' });
-    expect(store.finishIfClaimed).toHaveBeenCalledWith(expect.any(Number));
+    expect(store.finishIfClaimed).toHaveBeenCalledWith('alex', expect.any(Number));
   });
 
   it('the onboarding token in the session cookie is not a signed-in user', async () => {

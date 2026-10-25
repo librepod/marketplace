@@ -1,12 +1,13 @@
 import { vi } from 'vitest';
 import type { CasdoorSession } from '../../src/onboarding/casdoor-admin.service';
 
-/** Casdoor's built-in admin and the platform org's users, in memory: the slice of
+/** Casdoor's built-in admin, the platform org's users and its admins group, in memory: the slice of
  * CasdoorAdminService onboarding uses. Starts at the factory password "123". */
 export function fakeCasdoor(adminPassword = '123') {
-  const state = { adminPassword, users: new Map<string, string>() };
+  const state = { adminPassword, users: new Map<string, string>(), groupExists: false, admins: new Set<string>() };
   const casdoor = {
     factoryPassword: '123',
+    adminsGroupId: 'librepod/admins',
     reachable: vi.fn(async () => true),
     signIn: vi.fn(async (candidates: string[]): Promise<CasdoorSession | null> => {
       const password = candidates.find((p) => p !== '' && p === state.adminPassword);
@@ -17,8 +18,17 @@ export function fakeCasdoor(adminPassword = '123') {
     }),
     ensureOrganization: vi.fn(async () => undefined),
     getUser: vi.fn(async (_session: CasdoorSession, name: string) => (state.users.has(name) ? { name } : null)),
-    addUser: vi.fn(async (_session: CasdoorSession, name: string, password: string) => {
+    ensureGroup: vi.fn(async () => {
+      state.groupExists = true;
+    }),
+    ensureInGroup: vi.fn(async (_session: CasdoorSession, name: string) => {
+      if (!state.users.has(name)) return false;
+      state.admins.add(name);
+      return true;
+    }),
+    addUser: vi.fn(async (_session: CasdoorSession, name: string, password: string, groups: string[] = []) => {
       state.users.set(name, password);
+      if (groups.includes('librepod/admins')) state.admins.add(name);
     }),
     setUserPassword: vi.fn(async (_session: CasdoorSession, name: string, password: string) => {
       state.users.set(name, password);

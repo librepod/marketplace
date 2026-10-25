@@ -26,6 +26,13 @@ function make(casdoorPassword = '123') {
   return { kv, store, casdoor, state, service };
 }
 
+/** A device claimed and set up with `name`: its account is recorded. */
+async function claimedWithAccount(name: string) {
+  const t = await claimed();
+  await t.service.account({ username: name, password: 'personal-pass-12' });
+  return t;
+}
+
 /** A device claimed with ADMIN, as after a successful claim. */
 async function claimed() {
   const t = make();
@@ -39,7 +46,11 @@ describe('OnboardingService', () => {
     warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
   });
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+    delete process.env.BOOTSTRAP_MODE_OVERRIDE;
+  });
 
   describe('claim', () => {
     it('with the factory password: sets the admin password, stores it, ensures the org, records claimed', async () => {
@@ -109,10 +120,10 @@ describe('OnboardingService', () => {
     });
 
     it('already claimed or finished is a 409', async () => {
-      const t = await claimed();
+      const t = await claimedWithAccount('alex');
       const { code } = await t.store.record();
       await expect(t.service.claim({ code, password: ADMIN }, '10.0.0.9')).rejects.toThrow(ConflictException);
-      await t.store.finishIfClaimed();
+      await t.store.finishIfClaimed('alex');
       await expect(t.service.claim({ code, password: ADMIN }, '10.0.0.9')).rejects.toThrow(ConflictException);
     });
 
@@ -143,9 +154,102 @@ describe('OnboardingService', () => {
       const t = make();
       const { code } = await t.store.record();
       await expect(t.service.resume(code, '10.0.0.9')).rejects.toThrow(ConflictException);
-      const c = await claimed();
-      await c.store.finishIfClaimed();
+      const c = await claimedWithAccount('alex');
+      await c.store.finishIfClaimed('alex');
       await expect(c.service.resume((await c.store.record()).code, '10.0.0.9')).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('casdoorAdmin / prepareCasdoor', () => {
+    it('fresh device: stores a generated password BEFORE changing Casdoor, then uses it', async () => {
+      const { service, kv, casdoor, state } = make();
+      const order: string[] = [];
+      const write = kv.writeEntry.bind(kv);
+      vi.spyOn(kv, 'writeEntry').mockImplementation(async (...a) => {
+        order.push(`write:${a[1]}`);
+        return write(...a);
+      });
+      casdoor.setAdminPassword.mockImplementationOnce(async (_s, p) => {
+        order.push('casdoor');
+        state.adminPassword = p;
+      });
+      const session = await service.casdoorAdmin();
+      const stored = kv.get('system', 'admin')?.password;
+      expect(stored).toMatch(/^[0-9a-f]{32}$/);
+      expect(state.adminPassword).toBe(stored);
+      expect(session.cookie).toBeTruthy();
+      expect(order).toEqual(['write:admin', 'casdoor']);
+    });
+
+    it('stored password accepted: no change to Casdoor', async () => {
+      const t = make('stored-0123456789');
+      await t.kv.writeEntry('system', 'admin', { password: 'stored-0123456789' });
+      await t.service.casdoorAdmin();
+      expect(t.casdoor.setAdminPassword).not.toHaveBeenCalled();
+    });
+
+    it('Casdoor reset to factory while OpenBao kept the password: sets the stored one back', async () => {
+      const t = make('123');
+      await t.kv.writeEntry('system', 'admin', { password: 'stored-0123456789' });
+      await t.service.casdoorAdmin();
+      expect(t.state.adminPassword).toBe('stored-0123456789');
+      expect(t.kv.get('system', 'admin')).toEqual({ password: 'stored-0123456789' });
+    });
+
+    it('neither password accepted: 409 changed outside, nothing rewritten', async () => {
+      const t = make('someone-elses-pw');
+      await t.kv.writeEntry('system', 'admin', { password: 'stored-0123456789' });
+      await expect(t.service.casdoorAdmin()).rejects.toThrow(
+        new ConflictException("Casdoor's admin password was changed outside LibrePod"),
+      );
+      expect(t.kv.get('system', 'admin')).toEqual({ password: 'stored-0123456789' });
+    });
+
+    it('two concurrent first runs agree on one password (cas 0 race is not a "reload" 409)', async () => {
+      const t = make();
+      const [a, b] = await Promise.all([t.service.casdoorAdmin(), t.service.casdoorAdmin()]);
+      expect(a).toBeTruthy();
+      expect(b).toBeTruthy();
+      expect(t.state.adminPassword).toBe(t.kv.get('system', 'admin')?.password);
+    });
+
+    it('Casdoor down: 503 and system/admin keeps the first generated value for the retry', async () => {
+      const t = make();
+      t.casdoor.signIn.mockRejectedValueOnce(new ServiceUnavailableException('down'));
+      await expect(t.service.casdoorAdmin()).rejects.toThrow(ServiceUnavailableException);
+      const first = t.kv.get('system', 'admin')?.password;
+      await t.service.casdoorAdmin();
+      expect(t.kv.get('system', 'admin')?.password).toBe(first);
+    });
+
+    it('prepareCasdoor: org, group, and the recorded account joins admins', async () => {
+      const t = await claimedWithAccount('owner');
+      t.state.admins.clear();
+      await t.service.prepareCasdoor();
+      expect(t.casdoor.ensureOrganization).toHaveBeenCalled();
+      expect(t.state.groupExists).toBe(true);
+      expect(t.state.admins.has('owner')).toBe(true);
+    });
+
+    it('prepareCasdoor resolves when the recorded account was deleted from Casdoor', async () => {
+      const t = await claimedWithAccount('owner');
+      t.state.users.delete('owner');
+      await expect(t.service.prepareCasdoor()).resolves.toBeTruthy();
+    });
+
+    it('startCasdoor retries with backoff until prepareCasdoor succeeds; skipped under BOOTSTRAP_MODE_OVERRIDE', async () => {
+      vi.useFakeTimers();
+      const t = make();
+      t.casdoor.signIn.mockRejectedValueOnce(new ServiceUnavailableException('down'));
+      await t.service.startCasdoor();
+      expect(t.state.groupExists).toBe(false);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(t.state.groupExists).toBe(true);
+      vi.useRealTimers();
+      process.env.BOOTSTRAP_MODE_OVERRIDE = 'open';
+      const u = make();
+      u.service.onModuleInit();
+      expect(u.casdoor.signIn).not.toHaveBeenCalled();
     });
   });
 
@@ -154,6 +258,7 @@ describe('OnboardingService', () => {
       const t = await claimed();
       const record = await t.service.account({ username: 'alex', password: 'personal-pass-12' });
       expect(t.state.users.get('alex')).toBe('personal-pass-12');
+      expect(t.state.admins.has('alex')).toBe(true);
       expect(record).toMatchObject({ account: 'alex', accountGeneration: record.generation });
       expect(t.kv.get('system', RECORD)).toMatchObject({ account: 'alex', accountGeneration: 1 });
     });
@@ -171,6 +276,7 @@ describe('OnboardingService', () => {
     it('after a reset, the kept account stays as is without a password, or is re-passworded with one', async () => {
       const t = await afterReset();
       await t.service.account({ username: 'alex' });
+      expect(t.casdoor.ensureInGroup).toHaveBeenCalledWith(expect.anything(), 'alex');
       expect(t.casdoor.addUser).not.toHaveBeenCalled();
       expect(t.casdoor.setUserPassword).not.toHaveBeenCalled();
       await t.service.account({ username: 'alex', password: 'brand-new-pass-12' });
@@ -230,12 +336,12 @@ describe('OnboardingService', () => {
       await expect(t.service.account({ username: 'alex', password: 'short' })).rejects.toThrow(BadRequestException);
     });
 
-    it('no stored admin password is a 503', async () => {
-      const t = await claimed();
+    it('no stored admin password: generates one instead of failing', async () => {
+      const t = make(); // Casdoor still at factory
+      await t.store.save({ ...(await t.store.record()), state: 'claimed' });
       await t.kv.writeEntry('system', 'admin', {});
-      await expect(t.service.account({ username: 'alex', password: 'personal-pass-12' })).rejects.toThrow(
-        ServiceUnavailableException,
-      );
+      await expect(t.service.account({ username: 'alex', password: 'personal-pass-12' })).resolves.toBeDefined();
+      expect(t.kv.get('system', 'admin')?.password).toBeTruthy();
     });
   });
 });

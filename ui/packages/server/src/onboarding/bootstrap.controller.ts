@@ -103,7 +103,7 @@ export class BootstrapController {
     if (sso && sso.sub !== 'onboarding') {
       // Retries the SSO callback's finish write if it failed — the only write in a GET.
       void this.store
-        .finishIfClaimed(sso.iat * 1000)
+        .finishIfClaimed(sso.name, sso.iat * 1000)
         .catch((err: Error) => this.logger.warn(`finishing onboarding failed: ${err.message}`));
       return { ...status, state: 'finished' };
     }
