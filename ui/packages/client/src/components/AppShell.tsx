@@ -1,4 +1,8 @@
 import { NavLink, Outlet } from "react-router-dom"
+// The workspace-root release version — the same value pinned in the image tag,
+// not this package's own never-bumped version. Baked at build time; the SPA
+// ships inside the versioned image, so it can never drift from the running one.
+import { version } from "../../../../package.json"
 import { Separator } from "@/components/ui/separator"
 import { Toaster } from "@/components/ui/sonner"
 import { UserMenu } from "@/components/UserMenu"
@@ -55,6 +59,7 @@ export function AppShell() {
         <main className="pb-12">
           <Outlet />
         </main>
+        <footer className="pb-6 text-xs text-muted-foreground">LibrePod v{version}</footer>
       </div>
       <Toaster position="bottom-right" />
     </div>
