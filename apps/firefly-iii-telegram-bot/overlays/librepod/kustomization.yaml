@@ -10,4 +10,4 @@ images:
 - name: ghcr.io/cyxou/firefly-iii-telegram-bot
   newTag: v3.0.0
 - name: valkey/valkey
-  newTag: 8.1-alpine
+  newTag: 9.2-alpine
