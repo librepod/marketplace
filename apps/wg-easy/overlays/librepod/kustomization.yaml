@@ -12,7 +12,7 @@ resources:
 
 images:
 - name: ghcr.io/wg-easy/wg-easy
-  newTag: "15.4"
+  newTag: "15.5"
 
 patches:
 - path: patch-pvc.yaml

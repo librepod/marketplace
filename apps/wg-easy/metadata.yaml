@@ -11,7 +11,7 @@ spec:
 
   # renovate: datasource=docker depName=ghcr.io/wg-easy/wg-easy
   # serge: notesRepo=wg-easy/wg-easy
-  version: "15.4.0"
+  version: "15.5.0"
 
   source:
     type: oci-kustomize
