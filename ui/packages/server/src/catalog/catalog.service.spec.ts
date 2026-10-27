@@ -108,10 +108,19 @@ describe('CatalogService', () => {
       expect(result).toBeUndefined();
     });
 
-    it('returns undefined for system app names (filtered out)', () => {
-      // Even if you ask for a system app by name, it should not be found
+    it('finds system apps: install must reach the runtime system guard (409), and the platform panel links to their detail pages', () => {
       const result = service.findOne('traefik');
-      expect(result).toBeUndefined();
+      expect(result).toMatchObject({ name: 'traefik', category: 'System' });
+    });
+  });
+
+  describe('findAllIncludingSystem()', () => {
+    it('returns the whole catalog — the system-apps panel enriches these and keeps the cluster-managed ones', () => {
+      const all = service.findAllIncludingSystem();
+      expect(all).toHaveLength(7);
+      expect(all.map((a) => a.name)).toContain('traefik');
+      // while the user-facing view stays filtered
+      expect(service.findAll()).toHaveLength(4);
     });
   });
 

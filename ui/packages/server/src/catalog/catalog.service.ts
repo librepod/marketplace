@@ -56,14 +56,14 @@ export class CatalogService implements OnModuleInit, OnModuleDestroy {
         throw new Error('Invalid catalog.yaml: expected a YAML mapping at root');
       }
       const catalog = raw as CatalogFile;
-      // `System` marks platform components managed by the system-apps Flux
-      // Kustomization — hidden from the user catalog. The runtime
-      // SystemAppsService derivation is the authoritative layer; this static
-      // filter is its cold-start fallback, so the category must mirror it.
-      // `Infrastructure` is a regular user-facing category.
-      this.apps = (catalog.apps ?? []).filter(
-        (app) => app.category !== 'System',
-      );
+      // The FULL list is kept: the system-apps panel enriches these and keeps
+      // the ones the cluster manages. `System` marks platform components
+      // managed by the system-apps Flux Kustomization — hidden from the
+      // user-facing findAll(). The runtime SystemAppsService derivation is the
+      // authoritative layer; that static filter is its cold-start fallback, so
+      // the category must mirror it. `Infrastructure` is a regular user-facing
+      // category.
+      this.apps = catalog.apps ?? [];
       this.loadedOnce = true;
       this.reloadFailed = false;
       this.lastGoodAt = new Date();
@@ -71,8 +71,11 @@ export class CatalogService implements OnModuleInit, OnModuleDestroy {
         clearTimeout(this.retryTimer);
         this.retryTimer = null;
       }
+      const userFacing = this.apps.filter(
+        (app) => app.category !== 'System',
+      ).length;
       this.logger.log(
-        `Loaded ${this.apps.length} user-facing apps from catalog`,
+        `Loaded ${this.apps.length} apps from catalog (${userFacing} user-facing)`,
       );
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
@@ -138,10 +141,20 @@ export class CatalogService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** User-facing apps: everything except platform components (`System`). */
   findAll(): CatalogApp[] {
+    return this.apps.filter((app) => app.category !== 'System');
+  }
+
+  /** The whole catalog, platform components included — the system-apps panel
+   * enriches these and keeps the ones the cluster says are system-managed. */
+  findAllIncludingSystem(): CatalogApp[] {
     return this.apps;
   }
 
+  /** Searches the whole catalog: install/uninstall of a platform component
+   * must reach the runtime system guard (409) instead of dying as "not
+   * found", and the panel links to its `/apps/:name` detail page. */
   findOne(name: string): CatalogApp | undefined {
     return this.apps.find((app) => app.name === name);
   }

@@ -84,29 +84,32 @@ describe('Catalog API (e2e)', () => {
       expect(Array.isArray(response.body)).toBe(true);
     });
 
-    it('does not include Infrastructure apps', async () => {
+    it('does not include System apps (platform components)', async () => {
       const response = await request(app.getHttpServer())
         .get('/api/apps')
         .set('Cookie', authCookie)
         .expect(200);
 
-      response.body.forEach((app: { category: string }) => {
-        expect(app.category).not.toBe('Infrastructure');
+      response.body.forEach((app: { category: string; system?: boolean }) => {
+        expect(app.category).not.toBe('System');
+        // The runtime system classification must agree with the category.
+        expect(app.system).toBeFalsy();
       });
     });
 
-    it('returns exactly 3 user-facing apps from fixture', async () => {
+    it('returns exactly 4 user-facing apps from fixture', async () => {
       const response = await request(app.getHttpServer())
         .get('/api/apps')
         .set('Cookie', authCookie)
         .expect(200);
 
-      // this spec's fixture has 6 apps — vaultwarden, gogs, litellm + 3
-      // Infrastructure (traefik, cert-manager, nfs-provisioner) — so 3
-      // user-facing. Hermetic thanks to the pinned KUBECONFIG above: without
-      // it a developer's real cluster system-classifies gogs and the count
-      // silently drops.
-      expect(response.body).toHaveLength(3);
+      // this spec's fixture has 7 apps — vaultwarden, gogs, litellm +
+      // kata-containers (Infrastructure: a regular user-facing category since
+      // the #315 rename) + 3 System (traefik, cert-manager, nfs-provisioner)
+      // — so 4 user-facing. Hermetic thanks to the pinned KUBECONFIG above:
+      // without it a developer's real cluster system-classifies gogs and the
+      // count silently drops.
+      expect(response.body).toHaveLength(4);
     });
 
     it('each app has required fields', async () => {
@@ -146,11 +149,12 @@ describe('Catalog API (e2e)', () => {
         .expect(404);
     });
 
-    it('returns 404 for infrastructure app name (filtered out)', async () => {
-      await request(app.getHttpServer())
+    it('returns 200 for a system app: the panel links to its detail page, and install reaches the 409 guard', async () => {
+      const response = await request(app.getHttpServer())
         .get('/api/apps/traefik')
         .set('Cookie', authCookie)
-        .expect(404);
+        .expect(200);
+      expect(response.body.name).toBe('traefik');
     });
   });
 

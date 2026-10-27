@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { BadGatewayException, ServiceUnavailableException } from '@nestjs/common';
+import { BadGatewayException, ConflictException, ServiceUnavailableException } from '@nestjs/common';
 import { CasdoorAdminService, type CasdoorSession } from './casdoor-admin.service';
 
 function jsonRes(body: unknown, opts: { status?: number; setCookie?: string[] } = {}) {
@@ -72,6 +72,48 @@ describe('CasdoorAdminService', () => {
     it('is null when Casdoor rejects every candidate', async () => {
       recordFetch(() => jsonRes({ status: 'error', msg: 'password or code is incorrect' }));
       expect(await new CasdoorAdminService().signIn(['a-password-123', 'b-password-123'])).toBeNull();
+    });
+
+    it('ok + NextMfa is a 409 naming MFA, not a session: Casdoor has not signed it in', async () => {
+      const calls = recordFetch(() => jsonRes({ status: 'ok', data: 'NextMfa' }));
+      await expect(new CasdoorAdminService().signIn(['123', 'other-password'])).rejects.toThrow(
+        new ConflictException(
+          "Casdoor's admin account has multi-factor auth enabled. LibrePod signs in as a machine and cannot complete it — turn MFA off for setup, and back on afterwards.",
+        ),
+      );
+      // The password matched (MFA runs after it) — no other candidate is tried.
+      expect(calls).toHaveLength(1);
+    });
+
+    it('RequiredMfa (org-prompted) is refused the same way', async () => {
+      recordFetch(() => jsonRes({ status: 'ok', data: 'RequiredMfa' }));
+      await expect(new CasdoorAdminService().signIn(['123'])).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('userPasswordOk', () => {
+    it('posts the SSO login-page sign-in and answers by status', async () => {
+      const calls = recordFetch((_url, body) =>
+        JSON.parse(body!).password === 'right-pass-12'
+          ? jsonRes({ status: 'ok' })
+          : jsonRes({ status: 'error', msg: 'password or code is incorrect' }),
+      );
+      const svc = new CasdoorAdminService();
+      expect(await svc.userPasswordOk('alex', 'right-pass-12')).toBe(true);
+      expect(await svc.userPasswordOk('alex', 'wrong-pass-12')).toBe(false);
+      expect(calls[0]).toMatchObject({ url: '/api/login', method: 'POST' });
+      expect(JSON.parse(calls[0].body!)).toMatchObject({
+        type: 'login', application: 'marketplace-ui', organization: 'librepod', username: 'alex',
+      });
+    });
+
+    it('an MFA-pending account throws instead of answering false', async () => {
+      recordFetch(() => jsonRes({ status: 'ok', data: 'NextMfa' }));
+      await expect(new CasdoorAdminService().userPasswordOk('alex', 'right-pass-12')).rejects.toThrow(
+        new ConflictException(
+          'The account "alex" has multi-factor auth enabled — turn it off for setup, and back on afterwards. LibrePod cannot complete a second factor.',
+        ),
+      );
     });
 
     it('a down or erroring Casdoor is a 503 — never "wrong password"', async () => {

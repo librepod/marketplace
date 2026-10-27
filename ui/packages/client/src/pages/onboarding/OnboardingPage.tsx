@@ -85,7 +85,9 @@ function Frame({ children, reconnecting }: { children: ReactNode; reconnecting: 
     // near-black base, so the page background must stay transparent here.
     <div className="relative flex min-h-screen items-center justify-center px-6 text-foreground">
       <PodFieldBackground />
-      <div className="relative z-10 w-full max-w-lg">
+      {/* Frosted glass over the animation: the scene's glyphs are text-sized and
+          would otherwise run through the wizard's own text. */}
+      <div className="relative z-10 w-full max-w-lg rounded-xl bg-card/70 p-6 ring-1 ring-foreground/10 shadow-2xl backdrop-blur-md">
         {reconnecting && (
           <p role="status" className="mb-6 rounded-md border border-border px-3 py-2 text-xs text-muted-foreground">
             Your LibrePod is busy for a moment — reconnecting. What you've entered here is kept.

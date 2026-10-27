@@ -51,6 +51,7 @@ function make(o: {
   const store = {
     record: vi.fn(async () => value(o.record ?? claimed)),
     finishIfClaimed: vi.fn(async () => false),
+    logSetupCode: vi.fn(),
     knownFinished: o.knownFinished ?? false,
   };
   const onboarding = {
@@ -151,6 +152,15 @@ describe('BootstrapController.status', () => {
     });
     expect(installed.appStatus).not.toHaveBeenCalled();
     expect(wgEasy.listClients).not.toHaveBeenCalled();
+  });
+
+  it('a session-less browser entering the wizard re-logs the setup code; a session holder is past it', async () => {
+    const { controller, store } = make();
+    await controller.status(req('192.168.1.50'));
+    expect(store.logSetupCode).toHaveBeenCalledWith(expect.objectContaining({ state: 'claimed' }));
+    store.logSetupCode.mockClear();
+    await controller.status(req('192.168.1.50', withCookie()));
+    expect(store.logSetupCode).not.toHaveBeenCalled();
   });
 
   it('a cookie from another generation (a reset since) is no session', async () => {

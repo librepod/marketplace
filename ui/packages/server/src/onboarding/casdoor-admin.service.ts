@@ -1,4 +1,9 @@
-import { BadGatewayException, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  ConflictException,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 
 interface CasdoorResponse {
   status: string;
@@ -29,6 +34,7 @@ const TIMEOUT_MS = 10_000;
 export class CasdoorAdminService {
   private readonly baseUrl = (process.env.CASDOOR_BASE_URL ?? '').replace(/\/$/, '');
   private readonly org = process.env.CASDOOR_ORG_NAME ?? 'librepod';
+  private readonly app = process.env.CASDOOR_APP_NAME ?? 'marketplace-ui';
   private readonly baseDomain = process.env.BASE_DOMAIN ?? 'libre.pod';
 
   /** Casdoor's factory admin password, replaced at marketplace-ui's first start. The
@@ -68,11 +74,53 @@ export class CasdoorAdminService {
       });
       const json = await this.parse(res, '/api/login');
       if (json.status === 'ok') {
+        // The password matched (MFA runs after it — 3.106 checkMfaEnable), so no other
+        // candidate can help; but the session was NOT signed in. Returning the cookie
+        // here would make every admin call die as "Unauthorized operation" far from
+        // the cause, so name it where it happens.
+        if (this.mfaPending(json)) {
+          throw new ConflictException(
+            "Casdoor's admin account has multi-factor auth enabled. LibrePod signs in as a machine and cannot complete it — turn MFA off for setup, and back on afterwards.",
+          );
+        }
         const cookie = (res.headers.getSetCookie?.() ?? []).map((c) => c.split(';')[0]).join('; ');
         return { cookie, password };
       }
     }
     return null;
+  }
+
+  /** Password sign-in as a platform-org user — the same /api/login the SSO login
+   * page posts — to prove the submitter owns an existing account when the admin
+   * session can't be used (password drifted, or MFA on the admin). true = verified;
+   * an MFA-pending answer throws, since no wizard can complete a second factor. */
+  async userPasswordOk(username: string, password: string): Promise<boolean> {
+    const res = await this.request('/api/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type: 'login',
+        application: this.app,
+        organization: this.org,
+        username,
+        password,
+        autoSignin: true,
+      }),
+    });
+    const json = await this.parse(res, '/api/login');
+    if (this.mfaPending(json)) {
+      throw new ConflictException(
+        `The account "${username}" has multi-factor auth enabled — turn it off for setup, and back on afterwards. LibrePod cannot complete a second factor.`,
+      );
+    }
+    return json.status === 'ok';
+  }
+
+  /** Casdoor answers status ok with data "NextMfa"/"RequiredMfa" when the password
+   * matched but a second factor is due: the session is half-open — no signed-in
+   * user, no usable cookie. */
+  private mfaPending(json: CasdoorResponse): boolean {
+    return json.data === 'NextMfa' || json.data === 'RequiredMfa';
   }
 
   /** Verified against Casdoor 3.106: a signed-in admin needs no old password, and a stale
