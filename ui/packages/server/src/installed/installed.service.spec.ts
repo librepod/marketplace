@@ -86,7 +86,11 @@ describe('InstalledService', () => {
     removeApp: ReturnType<typeof vi.fn>;
   };
   let mockFluxService: { getStatusFor: ReturnType<typeof vi.fn> };
-  let mockCatalogService: { findAll: ReturnType<typeof vi.fn>; findOne: ReturnType<typeof vi.fn> };
+  let mockCatalogService: {
+    findAll: ReturnType<typeof vi.fn>;
+    findAllIncludingSystem: ReturnType<typeof vi.fn>;
+    findOne: ReturnType<typeof vi.fn>;
+  };
   let mockSystemAppsService: {
     getSystemApps: ReturnType<typeof vi.fn>;
     isSystem: ReturnType<typeof vi.fn>;
@@ -109,6 +113,7 @@ describe('InstalledService', () => {
     mockFluxService = { getStatusFor: vi.fn() };
     mockCatalogService = {
       findAll: vi.fn().mockReturnValue(mockCatalogApps),
+      findAllIncludingSystem: vi.fn().mockReturnValue(mockCatalogApps),
       findOne: vi.fn().mockImplementation((name: string) =>
         [...mockCatalogApps, settingsApp].find(a => a.name === name),
       ),
@@ -841,6 +846,24 @@ describe('InstalledService', () => {
       const vw = enriched.find((a) => a.name === 'vaultwarden')!;
       expect(vw.system).toBeFalsy();
       expect(mockFluxService.getStatusFor).toHaveBeenCalledWith('vaultwarden');
+    });
+  });
+
+  describe('getSystemApps() — the Platform panel', () => {
+    it('returns a category:System app the cluster manages: the panel must not be starved by the user-catalog filter (#315)', async () => {
+      // The production shape since #315: platform apps carry category System in
+      // the catalog, so findAll() excludes them — the panel must enrich the
+      // full list, not the user-facing one.
+      const traefik = { ...mockCatalogApps[0], name: 'traefik', category: 'System' };
+      mockCatalogService.findAll.mockReturnValue(mockCatalogApps.filter(a => a.category !== 'System'));
+      mockCatalogService.findAllIncludingSystem.mockReturnValue([...mockCatalogApps, traefik]);
+      mockSystemAppsService.getSystemApps.mockResolvedValue(new Map([['traefik', 'traefik']]));
+      mockFluxService.getStatusFor.mockResolvedValue('running');
+
+      const panel = await service.getSystemApps();
+
+      expect(panel.map((a) => a.name)).toEqual(['traefik']);
+      expect(panel[0]).toMatchObject({ system: true, installedStatus: 'running' });
     });
   });
 

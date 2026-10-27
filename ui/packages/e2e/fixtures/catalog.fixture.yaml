@@ -63,7 +63,7 @@ apps:
     version: "0.1.0"
     displayName: FRP Operator
     description: Fast reverse proxy operator for exposing services
-    category: Networking
+    category: System
     icon: https://example.com/frp-operator.png
     sourceType: oci-kustomize
     sourceUrl: oci://ghcr.io/librepod/marketplace/apps/frp-operator

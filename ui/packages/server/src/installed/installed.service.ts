@@ -85,7 +85,9 @@ export class InstalledService {
   }
 
   async getSystemApps(): Promise<CatalogApp[]> {
-    const all = await this.enrich(this.catalog.findAll());
+    // The full catalog, not findAll(): platform apps are category System
+    // (#315) and must still reach the enrichment that stamps `system: true`.
+    const all = await this.enrich(this.catalog.findAllIncludingSystem());
     return all.filter((app) => app.system);
   }
 
