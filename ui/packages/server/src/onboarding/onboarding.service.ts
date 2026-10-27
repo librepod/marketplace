@@ -9,6 +9,7 @@ import {
   OnModuleDestroy,
   OnModuleInit,
   ServiceUnavailableException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { OpenBaoCasMismatchError } from '../installed/openbao.client';
 import { CasdoorAdminService, type CasdoorSession } from './casdoor-admin.service';
@@ -135,30 +136,68 @@ export class OnboardingService implements OnModuleInit, OnModuleDestroy {
     return claimed;
   }
 
-  /** Creates the personal user, or keeps the recorded one (after a reset), setting a
-   * new password when one is given — the recovery for a forgotten personal password.
-   * Any other existing user is someone else's: 409. */
+  /** Creates the personal user, or adopts an existing one: the recorded account
+   * (after a reset), or an account proven by its password — the owner's own from
+   * before the record existed, or any existing one while the machine credential
+   * is unusable. Someone else's user is never adopted on a username alone. */
   async account(input: { username: unknown; password?: unknown }): Promise<OnboardingRecord> {
     const username = typeof input.username === 'string' ? input.username : '';
     if (!USERNAME.test(username) || username === 'admin') {
       throw new BadRequestException('Use 1–39 lowercase letters and digits, joined by single dots or dashes — "admin" is taken');
     }
     const given = input.password;
-    const password = given === undefined || given === null || given === '' ? null : checkPassword(given);
+    // Policy applies only where a password is WRITTEN: an existing account's
+    // current password may predate it.
+    const password = typeof given === 'string' && given !== '' ? given : null;
     const record = await this.stored(this.store.record());
     if (record.state !== 'claimed') throw new ConflictException('Claim this device first');
 
-    const session = await this.prepareCasdoor();
+    // The machine credential may be unusable (changed by hand, or MFA on the
+    // admin) — that only blocks creating a user, not adopting an existing one.
+    let session: CasdoorSession | null = null;
+    let adminBroken: string | null = null;
+    try {
+      session = await this.prepareCasdoor();
+    } catch (err) {
+      if (!(err instanceof ConflictException)) throw err;
+      adminBroken = err.message;
+    }
+
     const created = `${record.generation}:${username}`;
-    if (!(await this.casdoor.getUser(session, username))) {
+    if (!session) {
+      // No admin session: a user cannot be created and the admins group cannot be
+      // checked — the first setup did both, and adopting the account trusts them.
+      if (!password) {
+        throw new BadRequestException(
+          `A new account can't be created while the admin credential is broken — enter the password of an existing account to continue. (${adminBroken})`,
+        );
+      }
+      if (!(await this.casdoor.userPasswordOk(username, password))) {
+        throw new UnauthorizedException(
+          'Wrong username or password — only an existing account can continue while the admin credential is broken',
+        );
+      }
+    } else if (!(await this.casdoor.getUser(session, username))) {
       if (!password) throw new BadRequestException('Choose a password for the new account');
-      await this.casdoor.addUser(session, username, password, [this.casdoor.adminsGroupId]);
+      await this.casdoor.addUser(session, username, checkPassword(password), [this.casdoor.adminsGroupId]);
       this.created.add(created);
     } else if (username !== record.account && !this.created.has(created)) {
-      // After a reset other people's users exist: never re-password one of them.
-      throw new ConflictException('That username is already taken — choose another');
+      // An existing user the wizard has no record of: on a long-lived device that
+      // is usually the owner's own account (created before the record existed);
+      // after a reset it could be someone else's. Its password decides.
+      if (!password) {
+        throw new BadRequestException(
+          'That username belongs to an existing account — enter its current password to keep it, or choose another username',
+        );
+      }
+      if (!(await this.casdoor.userPasswordOk(username, password))) {
+        throw new UnauthorizedException(
+          `That password doesn't match the existing account "${username}" — choose another username`,
+        );
+      }
+      await this.casdoor.ensureInGroup(session, username);
     } else {
-      if (password) await this.casdoor.setUserPassword(session, username, password);
+      if (password) await this.casdoor.setUserPassword(session, username, checkPassword(password));
       await this.casdoor.ensureInGroup(session, username);
     }
 

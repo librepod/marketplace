@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Logger,
   ServiceUnavailableException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OnboardingService } from './onboarding.service';
@@ -244,14 +245,35 @@ describe('OnboardingService', () => {
       expect(t.state.users.get('alex')).toBe('brand-new-pass-12');
     });
 
-    it("after a reset, someone else's existing name is a 409 that leaves their password alone", async () => {
+    it("after a reset, someone else's existing name is not adopted on a wrong password: a 401 that leaves it alone", async () => {
       const t = await afterReset();
       t.state.users.set('sam', 'sams-own-pass-12');
       await expect(t.service.account({ username: 'sam', password: 'owner-typed-12' })).rejects.toThrow(
-        new ConflictException('That username is already taken — choose another'),
+        new UnauthorizedException('That password doesn\'t match the existing account "sam" — choose another username'),
       );
       expect(t.state.users.get('sam')).toBe('sams-own-pass-12');
       expect(t.kv.get('system', RECORD)).toMatchObject({ account: 'alex' });
+    });
+
+    it('an existing account the wizard has no record of is adopted on its own password (set up before the record existed)', async () => {
+      const t = await claimed();
+      t.state.users.set('alex', 'the-owners-pass-12'); // record.account is null on this device
+      const record = await t.service.account({ username: 'alex', password: 'the-owners-pass-12' });
+      expect(t.casdoor.addUser).not.toHaveBeenCalled();
+      // The password was the proof, not a new one — it must not be rewritten.
+      expect(t.casdoor.setUserPassword).not.toHaveBeenCalled();
+      expect(t.casdoor.ensureInGroup).toHaveBeenCalledWith(expect.anything(), 'alex');
+      expect(record).toMatchObject({ account: 'alex', accountGeneration: record.generation });
+    });
+
+    it('the same case without a password asks for it instead of "taken"', async () => {
+      const t = await claimed();
+      t.state.users.set('alex', 'the-owners-pass-12');
+      await expect(t.service.account({ username: 'alex' })).rejects.toThrow(
+        new BadRequestException(
+          'That username belongs to an existing account — enter its current password to keep it, or choose another username',
+        ),
+      );
     });
 
     it('a retry after the record write failed keeps the user it just created', async () => {
@@ -303,6 +325,40 @@ describe('OnboardingService', () => {
       await t.kv.writeEntry('system', 'admin', {});
       await expect(t.service.account({ username: 'alex', password: 'personal-pass-12' })).resolves.toBeDefined();
       expect(t.kv.get('system', 'admin')?.password).toBeTruthy();
+    });
+  });
+
+  describe('account with the machine credential unusable', () => {
+    /** Claimed, then the admin sign-in stops working — password changed by hand,
+     * or MFA enabled on the admin. */
+    async function adminBroken() {
+      const t = await claimed();
+      t.casdoor.signIn.mockResolvedValue(null);
+      return t;
+    }
+
+    it('an existing account is adopted on its password alone, with no admin session', async () => {
+      const t = await adminBroken();
+      t.state.users.set('alex', 'the-owners-pass-12');
+      const record = await t.service.account({ username: 'alex', password: 'the-owners-pass-12' });
+      expect(t.casdoor.addUser).not.toHaveBeenCalled();
+      expect(t.casdoor.setUserPassword).not.toHaveBeenCalled();
+      expect(record).toMatchObject({ account: 'alex', accountGeneration: record.generation });
+      expect(t.kv.get('system', RECORD)).toMatchObject({ account: 'alex', accountGeneration: 1 });
+    });
+
+    it('a wrong or unknown password is a 401; without one, no account can be created', async () => {
+      const t = await adminBroken();
+      await expect(t.service.account({ username: 'alex', password: 'personal-pass-12' })).rejects.toThrow(
+        new UnauthorizedException(
+          'Wrong username or password — only an existing account can continue while the admin credential is broken',
+        ),
+      );
+      await expect(t.service.account({ username: 'alex' })).rejects.toThrow(
+        new BadRequestException(
+          "A new account can't be created while the admin credential is broken — enter the password of an existing account to continue. (Casdoor's admin password was changed outside LibrePod)",
+        ),
+      );
     });
   });
 });

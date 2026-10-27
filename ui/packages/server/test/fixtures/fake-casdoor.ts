@@ -33,6 +33,7 @@ export function fakeCasdoor(adminPassword = '123') {
     setUserPassword: vi.fn(async (_session: CasdoorSession, name: string, password: string) => {
       state.users.set(name, password);
     }),
+    userPasswordOk: vi.fn(async (name: string, password: string) => state.users.get(name) === password),
   };
   return { casdoor, state };
 }
