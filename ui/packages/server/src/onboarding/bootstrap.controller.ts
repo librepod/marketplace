@@ -120,7 +120,12 @@ export class BootstrapController {
     if (record.state !== 'finished' && !(await this.casdoor.reachable())) return status;
     status.state = record.state;
     status.session = isOnboardingSession(this.session, cookies?.[ONBOARDING_COOKIE], record);
-    if (!status.session) return status;
+    if (!status.session) {
+      // Someone is entering the wizard at the code screen: make sure the code is in
+      // this pod's log tail, where the wizard's hint tells the owner to grep for it.
+      this.store.logSetupCode(record);
+      return status;
+    }
 
     const confirmed = record.account !== null && record.accountGeneration === record.generation;
     status.account = confirmed ? record.account : null;

@@ -31,6 +31,8 @@ const ADMIN_PATH = 'admin';
 const CACHE_TTL_MS = 5_000;
 export const RETRY_MIN_MS = 5_000;
 export const RETRY_MAX_MS = 60_000;
+/** How often logSetupCode() may repeat a code — the wizard polls status every 4s. */
+const CODE_LOG_THROTTLE_MS = 60_000;
 const STATES: readonly StoredState[] = ['open', 'claimed', 'finished'];
 
 const text = (value: unknown): string | null => (typeof value === 'string' ? value : null);
@@ -68,6 +70,7 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
   private cached?: { record: OnboardingRecord; at: number };
   private finished = false;
   private retry?: NodeJS.Timeout;
+  private codeLogged?: { code: string; at: number };
 
   constructor(
     private readonly bao: OpenBaoClient,
@@ -93,16 +96,24 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
   async start(delayMs = RETRY_MIN_MS): Promise<void> {
     try {
       const record = await this.ensure();
-      if (record.state !== 'finished') {
-        this.logger.log(
-          `LibrePod setup code: ${formatSetupCode(record.code)} — open http://<this device's IP> to set up`,
-        );
-      }
+      if (record.state !== 'finished') this.logCode(record.code);
     } catch (err) {
       this.logger.warn(`onboarding record not ready (${(err as Error).message}); retrying in ${delayMs / 1000}s`);
       this.retry = setTimeout(() => void this.start(Math.min(delayMs * 2, RETRY_MAX_MS)), delayMs);
       this.retry.unref();
     }
+  }
+
+  /** A browser entered the wizard without a setup session — the claim screen, where
+   * the code is needed. The start-time line may have scrolled out of the pod's log,
+   * or a reset-onboarding run while this pod was up replaced the code without it ever
+   * being logged here, so re-log it: the wizard's "grep the logs" hint must answer.
+   * At most once a minute per code; a new code logs immediately. */
+  logSetupCode(record: OnboardingRecord): void {
+    if (record.state === 'finished') return;
+    if (this.codeLogged?.code === record.code && Date.now() - this.codeLogged.at < CODE_LOG_THROTTLE_MS) return;
+    this.codeLogged = { code: record.code, at: Date.now() };
+    this.logCode(record.code);
   }
 
   /** The current record, at most CACHE_TTL_MS old. Throws when OpenBao can't answer. */
@@ -208,5 +219,11 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
   private remember(record: OnboardingRecord): void {
     this.cached = { record, at: Date.now() };
     this.finished = record.state === 'finished';
+  }
+
+  private logCode(code: string): void {
+    this.logger.log(
+      `LibrePod setup code: ${formatSetupCode(code)} — open http://<this device's IP> to set up`,
+    );
   }
 }

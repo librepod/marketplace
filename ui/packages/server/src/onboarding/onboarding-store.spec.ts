@@ -155,6 +155,32 @@ describe('OnboardingStore', () => {
     });
   });
 
+  describe('logSetupCode — a browser entering the wizard', () => {
+    it('re-logs the code, at most once a minute per code (the wizard polls every 4s)', async () => {
+      vi.useFakeTimers({ now: new Date('2026-10-14T10:00:00Z') });
+      const { store } = makeStore();
+      const record = await store.record();
+      store.logSetupCode(record);
+      store.logSetupCode(record);
+      expect(log).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(60_001);
+      store.logSetupCode(record);
+      expect(log).toHaveBeenCalledTimes(2);
+    });
+
+    it('a new code (a reset while this pod was running) logs immediately; a finished record never', async () => {
+      const { store } = makeStore();
+      const record = await store.record();
+      store.logSetupCode(record);
+      log.mockClear();
+      store.logSetupCode({ ...record, code: 'NEWCODE23456', generation: 2 });
+      expect(log).toHaveBeenCalledTimes(1);
+      log.mockClear();
+      store.logSetupCode({ ...record, state: 'finished', finishedAt: 'f' });
+      expect(log).not.toHaveBeenCalled();
+    });
+  });
+
   describe('transitions', () => {
     it('save() writes the whole record and refreshes the cache', async () => {
       const { store, kv } = makeStore();
