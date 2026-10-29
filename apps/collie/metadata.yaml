@@ -11,7 +11,7 @@ spec:
 
   # serge: notesRepo=AltanS/collie
   # renovate: datasource=docker depName=ghcr.io/cyxou/collie-lead
-  version: "1.24.0"
+  version: "1.24.1"
 
   source:
     type: oci-kustomize
