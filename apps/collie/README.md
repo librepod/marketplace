@@ -14,17 +14,18 @@ release; its tag is the collie version.
   middlewares. `/auth` (the PWA's "Sign in" link) redirects to oauth2-proxy's
   sign-in. Every `/api` route but `/api/health` and `/api/pair` also needs a
   paired device, reads included. Never expose the lead with `tailscale funnel`.
-- **Tailscale sidecar** (`components/tailscale`): joins the pod to your
+- **Tailscale sidecar** (the shared `tailscale` component, picked in the
+  install dialog): joins the pod to your
   tailnet, giving the lead egress to the members and an address members join
-  at. The node identity is `tailscaled.state` on the `collie-data` volume
+  at. The node identity is `tailscaled.state` on the component's `tailscale-state` volume
   (containerboot runs with `TS_KUBE_SECRET=""`), so the lead keeps its tailnet
-  address across restarts, reinstalls and namespace churn. The sidecar logs in
+  address across restarts (a reinstall gets a new state volume and enrols again). The sidecar logs in
   with `TS_AUTHKEY` only when that state can't (`TS_AUTH_ONCE=true`): Headscale
   0.28 enrols a new node whenever a tags-only pre-auth key is presented again.
 - **State**: the PVC `collie-data` (crew trust store, device pairings,
-  push keys, and the sidecar's `tailscaled.state`). Losing it means every
-  member re-runs `collie crew join`, every phone re-pairs, and the lead joins
-  the tailnet as a new node. Delete the old node on the control server first,
+  push keys). Losing it means every
+  member re-runs `collie crew join` and every phone re-pairs. Losing the
+  tailscale volume makes the lead join the tailnet as a new node: delete the old node on the control server first,
   or the new one gets a suffixed name (`collie-lead-<random>`) and
   `COLLIE_PUBLIC_URL` points at the dead node.
 
@@ -32,10 +33,16 @@ release; its tag is the collie version.
 
 | Setting | Purpose |
 |---|---|
-| `TS_AUTHKEY` | Pre-auth key that joins the lead to the tailnet on first start. |
-| `TS_EXTRA_ARGS` | Extra `tailscale up` flags, applied when the lead first joins, e.g. `--login-server=https://headscale.example.com` for a Headscale tailnet. |
-| `TS_HOSTNAME` | Optional: the lead's tailnet hostname (default `collie-lead`). Set only when the default name is already taken on the tailnet. |
 | `COLLIE_PUBLIC_URL` | The address crew members join at (`http://<lead tailnet name or IP>:8787`). |
+
+The tailnet settings (auth key, extra `tailscale up` flags, hostname) belong to
+the shared `tailscale` component and appear under Components in the install
+dialog; the hostname defaults to `collie-lead`.
+
+**Migrating an existing install:** reinstall with the tailscale component
+selected. Its state volume is new, so the node enrols again and needs a fresh
+auth key. Delete the old `collie-lead` node on the control server first, or the
+new one gets a suffixed name and `COLLIE_PUBLIC_URL` breaks.
 
 `COLLIE_PUBLIC_HOSTS` is deliberately not a setting. The public hostname needs
 no entry (collie accepts the host of every `COLLIE_ALLOWED_ORIGINS` entry, which

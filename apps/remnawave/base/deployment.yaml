@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: remnawave
+  annotations:
+    librepod.org/component-target: "true"
 spec:
   replicas: 1
   strategy:

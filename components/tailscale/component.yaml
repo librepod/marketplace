@@ -1,0 +1,31 @@
+apiVersion: marketplace/v1
+kind: ComponentDefinition
+metadata:
+  name: tailscale
+spec:
+  displayName: "Tailscale"
+  description: "Joins the app to your tailnet with a tailscale sidecar. Cluster names resolve through MagicDNS only when your tailnet routes cluster.local to CoreDNS (split DNS), as the bundled headscale does."
+  # renovate: datasource=docker depName=tailscale/tailscale
+  version: "v1.104.2"
+  group: network
+  kind: patch
+  settings:
+    - name: TS_AUTHKEY
+      label: "Tailnet auth key"
+      description: "Pre-auth key that joins the app to your tailnet (headscale: headscale preauthkeys create). Only used to join the first time."
+      type: string
+      required: true
+      sensitive: true
+    - name: TS_EXTRA_ARGS
+      label: "Extra tailscale up flags"
+      description: "For a headscale tailnet: --login-server=https://headscale.example.com. Leave empty for Tailscale. Applied when the app first joins."
+      type: string
+      required: false
+      sensitive: false
+  values:
+    - name: TS_HOSTNAME
+      from: install
+      label: "Tailnet hostname"
+      description: "The node name when the app first joins the tailnet"
+      default: "{app}"
+      pattern: "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"

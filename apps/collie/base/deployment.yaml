@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: collie
+  annotations:
+    librepod.org/component-target: "true"
 spec:
   replicas: 1
   strategy:
@@ -19,6 +21,14 @@ spec:
       # Paired phones can open shells in the collie container, so it gets no
       # API token. A container that needs one mounts it itself.
       automountServiceAccountToken: false
+      # serviceAccountName is set to default rather than omitted: installs
+      # from before the tailscale sidecar was removed run as the
+      # since-removed collie ServiceAccount, and on them the API server
+      # refills an omitted serviceAccountName from the deprecated
+      # serviceAccount alias (still collie) under both client- and
+      # server-side apply. The new pods would then reference the pruned
+      # ServiceAccount and never be created.
+      serviceAccountName: default
       # The image runs as 65534:65534.
       securityContext:
         runAsNonRoot: true

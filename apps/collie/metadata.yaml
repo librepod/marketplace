@@ -20,20 +20,14 @@ spec:
 
   settings:
     items:
-      - name: TS_AUTHKEY
-        label: "Tailnet auth key"
-        description: "Pre-auth key that joins the lead to your tailnet (Headscale: headscale preauthkeys create). Only needed to join the first time; the lead keeps its tailnet identity after that."
-        required: true
-        sensitive: true
-      - name: TS_EXTRA_ARGS
-        label: "Extra tailscale up flags"
-        description: "For a Headscale tailnet: --login-server=https://headscale.example.com. Leave empty for Tailscale. Applied when the lead first joins."
-      - name: TS_HOSTNAME
-        label: "Tailnet hostname"
-        description: "The lead's tailnet hostname when it first joins (default collie-lead; MagicDNS address collie-lead.ts.<domain>). Only needed when the default is taken. Changing it later keeps the MagicDNS name on Headscale; on Tailscale it renames the node and breaks the address members joined at."
       - name: COLLIE_PUBLIC_URL
         label: "Lead address for crew members"
         description: "The URL crew members join at: the lead's tailnet name or IP on port 8787, e.g. http://collie-lead.ts.example.com:8787."
+
+  components:
+    - name: tailscale
+      values:
+        TS_HOSTNAME: collie-lead
 
   dependencies:
     required:
