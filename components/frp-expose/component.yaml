@@ -1,0 +1,20 @@
+apiVersion: marketplace/v1
+kind: ComponentDefinition
+metadata:
+  name: frp-expose
+spec:
+  displayName: "Public HTTPS exposure (FRP relay)"
+  description: "Publishes the app at https://<subdomain>.<relay domain>, with TLS terminated at the relay. SSO login does not work through the relay, and an app whose only login is SSO forward-auth is exposed without one."
+  version: "1.0.0"
+  kind: resource
+  values:
+    - name: FRP_EXPOSE_HOST
+      from: app
+    - name: FRP_EXPOSE_PORT
+      from: app
+    - name: FRP_EXPOSE_SUBDOMAIN
+      from: install
+      label: "Public subdomain"
+      description: "Also the proxy name, so two devices sharing a relay must pick different subdomains"
+      default: "{app}"
+      pattern: "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"

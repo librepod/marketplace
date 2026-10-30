@@ -4,7 +4,7 @@ metadata:
   name: headscale
 spec:
   displayName: "Headscale"
-  description: "Self-hosted Tailscale control server — one tailnet for all your devices"
+  description: "Self-hosted Tailscale control server — one tailnet for all your devices. Without the frp-expose component, clients cannot reach headscale, because its URLs point at the relay."
   icon: "https://raw.githubusercontent.com/juanfont/headscale/main/docs/logo.png"
   category: "Network"
   website: "https://github.com/juanfont/headscale"
@@ -17,6 +17,12 @@ spec:
     type: oci-kustomize
     url: "oci://ghcr.io/librepod/marketplace/apps/headscale"
     path: ./overlays/librepod
+
+  components:
+    - name: frp-expose
+      values:
+        FRP_EXPOSE_HOST: headscale.headscale.svc.cluster.local
+        FRP_EXPOSE_PORT: "80"
 
   dependencies:
     required:

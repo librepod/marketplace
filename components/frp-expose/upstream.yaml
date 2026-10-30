@@ -1,0 +1,22 @@
+# Reconciled by frp-operator into the FRP client configuration. TLS is
+# terminated at the relay, which forwards plain HTTP to frps' vhost port, so
+# this is type http and frps routes by Host header.
+apiVersion: frp.zufardhiyaulhaq.com/v1alpha1
+kind: Upstream
+metadata:
+  # Registered with frps as the proxy name; must be unique per relay.
+  name: ${FRP_EXPOSE_SUBDOMAIN:=app}
+spec:
+  client: libreport
+  http:
+    host: ${FRP_EXPOSE_HOST:=localhost}
+    port: ${FRP_EXPOSE_PORT:=80}
+    subdomain: ${FRP_EXPOSE_SUBDOMAIN:=app}
+    healthCheck:
+      type: tcp
+      timeoutSeconds: 3
+      intervalSeconds: 10
+      maxFailed: 3
+    transport:
+      useEncryption: true
+      useCompression: true

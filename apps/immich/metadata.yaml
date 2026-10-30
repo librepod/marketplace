@@ -34,6 +34,12 @@ spec:
         generate:
           length: 40
 
+  components:
+    - name: frp-expose
+      values:
+        FRP_EXPOSE_HOST: immich-server.immich.svc.cluster.local
+        FRP_EXPOSE_PORT: "2283"
+
   dependencies:
     required:
       - kind: IngressController

@@ -22,7 +22,7 @@ headscale:
   # Internal Kubernetes service URL (same namespace).
   url: "http://headscale:80"
   # Public URL shown in the UI for user-facing links.
-  public_url: "https://headscale.${FRP_DOMAIN:=libre.pod}"
+  public_url: "https://${FRP_EXPOSE_SUBDOMAIN:=headscale}.${FRP_DOMAIN:=libre.pod}"
   # Read-only access to the Headscale config file (shared ConfigMap from base).
   config_path: "/etc/headscale/config.yaml"
   config_strict: true

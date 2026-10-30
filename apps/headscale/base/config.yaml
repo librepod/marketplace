@@ -25,7 +25,7 @@
 
 # Public URL — must be reachable by Tailscale clients outside the VPN.
 # Uses the FRP tunnel domain (not BASE_DOMAIN, which only resolves internally).
-server_url: https://headscale.${FRP_DOMAIN}
+server_url: https://${FRP_EXPOSE_SUBDOMAIN:=headscale}.${FRP_DOMAIN}
 listen_addr: 0.0.0.0:8080
 metrics_listen_addr: 0.0.0.0:9090
 grpc_listen_addr: 0.0.0.0:50443

@@ -26,7 +26,7 @@ spec:
   clientId: headscale              # Casdoor app name (id=admin/headscale) AND OIDC client_id
   organization: librepod           # platform org (created at bootstrap); login users must live here
   redirectUris:
-    - "https://headscale.${FRP_DOMAIN}/oidc/callback"
+    - "https://${FRP_EXPOSE_SUBDOMAIN:=headscale}.${FRP_DOMAIN}/oidc/callback"
   grantTypes: [authorization_code, refresh_token]
   tokenFormat: JWT-Standard        # standard OIDC claims only; avoids the plain-JWT address-claim trap (see docs/sso-app-author-guide.md)
   expireInHours: 168               # 7 days
