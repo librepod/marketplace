@@ -12,6 +12,14 @@ spec:
   targetNamespace: flux-system
   valuesContent: |-
     instance:
+      # The chart defaults plus source-watcher, which composes shared
+      # components into an app (ArtifactGenerator) when a user picks any.
+      components:
+        - source-controller
+        - kustomize-controller
+        - helm-controller
+        - notification-controller
+        - source-watcher
       sync:
         interval: 1m
         kind: OCIRepository
