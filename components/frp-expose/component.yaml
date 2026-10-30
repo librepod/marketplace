@@ -6,6 +6,7 @@ spec:
   displayName: "Public HTTPS exposure (FRP relay)"
   description: "Publishes the app at https://<subdomain>.<relay domain>, with TLS terminated at the relay. SSO login does not work through the relay, and an app whose only login is SSO forward-auth is exposed without one."
   version: "1.0.0"
+  group: exposure
   kind: resource
   values:
     - name: FRP_EXPOSE_HOST
@@ -18,3 +19,12 @@ spec:
       description: "Also the proxy name, so two devices sharing a relay must pick different subdomains"
       default: "{app}"
       pattern: "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
+    - name: FRP_EXPOSE_DOMAIN
+      from: install
+      label: "Relay domain"
+      description: "The relay's base domain; the app is served at <subdomain>.<relay domain>"
+      pattern: "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)+$"
+    # The exposure contract: apps read their public hostname from PUBLIC_HOST only.
+    - name: PUBLIC_HOST
+      from: derived
+      default: "{FRP_EXPOSE_SUBDOMAIN}.{FRP_EXPOSE_DOMAIN}"

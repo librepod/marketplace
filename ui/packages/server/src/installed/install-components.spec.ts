@@ -140,6 +140,30 @@ describe('resolveComponents', () => {
     expect(errors).toEqual([{ name: 'components.frp-expose.FRP_EXPOSE_PORT', message: 'Set by the app' }]);
   });
 
+  it('derives a value from the others and refuses it from the request', () => {
+    const expose: AppComponent = {
+      ...frp,
+      values: [
+        { name: 'SUB', from: 'install', default: 'immich', pattern: DNS_LABEL },
+        { name: 'DOMAIN', from: 'install', pattern: '^[a-z.]+$' },
+        { name: 'PUBLIC_HOST', from: 'derived', default: '{SUB}.{DOMAIN}' },
+      ],
+    };
+    const exposeApp = { name: 'immich', components: [expose] } as unknown as CatalogApp;
+    const resolve = (values?: Record<string, string>) =>
+      resolveComponents(exposeApp, { components: [{ name: 'frp-expose', values }] });
+    expect(resolve({ DOMAIN: 'relay.example' })).toMatchObject({
+      ok: true,
+      components: [{ values: { SUB: 'immich', DOMAIN: 'relay.example', PUBLIC_HOST: 'immich.relay.example' } }],
+    });
+    expect(resolve({ DOMAIN: 'relay.example', PUBLIC_HOST: 'x' })).toEqual({
+      ok: false,
+      errors: [{ name: 'components.frp-expose.PUBLIC_HOST', message: 'Set by the component' }],
+    });
+    // A missing input is reported once, on the input itself.
+    expect(resolve()).toEqual({ ok: false, errors: [{ name: 'components.frp-expose.DOMAIN', message: 'Required' }] });
+  });
+
   it('rejects an unknown value key', () => {
     const errors = errorsOf({ components: [{ name: 'frp-expose', values: { NOPE: 'x' } }] });
     expect(errors.map((e) => e.name)).toEqual(['components.frp-expose.NOPE']);

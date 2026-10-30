@@ -31,7 +31,7 @@ spec:
             # address the client sent to. conntrack cannot reverse-NAT a packet
             # whose source it never saw, so the reply arrives from an unexpected
             # peer and the kernel drops it on any CONNECTED UDP socket — which is
-            # what frp's UDP proxy dials, so a tunnelled STUN endpoint is a black
+            # what a tunnel client's UDP proxy dials, so a tunnelled STUN endpoint is a black
             # hole even though every hop reports itself healthy. Symptom: STUN
             # times out with no errors logged anywhere, the embedded DERP region
             # never gets a latency measurement, and no client ever picks it as its

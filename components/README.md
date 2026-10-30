@@ -21,11 +21,17 @@ descriptor (version, `group`, `kind: patch | resource`, `settings`, `values`).
   semver. A manifest-only change re-pushes the same tag.
 - **Defaults on every variable.** Write `${VAR:=default}`; strict substitution
   must never fail a build. `INSTANCE_NAME` is always supplied by the installer.
-  Reserved names: `BASE_DOMAIN`, `DEVICE_IP`, `INSTANCE_NAME`, `FRP_DOMAIN`.
+  Reserved names: `BASE_DOMAIN`, `DEVICE_IP`, `INSTANCE_NAME`.
 - **Secrets.** Settings go to OpenBao `apps/<app>/<component>`, delivered by the
   component's own ExternalSecret `<name>-settings`, never merged into the app's.
 - **`from: install` values** need an anchored `pattern` (`^…$`); the server also
   restricts them to a safe charset.
+- **`from: derived` values** are never asked: the installer fills the `default`
+  template (`{OTHER_VALUE}` placeholders) from the component's other values.
+- **Exposure contract.** A component in group `exposure` must provide
+  `PUBLIC_HOST`, the public hostname the app is served at. Apps read only
+  `${PUBLIC_HOST:=<local fallback>}`, so they never depend on how they are
+  exposed (frp-expose today, another tunnel later).
 
 ## Opting an app in
 

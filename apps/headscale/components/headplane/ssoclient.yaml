@@ -14,7 +14,7 @@
 #
 # ${BASE_DOMAIN} is expanded by Flux postBuild.substitute at deploy time (and
 # the controller), so the on-cluster CR carries a concrete redirect URI. The
-# callback is on the BASE_DOMAIN (cluster ingress), NOT the FRP tunnel domain:
+# callback is on the BASE_DOMAIN (cluster ingress), NOT the public host (PUBLIC_HOST):
 # headplane is an admin UI reached via headplane.<BASE_DOMAIN>, and the browser
 # completes the OIDC redirect before/independent of any Tailscale tunnel.
 apiVersion: marketplace.librepod.org/v1alpha1

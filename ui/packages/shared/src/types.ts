@@ -79,10 +79,13 @@ export interface InstallRequest {
   components?: ComponentRequest[];
 }
 
-/** A non-secret component input: asked in the dialog (`install`) or supplied by the app (`app`). */
+/**
+ * A non-secret component input: asked in the dialog (`install`), supplied by the app (`app`),
+ * or `derived` at install from the component's other values (`default` is then a `{NAME}` template).
+ */
 export interface ComponentValueDef {
   name: string;
-  from: 'install' | 'app';
+  from: 'install' | 'app' | 'derived';
   label?: string;
   description?: string;
   default?: string;

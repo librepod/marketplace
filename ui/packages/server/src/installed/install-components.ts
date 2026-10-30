@@ -45,15 +45,16 @@ function resolveOne(def: AppComponent, entry: ComponentRequest, errors: FieldErr
     errors.push({ name: scope, message: 'values must be an object of text values' });
     return { name: def.name, version: def.version, hasSettings: !!def.settings?.length, settings, values };
   }
+  const before = errors.length;
   const declared = new Set(def.values.map((v) => v.name));
   for (const key of Object.keys(given)) {
     if (!declared.has(key)) errors.push({ name: `${scope}.${key}`, message: 'Not a value of this component' });
   }
   for (const v of def.values) {
     const field = `${scope}.${v.name}`;
-    if (v.from === 'app') {
-      if (given[v.name] !== undefined) errors.push({ name: field, message: 'Set by the app' });
-      else values[v.name] = v.default ?? '';
+    if (v.from !== 'install') {
+      if (given[v.name] !== undefined) errors.push({ name: field, message: v.from === 'app' ? 'Set by the app' : 'Set by the component' });
+      else if (v.from === 'app') values[v.name] = v.default ?? '';
       continue;
     }
     const value = given[v.name] ?? v.default;
@@ -69,6 +70,14 @@ function resolveOne(def: AppComponent, entry: ComponentRequest, errors: FieldErr
     }
     if (!matches || !SAFE_VALUE.test(value) || YAML_NON_STRING.test(value)) errors.push({ name: field, message: 'Invalid value' });
     else values[v.name] = value;
+  }
+  // Derived values fill their template from the values above (skipped once any input failed,
+  // so a bad input is not reported twice) and face the same checks as install values.
+  for (const v of errors.length === before ? def.values : []) {
+    if (v.from !== 'derived') continue;
+    const value = (v.default ?? '').replace(/\{(\w+)\}/g, (m, k: string) => values[k] ?? m);
+    if (SAFE_VALUE.test(value) && !YAML_NON_STRING.test(value)) values[v.name] = value;
+    else errors.push({ name: `${scope}.${v.name}`, message: 'Invalid value' });
   }
   return { name: def.name, version: def.version, hasSettings: !!def.settings?.length, settings, values };
 }

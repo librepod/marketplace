@@ -68,6 +68,9 @@ spec:
       from: install
       default: "{app}"
       pattern: "^[a-z]+$"
+    - name: RES_URL
+      from: derived
+      default: "{RES_NAME}.example"
 EOF
   cat > "$T/components/res/kustomization.yaml" <<'EOF'
 apiVersion: kustomize.config.k8s.io/v1alpha1
@@ -183,6 +186,10 @@ reserved_name_fails() {
   new_tree; yq -i '.spec.values[1].name = "INSTANCE_NAME"' "$T/components/res/component.yaml"
   expect_fail reserved_name "reserved" demo
 }
+exposure_without_public_host_fails() {
+  new_tree; yq -i '.spec.group = "exposure"' "$T/components/res/component.yaml"
+  expect_fail exposure_without_public_host PUBLIC_HOST demo
+}
 var_without_default_fails() {
   new_tree; sed -i 's/\${RES_HOST:=x}/${RES_HOST}/' "$T/components/res/cm.yaml"
   expect_fail var_without_default default demo
@@ -203,7 +210,7 @@ two_targets_fail() {
 }
 
 for t in demo_passes sibling_untouched missing_target_fails missing_app_value_fails \
-         undeclared_value_fails unanchored_pattern_fails reserved_name_fails \
+         undeclared_value_fails unanchored_pattern_fails reserved_name_fails exposure_without_public_host_fails \
          var_without_default_fails substitute_disabled_fails two_targets_fail; do
   "$t"; echo "ok $t"
 done

@@ -167,7 +167,8 @@ spec:
       sensitive: true
   values:                    # non-secret → Flux postBuild.substitute in release.yaml
     - name: FRP_EXPOSE_SUBDOMAIN   # (frp-expose example)
-      from: install          # install = asked in the dialog; app = supplied by the app's metadata
+      from: install          # install = asked in the dialog; app = supplied by the app's metadata;
+                             # derived = filled from the component's other values ({NAME} template in default)
       default: "{app}"       # "{app}" = the app name, filled by the renderer
       pattern: "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
 ```
@@ -453,7 +454,7 @@ re-enrolment fix):
 - Image: `tailscale/tailscale` `v1.104.2` (the newer of the two app pins).
 - Does **not** set `serviceAccountName`.
 
-### `frp-expose` — no group, kind `resource` (extracted from headscale)
+### `frp-expose` — group `exposure`, kind `resource` (extracted from headscale)
 
 ```yaml
 apiVersion: frp.zufardhiyaulhaq.com/v1alpha1
@@ -482,7 +483,14 @@ spec:
   app name, DNS-label pattern). Subdomain = proxy name, so two devices sharing a
   relay must pick different subdomains; a collision shows up as the Upstream /
   frpc reporting the name taken.
-- Public address: `https://<subdomain>.${FRP_DOMAIN}`; TLS is terminated at the
+- `FRP_EXPOSE_DOMAIN` (`from: install`, DNS-name pattern, no default) is the
+  relay's base domain. Nothing on the device knows it, so the dialog asks.
+- **Exposure contract.** Group `exposure` components must provide `PUBLIC_HOST`
+  (enforced by `check-app-components.sh`); frp-expose derives it as
+  `{FRP_EXPOSE_SUBDOMAIN}.{FRP_EXPOSE_DOMAIN}` (`from: derived`). Apps read
+  only `${PUBLIC_HOST:=<local fallback>}`, so a later cloudflared or ngrok
+  component needs no app change.
+- Public address: `https://${PUBLIC_HOST}`; TLS is terminated at the
   relay, which forwards plain HTTP to frps' vhost port (headscale's setup).
 - The health check is `tcp` (generic) rather than headscale's `http /health`.
 - Version: `1.0.0`, hand-bumped.
@@ -496,7 +504,7 @@ spec:
 |---|---|---|
 | collie | Delete `components/tailscale`, its overlay `components:` entry and `images:` pin; drop `TS_*` from `settings`; move `serviceAccountName: default` (its own legacy-SA workaround) into `base/`; annotate the Deployment; `spec.components: [{name: tailscale, values: {TS_HOSTNAME: collie-lead}}]` (keeps the documented `collie-lead.ts.<domain>` address) | Reinstall with tailscale selected. The new state PVC means the node enrols again and needs a fresh auth key. Delete the old `collie-lead` node first, or the control server gives the new one a suffixed name and `COLLIE_PUBLIC_URL` breaks |
 | remnawave | Delete `components/tailscale` (incl. its SA/Role/RoleBinding/PVC) and the commented overlay reference; annotate the Deployment; `spec.components: [{name: tailscale}]` | Reinstall if tailscale is wanted. An install whose `release.yaml` was hand-edited to add `../../components/tailscale` stops building once the re-pushed artifact drops that directory, and needs a reinstall |
-| headscale | Delete `components/frp-upstreams` and its overlay entry; `spec.components: [{name: frp-expose, values: {FRP_EXPOSE_HOST: headscale.headscale.svc.cluster.local, FRP_EXPOSE_PORT: "80"}}]`; replace the literal `headscale.` host in `server_url` (`base/config.yaml`), headplane `public_url` and the SSOClient redirect URI with `${FRP_EXPOSE_SUBDOMAIN:=headscale}.` | Reinstall with frp-expose selected and subdomain `headscale`. Without frp-expose, headscale has no reachable `server_url`, and LAN clients are affected too, because the OIDC redirect and the DERP host point at the relay. Accepted per "all components optional"; the help text says so |
+| headscale | Delete `components/frp-upstreams` and its overlay entry; `spec.components: [{name: frp-expose, values: {FRP_EXPOSE_HOST: headscale.headscale.svc.cluster.local, FRP_EXPOSE_PORT: "80"}}]`; `server_url` (`base/config.yaml`), headplane `public_url` and the SSOClient redirect URI become `https://${PUBLIC_HOST:=headscale.${BASE_DOMAIN:=libre.pod}}`; drop `FRP_DOMAIN` and every FRP mention from the app | Reinstall with frp-expose selected, subdomain `headscale` and the relay domain. Without an exposure component, headscale falls back to its local host, so only devices that reach the device (home network or VPN) can join |
 | firefly-iii-telegram-bot | Annotate the Deployment; `spec.components: [{name: gluetun}, {name: sing-box}]` | n/a (new capability) |
 | immich | `spec.components: [{name: frp-expose, values: {FRP_EXPOSE_HOST: immich-server.immich.svc.cluster.local, FRP_EXPOSE_PORT: "2283"}}]` | n/a |
 
@@ -578,9 +586,6 @@ with their go-ahead:
 - gluetun's current custom-WireGuard config file path and env names.
 - Exact ExternalSecret `key` form for nested OpenBao paths (confirm the store
   resolves `apps/<app>/<component>` like `apps/<app>`).
-- How `FRP_DOMAIN` reaches the substitution map on a UI install (headscale uses
-  it today; confirm the mechanism on a live install before relying on it in the
-  dialog's address hint).
 - Renovate config grouping for a component's descriptor version + `images:` pin.
 - Field-level UI copy and layout inside the Components section.
 

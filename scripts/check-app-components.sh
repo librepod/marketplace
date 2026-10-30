@@ -7,7 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ANN='librepod.org/component-target'
-RESERVED=" BASE_DOMAIN DEVICE_IP INSTANCE_NAME FRP_DOMAIN "
+RESERVED=" BASE_DOMAIN DEVICE_IP INSTANCE_NAME "
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 STATUS=0
@@ -31,12 +31,17 @@ check_descriptor() { # <component>
   local name from pattern
   while IFS=$'\t' read -r name from pattern; do
     [ -n "$name" ] || continue
-    [[ "$from" == install || "$from" == app ]] || bad "$c" "value $name: from must be install or app"
+    [[ "$from" == install || "$from" == app || "$from" == derived ]] || bad "$c" "value $name: from must be install, app or derived"
     [[ "$RESERVED" != *" $name "* ]] || bad "$c" "value $name is a reserved name"
     if [ "$from" = install ]; then
       [[ "$pattern" == ^*\$ ]] || bad "$c" "value $name: pattern must start with ^ and end with \$"
     fi
   done < <(yq '.spec.values // [] | .[] | [.name, .from, .pattern // ""] | @tsv' "$f")
+  # Apps only ever read their public hostname from PUBLIC_HOST, whichever exposure is picked.
+  if [ "$(yq '.spec.group // ""' "$f")" = exposure ]; then
+    [ "$(yq '[.spec.values // [] | .[] | select(.name == "PUBLIC_HOST")] | length' "$f")" -gt 0 ] \
+      || bad "$c" "an exposure component must provide a PUBLIC_HOST value"
+  fi
   local f2 vars
   for f2 in components/"$c"/*.yaml components/"$c"/*.env; do
     [ -f "$f2" ] || continue
