@@ -8,6 +8,7 @@ on:
       - 'apps/*/base/**'
       - 'apps/*/overlays/**'
       - 'apps/*/components/**'
+      - 'components/**'
 
 jobs:
   # Closed category vocabulary gate (#314): a category outside this list is
@@ -103,6 +104,16 @@ jobs:
               --local-sources GitRepository/flux-system/librepod-apps=./ \
               --dry-run || true
           '
+
+  app-components:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - name: Check app/shared-component compatibility
+        run: nix-shell shell.nix --run 'bash scripts/check-app-components.sh'
 
   e2e:
     needs: detect-changes
