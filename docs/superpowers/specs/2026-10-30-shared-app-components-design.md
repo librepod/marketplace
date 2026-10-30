@@ -191,11 +191,13 @@ Rules for component authors:
 - **Substitution.** Every `${VAR}` in a component has a default
   (`${VAR:=default}`) so strict substitution never fails a build; values are
   simple scalars only (kustomize strips quotes, so Flux substitution yields
-  bare scalars). `APP_NAME` is always provided by the renderer when components
-  are present.
+  bare scalars). `INSTANCE_NAME` is always provided by the renderer when components
+  are present. Today it equals the app name; the variable name comes from the
+  multi-instance proposal (#246) so components need no rename when instances
+  land (my call).
 - **Secrets.** A component that has `settings` ships its own ExternalSecret
   `<name>-settings` (ClusterSecretStore `openbao`, `dataFrom.extract.key:
-  apps/${APP_NAME}/<name>`) producing Secret `<name>-settings`, consumed only by
+  apps/${INSTANCE_NAME}/<name>`) producing Secret `<name>-settings`, consumed only by
   the component's own container (env or file mount). Never merged into
   `<app>-settings`.
 
@@ -209,6 +211,10 @@ spec:
         FRP_EXPOSE_HOST: immich-server.immich.svc.cluster.local
         FRP_EXPOSE_PORT: "2283"
 ```
+
+An app may also set a `from: install` value here. It then replaces the
+component's default as the dialog prefill, and the user can still change it.
+collie uses this to keep `TS_HOSTNAME: collie-lead` (my call).
 
 ### 2. Publish layer
 
@@ -246,8 +252,8 @@ the component added, apply the app's `values` as substitution, and assert:
 - Top-level `components:` map built from `components/*/component.yaml`:
   `name → {displayName, description, version, group, kind, settings, values}`.
 - Per-app `components:` list from `metadata.yaml spec.components`:
-  `[{name, values}]`. Generation fails on an unknown component name or a
-  missing `from: app` value.
+  `[{name, values}]`. Generation fails on an unknown component name, a
+  missing `from: app` value, or a value name the component does not declare.
 - No new per-app templates. The component-source and generator shapes are
   platform-fixed and owned by the renderer (catalog.yaml is already ~73%
   template bodies).
@@ -342,7 +348,7 @@ install` values present or defaulted and matching `pattern`; no unknown keys.
   - `spec.sourceRef` → `{kind: ExternalArtifact, name: marketplace-<app>}`
   - `spec.components` → `["../../shared-components/<component>", …]` (sorted by
     name for stable output)
-  - `spec.postBuild.substitute` += `APP_NAME` + every selected component's
+  - `spec.postBuild.substitute` += `INSTANCE_NAME` + every selected component's
     values (app-supplied from the catalog, install-supplied from the request)
 - `kustomization.yaml` — the app's template output with `components.yaml` and
   `generator.yaml` appended to `resources`.
@@ -416,17 +422,34 @@ re-enrolment fix):
   `TS_ACCEPT_DNS=false`, `TS_STATE_DIR=/var/lib/tailscale`, `TS_KUBE_SECRET=""`
   (no Kubernetes API use, so no RBAC and no ServiceAccount change),
   `TS_AUTH_ONCE=true` (no re-enrolment on restart), `TS_ENABLE_HEALTH_CHECK=true`,
-  `TS_NO_LOGS_NO_SUPPORT=true`, `TS_HOSTNAME=${APP_NAME}` default.
+  `TS_NO_LOGS_NO_SUPPORT=true`, `TS_HOSTNAME=${TS_HOSTNAME:=app}` (the renderer
+  always supplies the value).
 - Settings (`tailscale-settings` Secret): `TS_AUTHKEY` (sensitive, required),
-  `TS_EXTRA_ARGS` (optional, e.g. `--login-server=https://…` for headscale),
-  `TS_HOSTNAME` (optional override).
+  `TS_EXTRA_ARGS` (optional, e.g. `--login-server=https://…` for headscale).
+- Value `TS_HOSTNAME` (`from: install`, default `{app}`, DNS-label pattern) sets
+  the node name. It is a value rather than a setting so an app can supply its
+  own default (my call).
 - State: PVC `tailscale-state` (component resource) mounted at
   `/var/lib/tailscale`.
 - `startupProbe`: `httpGet /healthz` on port 9002.
 - DNS: collie's MagicDNS-first `dnsPolicy: None` + `dnsConfig` (nameservers
-  `100.100.100.100`, `10.43.0.10`; search `ts.${BASE_DOMAIN:=libre.pod}`;
-  `timeout: 1`, `attempts: 2`) so the app resolves tailnet names and degrades to
-  CoreDNS within ~1s if the sidecar is down.
+  `100.100.100.100`, `10.43.0.10`; `timeout: 1`, `attempts: 2`) so the app
+  resolves tailnet names and degrades to CoreDNS within ~1s if the sidecar is
+  down.
+  - Search domains: `ts.${BASE_DOMAIN:=libre.pod}`,
+    `${INSTANCE_NAME}.svc.cluster.local`, `svc.cluster.local`, `cluster.local`.
+  - The cluster entries are needed because `dnsPolicy: None` drops the pod's
+    cluster search list, and apps reach their own Services by short name
+    (remnawave → `remnawave-postgres`).
+  - This assumes the namespace equals `INSTANCE_NAME`, which holds for every
+    app today. Collie's copy lacks these entries; this fix came from review
+    (my call).
+- In-cluster names resolve through 100.100.100.100 only because the bundled
+  headscale routes `cluster.local` to CoreDNS through split DNS.
+  - On a tailnet that overrides local DNS without such a route, cluster lookups
+    get NXDOMAIN from the global resolvers and do not fall back.
+  - Help text says so. The dev e2e checks remnawave → postgres with the sidecar
+    up.
 - Image: `tailscale/tailscale` `v1.104.2` (the newer of the two app pins).
 - Does **not** set `serviceAccountName`.
 
@@ -471,9 +494,9 @@ spec:
 
 | App | Change | Existing install |
 |---|---|---|
-| collie | Delete `components/tailscale`, its overlay `components:` entry and `images:` pin; drop `TS_*` from `settings`; move `serviceAccountName: default` (its own legacy-SA workaround) into `base/`; annotate the Deployment; `spec.components: [{name: tailscale}]` | Reinstall with tailscale selected. New state PVC → the node enrols again (needs a fresh auth key); its old tailnet node becomes stale |
-| remnawave | Delete `components/tailscale` (incl. its SA/Role/RoleBinding/PVC) and the commented overlay reference; annotate the Deployment; `spec.components: [{name: tailscale}]` | Reinstall if tailscale is wanted |
-| headscale | Delete `components/frp-upstreams` and its overlay entry; `spec.components: [{name: frp-expose, values: {FRP_EXPOSE_HOST: headscale.headscale.svc.cluster.local, FRP_EXPOSE_PORT: "80"}}]`; replace the literal `headscale.` host in `server_url` (`base/config.yaml`), headplane `public_url` and the SSOClient redirect URI with `${FRP_EXPOSE_SUBDOMAIN:=headscale}.` | Reinstall with frp-expose selected and subdomain `headscale` (otherwise remote clients cannot reach it) |
+| collie | Delete `components/tailscale`, its overlay `components:` entry and `images:` pin; drop `TS_*` from `settings`; move `serviceAccountName: default` (its own legacy-SA workaround) into `base/`; annotate the Deployment; `spec.components: [{name: tailscale, values: {TS_HOSTNAME: collie-lead}}]` (keeps the documented `collie-lead.ts.<domain>` address) | Reinstall with tailscale selected. The new state PVC means the node enrols again and needs a fresh auth key. Delete the old `collie-lead` node first, or the control server gives the new one a suffixed name and `COLLIE_PUBLIC_URL` breaks |
+| remnawave | Delete `components/tailscale` (incl. its SA/Role/RoleBinding/PVC) and the commented overlay reference; annotate the Deployment; `spec.components: [{name: tailscale}]` | Reinstall if tailscale is wanted. An install whose `release.yaml` was hand-edited to add `../../components/tailscale` stops building once the re-pushed artifact drops that directory, and needs a reinstall |
+| headscale | Delete `components/frp-upstreams` and its overlay entry; `spec.components: [{name: frp-expose, values: {FRP_EXPOSE_HOST: headscale.headscale.svc.cluster.local, FRP_EXPOSE_PORT: "80"}}]`; replace the literal `headscale.` host in `server_url` (`base/config.yaml`), headplane `public_url` and the SSOClient redirect URI with `${FRP_EXPOSE_SUBDOMAIN:=headscale}.` | Reinstall with frp-expose selected and subdomain `headscale`. Without frp-expose, headscale has no reachable `server_url`, and LAN clients are affected too, because the OIDC redirect and the DERP host point at the relay. Accepted per "all components optional"; the help text says so |
 | firefly-iii-telegram-bot | Annotate the Deployment; `spec.components: [{name: gluetun}, {name: sing-box}]` | n/a (new capability) |
 | immich | `spec.components: [{name: frp-expose, values: {FRP_EXPOSE_HOST: immich-server.immich.svc.cluster.local, FRP_EXPOSE_PORT: "2283"}}]` | n/a |
 
@@ -486,7 +509,8 @@ big-bang migration).
 
 | Risk | Handling |
 |---|---|
-| source-watcher is v1beta1 and fast-moving | Only installs with components depend on it; plain installs never do. Failures stall that one app (retries), no data loss |
+| A cluster without the source-watcher CRDs gets a components install | `generator.yaml` fails the apply of the shared `user-apps` Kustomization. Every user-app change on the device stalls until that app is removed. Rollout order prevents this, not code: the FluxInstance change lands on a cluster before any marketplace-ui release that renders components. Only maintainer devices exist (my call) |
+| source-watcher is v1beta1 and fast-moving | Once its CRDs exist, only installs with components depend on it. A generator that is not Ready stalls only that one app, which retries; no data is lost |
 | Component source tag missing / verify fails | ArtifactGenerator not Ready → app Kustomization not Ready → app shows Error; reinstall without the component |
 | Patch target missing (app renamed its Deployment or dropped the annotation) | `check-app-components.sh` fails the app's PR in CI |
 | Broken WG / sing-box config or bad tailscale auth key | Sidecar crash-loops or never passes its startup probe; the app shows Error. Human-supplied credential → reinstall with a fixed value |
@@ -529,6 +553,25 @@ big-bang migration).
    setting type.
 5. App migrations (table above), k3d bootstrap FluxInstance, dev e2e, then
    production FluxInstance and reinstalls of collie / headscale.
+
+Plan boundary (my call): the plan's agent tasks are the repo work, CI and local
+tests, meaning steps 2–4 and the repo half of step 5. Anything that needs a
+person or a live cluster goes on a handoff checklist, done by the maintainer or
+with their go-ahead:
+
+- The dev smoke test (step 1) is a checkpoint before step 4 merges, not a
+  blocker for steps 2–3.
+- E2E needs credentials: a WireGuard config, a sing-box config, a headscale
+  pre-auth key and a free relay subdomain.
+- After the first component publish, confirm the `marketplace/components/*`
+  GHCR packages are public. New packages may start private, and a private one
+  fails every install pull.
+- Production must be ready **before** the marketplace-ui release that renders
+  components:
+  - confirm its Flux is new enough for source-watcher (2.7.2 or later);
+  - add `source-watcher` to its FluxInstance, which lives outside this repo.
+- Release marketplace-ui and bump its system-app pin.
+- Reinstall collie and headscale, and remnawave if wanted.
 
 ## Left to the builder
 
