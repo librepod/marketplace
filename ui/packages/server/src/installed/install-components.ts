@@ -8,6 +8,10 @@ import { isPlainObject, resolveSettings } from './install-settings';
  */
 export const SAFE_VALUE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$/;
 
+/** Bare YAML scalars of these shapes parse as non-strings (number, bool, null) after substitution. */
+const YAML_NON_STRING =
+  /^(y|yes|n|no|true|false|on|off|null|~)$|^[-+]?(\d[\d_]*(\.\d*)?([eE][-+]?\d+)?|0x[0-9a-f]+|0o?[0-7]+)$/i
+
 export interface ResolvedComponent {
   name: string;
   version: string;
@@ -63,7 +67,7 @@ function resolveOne(def: AppComponent, entry: ComponentRequest, errors: FieldErr
     } catch {
       matches = false;
     }
-    if (!matches || !SAFE_VALUE.test(value)) errors.push({ name: field, message: 'Invalid value' });
+    if (!matches || !SAFE_VALUE.test(value) || YAML_NON_STRING.test(value)) errors.push({ name: field, message: 'Invalid value' });
     else values[v.name] = value;
   }
   return { name: def.name, version: def.version, hasSettings: !!def.settings?.length, settings, values };

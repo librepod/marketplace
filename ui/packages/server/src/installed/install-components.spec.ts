@@ -126,6 +126,15 @@ describe('resolveComponents', () => {
     }
   });
 
+  it('rejects install values YAML would read as a number, boolean or null', () => {
+    for (const bad of ['1234', '1e5', 'on', 'Yes', 'true', 'null', '0x1f']) {
+      const r = resolveComponents(app, { components: [{ name: 'frp-expose', values: { FRP_EXPOSE_SUBDOMAIN: bad } }] })
+      expect(r.ok, bad).toBe(false)
+    }
+    const ok = resolveComponents(app, { components: [{ name: 'frp-expose', values: { FRP_EXPOSE_SUBDOMAIN: 'photos2' } }] })
+    expect(ok.ok).toBe(true)
+  })
+
   it('rejects overriding a from:app value', () => {
     const errors = errorsOf({ components: [{ name: 'frp-expose', values: { FRP_EXPOSE_PORT: '1' } }] });
     expect(errors).toEqual([{ name: 'components.frp-expose.FRP_EXPOSE_PORT', message: 'Set by the app' }]);
