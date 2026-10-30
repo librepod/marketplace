@@ -13,9 +13,9 @@ components:
 
 images:
 - name: ghcr.io/cyxou/collie-lead
-  newTag: 1.24.1
+  newTag: 1.24.3
 - name: tailscale/tailscale
-  newTag: v1.104.2
+  newTag: v1.104.4
 
 patches:
 - path: ./patch-storage-class.yaml
