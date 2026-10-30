@@ -156,3 +156,55 @@ node -e '
   if (fs.readFileSync(file, "utf8").includes("params")) process.exit(2);
 ' "$JS_YAML" "$TMP/catalog.yaml" || fail "params leaked into catalog.yaml"
 echo "PASS test 5"
+
+echo "== test 6: components map and per-app opt-ins =="
+mkdir -p "$TMP/components/demo-net"
+cat > "$TMP/components/demo-net/component.yaml" <<'EOF'
+apiVersion: marketplace/v1
+kind: ComponentDefinition
+metadata:
+  name: demo-net
+spec:
+  displayName: "Demo net"
+  description: "Demo component"
+  # renovate: datasource=docker depName=demo/net
+  version: "v1.0.0"
+  group: network
+  kind: patch
+  settings:
+    - name: DEMO_KEY
+      type: text
+      sensitive: true
+  values:
+    - name: DEMO_HOST
+      from: app
+    - name: DEMO_NAME
+      from: install
+      default: "{app}"
+      pattern: "^[a-z]+$"
+EOF
+sed -i 's/^  dependencies: \[\]/  components:\n    - name: demo-net\n      values:\n        DEMO_HOST: demo.svc\n\n  dependencies: []/' \
+  "$TMP/apps/demo/metadata.yaml"
+bash "$TMP/scripts/generate-catalog.sh" >/dev/null || fail "generator exited non-zero"
+node -e '
+  const yaml = require(process.argv[1]);
+  const cat = yaml.load(require("fs").readFileSync(process.argv[2], "utf8"));
+  const c = cat.components["demo-net"];
+  if (c.version !== "v1.0.0") { console.error("version " + c.version); process.exit(1); }
+  if (c.values[1].default !== "{app}") process.exit(2);
+  if (c.settings[0].name !== "DEMO_KEY") process.exit(3);
+  const app = cat.apps[0];
+  if (JSON.stringify(app.components) !== JSON.stringify([{ name: "demo-net", values: { DEMO_HOST: "demo.svc" } }])) {
+    console.error("app.components " + JSON.stringify(app.components)); process.exit(4);
+  }
+  if (JSON.stringify(app.settings) !== JSON.stringify({ allowCustom: true, items: [{ name: "DEMO_X", default: "a" }] }) && !app.settings) process.exit(5);
+' "$JS_YAML" "$TMP/catalog.yaml" || fail "components not emitted as expected"
+echo "PASS test 6"
+
+echo "== test 7: an app listing an unknown component fails generation =="
+sed -i 's/- name: demo-net/- name: ghost/' "$TMP/apps/demo/metadata.yaml"
+if bash "$TMP/scripts/generate-catalog.sh" >/dev/null 2>"$TMP/err"; then
+  fail "generator accepted an unknown component"
+fi
+grep -q 'unknown component "ghost"' "$TMP/err" || fail "stderr lacks the unknown-component error: $(cat "$TMP/err")"
+echo "PASS test 7"
