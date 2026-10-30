@@ -222,6 +222,30 @@ describe('AppDetailPage', () => {
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     })
 
+    it('opens the dialog for a settings-less app with components without fetching settings', async () => {
+      const withComponents = {
+        ...mockApp,
+        components: [
+          {
+            name: 'frp-expose', displayName: 'Public exposure', description: 'Publish on the relay', version: '1.0.0', kind: 'resource',
+            values: [{ name: 'FRP_EXPOSE_SUBDOMAIN', from: 'install', label: 'Public subdomain', default: 'vaultwarden' }],
+          },
+        ],
+      }
+      const fetchSpy = routeFetch(withComponents)
+      render(<AppDetailPage />, { wrapper: createWrapper() })
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Install App' }))
+      await userEvent.click(await screen.findByRole('checkbox', { name: 'Public exposure' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Install' }))
+
+      await waitFor(() => expect(writes(fetchSpy)).toHaveLength(1))
+      expect(fetchSpy.mock.calls.some((call) => String(call[0]).endsWith('/settings'))).toBe(false)
+      expect(JSON.parse(writes(fetchSpy)[0][1].body as string).components).toEqual([
+        { name: 'frp-expose', settings: {}, values: { FRP_EXPOSE_SUBDOMAIN: 'vaultwarden' } },
+      ])
+    })
+
     it('keeps one-click install (no body) when the only settings are machine-generated items', async () => {
       const fetchSpy = vi
         .spyOn(global, 'fetch')

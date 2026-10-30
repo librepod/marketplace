@@ -1,6 +1,13 @@
-import { useState, type FormEvent, type ReactNode } from "react"
+import { useState, type CSSProperties, type FormEvent, type ReactNode } from "react"
 import { Eye, EyeOff, Loader2, Plus, Trash2 } from "lucide-react"
-import type { AppSettingItem, AppSettings, AppSettingsValues, CatalogApp, InstallRequest } from "@librepod/shared"
+import type {
+  AppComponent,
+  AppSettingItem,
+  AppSettings,
+  AppSettingsValues,
+  CatalogApp,
+  InstallRequest,
+} from "@librepod/shared"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
@@ -52,6 +59,21 @@ export function hasInstallQuestions(settings?: AppSettings): boolean {
   if (!settings) return false
   if (settings.allowCustom) return true
   return (settings.items ?? []).some((item) => !item.generate)
+}
+
+/** Whether the app lists shared components: the install dialog opens for them even with no questions. */
+export function hasComponents(app?: CatalogApp): boolean {
+  return (app?.components?.length ?? 0) > 0
+}
+
+/** What a component asks in the dialog: its settings, then its install values (always required). */
+function componentFields(component: AppComponent): AppSettingItem[] {
+  return [
+    ...(component.settings ?? []).filter((item) => !item.generate),
+    ...component.values
+      .filter((v) => v.from === "install")
+      .map((v) => ({ name: v.name, label: v.label, description: v.description, required: true, default: v.default })),
+  ]
 }
 
 /** A bare YAML `default:` is null: no default, never the text "null". */
@@ -109,18 +131,70 @@ function MaskedInput({
   )
 }
 
+const textareaClass =
+  "flex min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm text-foreground shadow-sm transition-colors focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+
+/** Multi-line answer (a pasted config). Sensitive ones are masked like a password field. */
+function TextArea({
+  id,
+  value,
+  onChange,
+  invalid,
+  describedBy,
+  sensitive,
+}: {
+  id: string
+  value: string
+  onChange: (value: string) => void
+  invalid?: boolean
+  describedBy?: string
+  sensitive?: boolean
+}) {
+  const [shown, setShown] = useState(false)
+  return (
+    <div className="flex min-w-0 flex-1 gap-1">
+      <textarea
+        id={id}
+        rows={6}
+        className={textareaClass}
+        aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
+        autoComplete="off"
+        spellCheck={false}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        // shortcut: browsers without -webkit-text-security show it unmasked, upgrade if that matters
+        style={sensitive && !shown ? ({ WebkitTextSecurity: "disc" } as CSSProperties) : undefined}
+      />
+      {sensitive && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={shown ? "Hide value" : "Show value"}
+          onClick={() => setShown((s) => !s)}
+        >
+          {shown ? <EyeOff /> : <Eye />}
+        </Button>
+      )}
+    </div>
+  )
+}
+
 function QuestionField({
   item,
   value,
   onChange,
   error,
+  idPrefix = "setting",
 }: {
   item: AppSettingItem
   value: string
   onChange: (value: string) => void
   error?: string
+  idPrefix?: string
 }) {
-  const id = `setting-${item.name}`
+  const id = `${idPrefix}-${item.name}`
   const label = item.label ?? humanize(item.name)
   const type = item.type ?? "string"
   const describedBy =
@@ -135,6 +209,17 @@ function QuestionField({
         aria-describedby={describedBy}
         checked={value === "true"}
         onCheckedChange={(checked: boolean) => onChange(checked ? "true" : "false")}
+      />
+    )
+  } else if (type === "text") {
+    control = (
+      <TextArea
+        id={id}
+        value={value}
+        onChange={onChange}
+        invalid={!!error}
+        describedBy={describedBy}
+        sensitive={item.sensitive}
       />
     )
   } else if (item.options) {
@@ -197,6 +282,17 @@ function QuestionField({
   )
 }
 
+/** Layout units: one per group (radios, members in catalog order) and one per ungrouped component. */
+function componentBlocks(components: AppComponent[]): Array<{ group?: string; members: AppComponent[] }> {
+  const blocks: Array<{ group?: string; members: AppComponent[] }> = []
+  for (const c of components) {
+    const existing = c.group ? blocks.find((b) => b.group === c.group) : undefined
+    if (existing) existing.members.push(c)
+    else blocks.push({ group: c.group, members: [c] })
+  }
+  return blocks
+}
+
 function InstallForm({
   app,
   stored,
@@ -226,6 +322,22 @@ function InstallForm({
   const [sentRowIds, setSentRowIds] = useState<number[]>([])
   const [customOpen, setCustomOpen] = useState(stored.custom.length > 0)
 
+  // Shared components are picked at install only; an installed app's are fixed.
+  const offered = mode === "install" ? (app.components ?? []) : []
+  const [picked, setPicked] = useState<string[]>([])
+  const [componentValues, setComponentValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(offered.flatMap((c) => componentFields(c).map((item) => [`${c.name}.${item.name}`, initialValue(item)]))),
+  )
+  const chosen = offered.filter((c) => picked.includes(c.name))
+  const toggleComponent = (name: string, on: boolean) =>
+    setPicked((current) => (on ? [...current, name] : current.filter((n) => n !== name)))
+  // One component per group: swap the group's pick (or clear it with null).
+  const pickInGroup = (group: string, name: string | null) =>
+    setPicked((current) => [
+      ...current.filter((n) => offered.find((c) => c.name === n)?.group !== group),
+      ...(name ? [name] : []),
+    ])
+
   const error = mutation.error
   const fieldErrors = new Map((error?.fieldErrors ?? []).map((e) => [e.name, e.message]))
   const rowError = (id: number) => {
@@ -236,6 +348,10 @@ function InstallForm({
   // Errors no field below can show: whole-request ones ("settings") or names this form
   // doesn't render (e.g. the catalog changed while the dialog was open). They go in the alert.
   const isShownByField = (name: string) => {
+    const component = /^components\.([^.]+)\.(.+)$/.exec(name)
+    if (component) {
+      return chosen.some((c) => c.name === component[1] && componentFields(c).some((item) => item.name === component[2]))
+    }
     if (items.some((item) => item.name === name)) return true
     if (!settings.allowCustom) return false
     if (name === "custom") return true
@@ -243,6 +359,21 @@ function InstallForm({
     return match !== null && rows.some((row) => row.id === sentRowIds[Number(match[1])])
   }
   const unplacedErrors = (error?.fieldErrors ?? []).filter((e) => !isShownByField(e.name))
+
+  const renderComponentFields = (c: AppComponent) => (
+    <div className="grid gap-3 pl-6">
+      {componentFields(c).map((item) => (
+        <QuestionField
+          key={item.name}
+          item={item}
+          idPrefix={`setting-${c.name}`}
+          value={componentValues[`${c.name}.${item.name}`] ?? ""}
+          onChange={(value) => setComponentValues((current) => ({ ...current, [`${c.name}.${item.name}`]: value }))}
+          error={fieldErrors.get(`components.${c.name}.${item.name}`)}
+        />
+      ))}
+    </div>
+  )
 
   const updateRow = (id: number, patch: Partial<CustomRow>) =>
     setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)))
@@ -261,6 +392,14 @@ function InstallForm({
     // left out, so an optional field the user cleared stays unset instead of reverting.
     const request: InstallRequest = { settings: values }
     if (sent.length > 0) request.custom = sent.map((row) => ({ name: row.name.trim(), value: row.value }))
+    if (chosen.length > 0) {
+      const answer = (c: AppComponent, name: string) => componentValues[`${c.name}.${name}`] ?? ""
+      request.components = chosen.map((c) => ({
+        name: c.name,
+        settings: Object.fromEntries((c.settings ?? []).filter((i) => !i.generate).map((i) => [i.name, answer(c, i.name)])),
+        values: Object.fromEntries(c.values.filter((v) => v.from === "install").map((v) => [v.name, answer(c, v.name)])),
+      }))
+    }
     mutation.mutate(request, { onSuccess: onClose })
   }
 
@@ -288,6 +427,56 @@ function InstallForm({
           error={fieldErrors.get(item.name)}
         />
       ))}
+
+      {offered.length > 0 && (
+        <fieldset className="grid gap-3 rounded-md border border-input px-3 py-2">
+          <legend className="px-1 text-sm font-medium">Components</legend>
+          {componentBlocks(offered).map((block) =>
+            block.group ? (
+              <div key={block.group} role="radiogroup" aria-label={humanize(block.group)} className="grid gap-2">
+                <p className="text-xs font-medium text-muted-foreground">{humanize(block.group)}</p>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name={`component-group-${block.group}`}
+                    checked={!block.members.some((c) => picked.includes(c.name))}
+                    onChange={() => pickInGroup(block.group!, null)}
+                  />
+                  None
+                </label>
+                {block.members.map((c) => (
+                  <div key={c.name} className="grid gap-2">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="radio"
+                        name={`component-group-${block.group}`}
+                        checked={picked.includes(c.name)}
+                        onChange={() => pickInGroup(block.group!, c.name)}
+                      />
+                      {c.displayName}
+                    </label>
+                    <p className="pl-6 text-xs text-muted-foreground">{c.description}</p>
+                    {picked.includes(c.name) && renderComponentFields(c)}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div key={block.members[0].name} className="grid gap-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={picked.includes(block.members[0].name)}
+                    onChange={(e) => toggleComponent(block.members[0].name, e.target.checked)}
+                  />
+                  {block.members[0].displayName}
+                </label>
+                <p className="pl-6 text-xs text-muted-foreground">{block.members[0].description}</p>
+                {picked.includes(block.members[0].name) && renderComponentFields(block.members[0])}
+              </div>
+            ),
+          )}
+        </fieldset>
+      )}
 
       {settings.allowCustom && (
         <details
@@ -347,6 +536,8 @@ function InstallForm({
   )
 }
 
+const NO_STORED: AppSettingsValues = { settings: {}, custom: [] }
+
 /**
  * The form once the stored settings are loaded. Never a form without them: saving one built
  * from defaults alone would wipe the user's values.
@@ -362,7 +553,9 @@ function SettingsBody({
   mode: Mode
   onClose: () => void
 }) {
-  const stored = useAppSettings(app.name)
+  // An app with components but no questions has no settings entry to read (the endpoint 404s).
+  const stored = useAppSettings(app.name, !!app.settings)
+  if (!app.settings) return <InstallForm app={app} stored={NO_STORED} mutation={mutation} mode={mode} onClose={onClose} />
   if (stored.data) return <InstallForm app={app} stored={stored.data} mutation={mutation} mode={mode} onClose={onClose} />
   if (stored.isError) {
     return (
