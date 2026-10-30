@@ -239,6 +239,14 @@ Degradation is layered, and the distinction matters:
 5. Render `apps/<name>/{source,release,kustomization}.yaml` (via `${VAR}` regex substitution;
    `secret.yaml` too when a legacy template declares one) and write them all as **one commit**
    (`UserAppsRepoService.writeApp`).
+6. **Components branch** (the body carries `components`, and the app lists them in the catalog):
+   `resolveComponents` (`install-components.ts`) validates the selection (400, one per `group`,
+   install values must match their pattern **and** `SAFE_VALUE`) before any write;
+   `renderComponentFiles` (`component-files.ts`) then adds `components.yaml` (pinned,
+   cosign-verified OCIRepositories), `generator.yaml` (an ArtifactGenerator) and re-points
+   `release.yaml` at the generated ExternalArtifact. Render failures are a 500 with nothing
+   written. Writes run validate → render → OpenBao `apps/<app>` → OpenBao `apps/<app>/<component>`
+   (component secrets never enter the app's entry) → one commit. No components = today's files.
 
 **Legacy secret mirror** (`LegacySecretMirror`, decision #12 in `../docs/DECISIONS_LOG.md`):
 apps installed before settings moved to OpenBao keep their real secret values only in the
