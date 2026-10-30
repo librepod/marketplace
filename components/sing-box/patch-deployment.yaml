@@ -1,0 +1,38 @@
+# Name is a placeholder: the kustomization selects the annotated Deployment.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: placeholder
+spec:
+  template:
+    spec:
+      initContainers:
+        # Native sidecar. No startup probe: the config is opaque, so there is
+        # nothing generic to wait for.
+        - name: sing-box
+          image: ghcr.io/sagernet/sing-box
+          imagePullPolicy: IfNotPresent
+          restartPolicy: Always
+          args: ["run", "-c", "/etc/sing-box/config.json"]
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+            capabilities:
+              add: ["NET_ADMIN"]
+          volumeMounts:
+            - name: tun
+              mountPath: /dev/net/tun
+            - name: sing-box-config
+              mountPath: /etc/sing-box
+              readOnly: true
+      volumes:
+        - name: tun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice
+        - name: sing-box-config
+          secret:
+            secretName: sing-box-settings
+            items:
+              - key: CONFIG
+                path: config.json

@@ -1,0 +1,18 @@
+apiVersion: marketplace/v1
+kind: ComponentDefinition
+metadata:
+  name: sing-box
+spec:
+  displayName: "VPN egress (sing-box)"
+  description: "Runs a sing-box sidecar with the full config you paste. Routing is entirely yours, including direct routes for the cluster CIDRs, or cluster-local traffic breaks."
+  # renovate: datasource=docker depName=ghcr.io/sagernet/sing-box
+  version: "v1.14.4"
+  group: network
+  kind: patch
+  settings:
+    - name: CONFIG
+      label: "sing-box config (JSON)"
+      description: "Full sing-box configuration"
+      type: text
+      required: true
+      sensitive: true
