@@ -1,379 +1,549 @@
 # Shared App Components — Design
 
 **Date:** 2026-10-30
-**Status:** Proposed (awaiting review)
+**Status:** Proposed — revision 2 (replaces the vendored-slots design after review)
 **Branch:** `feat/shared-app-components`
 
-## Problem
+## Intent
 
-Marketplace apps are immutable, version-pinned OCI artifacts — every installer of an
-app gets a byte-identical deployment. Two recurring needs don't fit that model:
+Advanced users want to bolt optional networking pieces onto an app when they
+install it:
 
-1. **Outbound egress through a VPN/proxy.** Apps that talk to services blocked at
-   the user's location (e.g. `firefly-iii-telegram-bot` → Telegram API from Russia)
-   need their pod's traffic routed through a tunnel the *user* brings.
-2. **Exposing an app outside the cluster via FRP.** frp-operator is platform
-   infrastructure; a user should be able to attach an `Upstream` CR to an installed
-   app (e.g. immich through a relay) without hand-editing manifests.
+- **VPN egress** — route the pod's outbound traffic through a tunnel the user
+  brings (gluetun with a WireGuard config, or sing-box with a full config).
+  Motivating case: `firefly-iii-telegram-bot` reaching the Telegram API from a
+  location where it is blocked.
+- **Tailnet membership** — run a tailscale sidecar so the app joins the user's
+  tailnet (headscale or Tailscale).
+- **Public HTTPS exposure** — publish the app on a subdomain of the FRP relay,
+  TLS terminated at the relay.
 
-Today's per-install variance channels are only `postBuild.substitute`
-(BASE_DOMAIN, DEVICE_IP) and the settings→OpenBao→ESO path. There is no way for a
-user to choose, per install, that an app ships with an extra sidecar or an extra
-cluster resource.
+Today these exist only as app-private kustomize components baked into single
+apps — tailscale in `collie` and `remnawave` (two copies that already drifted:
+different state storage, DNS, RBAC and image pins), FRP upstreams in `headscale`.
+They were baked in only because no shared mechanism existed. This design makes
+them one shared, separately versioned library that is composed into an app per
+install, in-cluster.
 
-## Solution in one paragraph
+Audience: this is an advanced-user feature. Users decide what they attach and
+live with the consequences; the platform does not gate choices. Marking apps as
+"one-click" vs "needs setup" (badges) and a dedicated install screen for apps
+that need setup are a separate, later feature.
 
-A shared component library lives at repo-root `./components/` (single place,
-kustomize `kind: Component` + a descriptor). At publish time each app's OCI
-artifact is assembled to also contain **stamped copies of the components the app
-declares** plus an `install/` wrapper and four inert "slot" components. At install
-time the marketplace renderer emits a Flux **ArtifactGenerator** (from
-`fluxcd/source-watcher`) whose copy operations drop the *selected* components into
-the slots — per-install composition happens in-cluster, so the artifact ships
-parts and the installation chooses the assembly. The app's Flux Kustomization
-switches its `sourceRef` from the `OCIRepository` to the generated
-`ExternalArtifact` and builds `./install`.
+## Goals
 
-## Non-goals (v1)
+1. In the install dialog, a user can pick optional components for an app and
+   provide their settings; the app installs with them.
+2. Each component exists exactly once in the repo and is versioned and
+   published independently of apps.
+3. Any installed app version can take any component the app lists — components
+   do not ride inside app artifacts.
+4. An install pins the component versions it got (like it pins the app tag) and
+   that pin is recorded so a future update feature can detect "update
+   available".
+5. tailscale (collie, remnawave) and the FRP upstream (headscale) are extracted
+   into optional shared components; the app-private copies are deleted.
 
-- **Egress components on Helm-type apps.** Pod-patching a chart's rendered output
-  is chart-internal and fragile; egress components attach to Kustomize-type apps
-  only (the descriptor declares this). Revisit only when a Helm app actually needs it.
-- **HTTPS-subdomain FRP exposure** (frp-operator `spec.https` lacks subdomain
-  control — known upstream gap). v1 exposes raw TCP/UDP ports only.
-- **Commercial-VPN provider flows for gluetun** (per-provider env var matrices).
-  v1 accepts a full custom WireGuard config paste, which covers self-hosted
-  wg-easy and any provider that exports WG confs.
-- **Third-party component marketplace.** Components are repo-curated.
-- **A component version visible to users.** Component updates ride the app
-  artifact (see Update policy).
+## Non-goals (this story)
+
+- **The update button / update flow.** This story only records versions. A
+  separate feature will compare installed vs catalog versions and let the user
+  update.
+- **Changing components after install** (Manage-page attach/detach). To change
+  components, uninstall and reinstall.
+- **Editing component settings after install.** Same: reinstall.
+- **Casual/advanced app badges and an advanced install screen.**
+- **Guarding unsafe choices.** E.g. exposing an app via frp-expose whose only
+  login is Traefik's SSO forward-auth puts it on the internet without a login.
+  That is the user's call; the UI does not block it.
+- **Raw TCP/UDP FRP ports.** v1 frp-expose is HTTPS-subdomain only. wg-easy's
+  `components/frp-upstreams` (UDP, not wired into wg-easy today) is left alone.
+- **Pod-patching components on apps whose workload lives inside a HelmRelease**
+  (e.g. immich). Such apps may list resource-only components (frp-expose) but
+  not patch components (gluetun, sing-box, tailscale).
+- **Commercial-VPN provider flows for gluetun** (provider env matrices). v1 takes
+  a full custom WireGuard config paste.
+- **Third-party components.** Components are repo-curated.
+- **Cosign verification of user-app OCIRepositories** — a pre-existing gap (no
+  app `source` template sets `verify`). Component sources added by this design
+  *are* verified; closing the app-source gap is a follow-up.
+
+## Anti-goals (failure even if it "works")
+
+- An app with no components selected depending on source-watcher. Plain
+  installs keep today's exact files.
+- App-specific copies of component manifests, or app names stamped into
+  component manifests at publish time.
+- A component's secrets (VPN keys, auth keys) reaching the app container. Apps
+  load `<app>-settings` with `envFrom`, so component secrets must never be
+  written there.
+
+## Decided by the user
+
+- Composition via Flux **ArtifactGenerator** (fluxcd/source-watcher) combining
+  the app artifact with separately published component artifacts (review
+  "option B").
+- Component versioning mirrors apps: a component's version tracks its *native*
+  version (the image it runs); manifest-only changes re-push the **same** tag
+  (rolling tag), so installs pinned to that version converge silently. A new
+  native version is a new tag, and the future update feature surfaces it.
+- Only record versions in this story; the update button is a separate feature.
+- Big-bang migration of existing installs; downtime accepted.
+- tailscale and frp-expose are extracted into **optional** shared components.
+  All components are optional — including frp-expose for headscale.
+- frp-expose v1 uses the HTTPS-subdomain route headscale uses today, not raw
+  TCP ports.
+- No login gate on frp-expose.
+- Components are picked **only in the install dialog** in this story.
+
+## Verified facts this design relies on
+
+| Fact | How verified |
+|---|---|
+| source-watcher runs on dev (v2.2.4) via FluxInstance `spec.components`; flux-operator adds `--feature-gates=ExternalArtifact=true` to kustomize-controller automatically | live dev cluster; flux-operator source (`internal/builder/profiles.go`) |
+| ArtifactGenerator has **no** `spec.interval`; it regenerates on source change; the drift interval is the annotation `source.extensions.fluxcd.io/reconcileEvery` (default 1h) | `api/v1beta1/artifactgenerator_types.go`, spec doc |
+| Copy `from: "@x/"` copies the source root's *contents* into `to`; later copies overwrite earlier ones | `internal/builder/builder.go` |
+| Generated ExternalArtifact revision is `latest@sha256:<content>`; `originRevision: "@app"` keeps the app revision in metadata. Do **not** set `revision: "@app"` (component changes would then not change the revision) | spec doc |
+| Generator deletion removes its ExternalArtifacts via finalizer + inventory (not ownerReferences); if source-watcher is down, deletion waits | `artifactgenerator_finalize.go` |
+| All 42 catalog apps are `oci-kustomize`, `path: ./overlays/librepod`, and their `release` template is a Flux `Kustomization` | `apps/*/metadata.yaml` |
+| Flux `Kustomization.spec.components` takes paths relative to `spec.path`; `..` allowed | kustomize-controller `docs/spec/v1/kustomizations.md` |
+| Resources added by a component included at the overlay level inherit the overlay's `namespace:` | local `kustomize build` |
+| A component patch with `target.annotationSelector` and a placeholder `metadata.name` patches only the annotated Deployment (a sibling Deployment in the same overlay is untouched) | local `kustomize build` |
+| OpenBao policies `apps/data/*` (marketplace-ui write, ESO read) already cover nested paths like `apps/<app>/<component>` | `apps/openbao/overlays/librepod/policies/*.hcl` |
+| App settings types are `string \| boolean \| number` — no multi-line type | `ui/packages/shared/src/types.ts` |
+| `cosign-pub` Secret exists in `flux-system` wherever system apps verify (they reference it) | `infrastructure/system-apps/*.yaml` |
+| gluetun's health server binds `127.0.0.1:9999` (kubelet `httpGet` cannot reach it); its firewall auto-accepts inbound to the pod's own subnet but only allows outbound to that /24 unless `FIREWALL_OUTBOUND_SUBNETS` widens it | gluetun `Dockerfile`, `internal/firewall/enable.go` |
+| kustomize-controller main defaults `StrictPostBuildSubstitutions=true`: an undefined `${VAR}` without default becomes a build error after a Flux bump | kustomize-controller `internal/features/features.go` |
 
 ## Architecture
 
-Four layers, each independently testable:
-
 ```
-repo components/          publish assembly             install rendering              cluster
-────────────────          ────────────────             ─────────────────              ───────
-components/<name>/   ──▶  <app OCI artifact>     ──▶   user-apps repo files     ──▶   ArtifactGenerator
-  Component (kustomize)     components/<name>/          source.yaml                    → ExternalArtifact
-  component.yaml (desc)     components/_c1../_c4        generator.yaml   (selection)     → Kustomization
-  __APP_NAME__ sentinels    install/kustomization       release.yaml                   (path ./install)
-                            .yaml (wrapper)             (substitute additions)
-```
-
-### 1. Repo layer — `./components/`
-
-One directory per component:
-
-```
-components/gluetun/
-├── component.yaml          # descriptor (below)
-├── kustomization.yaml      # kind: Component; images: pins the sidecar image (renovate-managed)
-└── deployment-patch.yaml   # strategic-merge patch: native sidecar + startupProbe gate
+repo                         publish                          install (marketplace-ui)           cluster (flux-system)
+────                         ───────                          ────────────────────────           ─────────────────────
+components/<name>/      ──▶  oci://…/marketplace/        ──▶  user-apps/apps/<app>/          ──▶  OCIRepository app (pinned)
+  component.yaml               components/<name>:<ver>          source.yaml   (unchanged)          OCIRepository app-<c> (pinned)
+  kustomization.yaml           + :latest, cosign-signed         components.yaml (NEW, if any)      ArtifactGenerator app
+  manifests                    (rolling tag)                    generator.yaml  (NEW, if any)        └▶ ExternalArtifact app
+                                                                release.yaml  (patched if any)     Kustomization app
+apps/<app>/metadata.yaml ──▶  catalog.yaml: components map                                           sourceRef ExternalArtifact
+  spec.components (opt-in)     + per-app component list                                           path ./overlays/librepod
+                                                                                                    components: ../../shared-components/<c>
 ```
 
-Descriptor schema (`component.yaml`):
+Plain installs (no components) are byte-for-byte today's three files: no
+generator, no dependency on source-watcher.
+
+### 1. Repo layer — `components/<name>/`
+
+```
+components/tailscale/
+├── component.yaml        # descriptor — read by catalog generation, ignored by kustomize
+├── kustomization.yaml    # kind: Component; images: pin (renovate-managed)
+├── patch-deployment.yaml
+├── externalsecret.yaml
+├── pvc.yaml
+└── tailscale.env
+```
+
+Descriptor (`component.yaml`):
 
 ```yaml
-kind: ComponentDescriptor
+apiVersion: marketplace/v1
+kind: ComponentDefinition
 metadata:
-  name: gluetun
+  name: tailscale
 spec:
-  displayName: "VPN egress (gluetun)"
-  description: "Route all pod traffic through a WireGuard tunnel"
-  group: egress              # components in one group are mutually exclusive in the UI (radio)
-  appliesTo:
-    appTypes: [kustomize]    # kustomize | any; egress is pod-patching → kustomize-only in v1
-  params:                    # app-declared, stamped at publish (see §2)
-    - name: deploymentName   # example; defaults to __APP_NAME__ when absent
-      required: false
-  settings:                  # SAME item schema as app settings (label/description/type/
-    - name: GLUETUN_WG_CONFIG    # required/sensitive) — delivered via OpenBao → <app>-settings
-      sensitive: true           # Secret → envFrom / secret volume in the sidecar
+  displayName: "Tailscale"
+  description: "Join this app to your tailnet with a tailscale sidecar"
+  # renovate: datasource=docker depName=tailscale/tailscale
+  version: "v1.104.2"        # native version = the image tag in kustomization.yaml images:
+  group: network             # at most one component per group per app (UI radio)
+  kind: patch                # patch | resource — patch needs the app's target annotation
+  settings:                  # same item schema as app settings → OpenBao apps/<app>/<name>
+    - name: TS_AUTHKEY
+      label: "Tailnet auth key"
+      type: string
       required: true
-  substitute:                # per-install NON-secret values → postBuild.substitute in release.yaml
-    - name: FRP_REMOTE_PORT  # (frp-expose example) — item shape mirrors settings
-      default: "0"
+      sensitive: true
+  values:                    # non-secret → Flux postBuild.substitute in release.yaml
+    - name: FRP_EXPOSE_SUBDOMAIN   # (frp-expose example)
+      from: install          # install = asked in the dialog; app = supplied by the app's metadata
+      default: "{app}"       # "{app}" = the app name, filled by the renderer
+      pattern: "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
 ```
 
-Rules:
+Rules for component authors:
 
-- Component manifests may use sentinels `__APP_NAME__` and `__PARAM_<NAME>__`;
-  both are stamped by the assembler.
-- Component resources hardcode their own namespace/labels — kustomize component
-  transformers merge into the overlay ROOT, so relying on inheritance is a trap
-  (established gotcha). The overlay's `images:` transformer does NOT reach into a
-  component's own `images:` pins — each component pins its sidecar image itself,
-  with a `# renovate:` annotation, managed in exactly one place (`./components/`).
-- Settings keys are component-prefixed (`GLUETUN_*`, `SINGBOX_*`, `FRP_*`) and
-  merged into the app's single OpenBao entry (`apps/<app>`), delivered by the
-  app's existing ExternalSecret — no new Secret, no new ESO object.
+- **Patch targeting.** Patch components patch the Deployment carrying the
+  annotation `librepod.org/component-target: "true"` via
+  `patches[].target.annotationSelector`; the patch file's `metadata.name` is a
+  placeholder. An app that lists a patch component annotates exactly one
+  Deployment.
+- **No namespaces.** Component resources omit `namespace:` and inherit the
+  overlay's.
+- **Fixed names.** Resource names are fixed per component (`tailscale-state`,
+  `gluetun-settings`, …) — the app namespace isolates them.
+- **Image pins** live in the component's own `kustomization.yaml images:`; the
+  descriptor `version` equals that tag. Renovate bumps both together (one
+  grouped update), exactly like app `metadata.yaml` version + overlay pin.
+  Resource-only components with no image (frp-expose) carry a hand-bumped
+  semver.
+- **Substitution.** Every `${VAR}` in a component has a default
+  (`${VAR:=default}`) so strict substitution never fails a build; values are
+  simple scalars only (kustomize strips quotes, so Flux substitution yields
+  bare scalars). `APP_NAME` is always provided by the renderer when components
+  are present.
+- **Secrets.** A component that has `settings` ships its own ExternalSecret
+  `<name>-settings` (ClusterSecretStore `openbao`, `dataFrom.extract.key:
+  apps/${APP_NAME}/<name>`) producing Secret `<name>-settings`, consumed only by
+  the component's own container (env or file mount). Never merged into
+  `<app>-settings`.
 
-### 2. Publish layer — artifact assembly
-
-New script `scripts/assemble-app.sh <app>` (consumed by the publish workflow,
-verify-app, and local builds; tested by `scripts/test-assemble-app.sh`):
-
-1. Copy `apps/<app>/` to the artifact staging tree.
-2. For each entry in `metadata.yaml spec.components`: copy `./components/<name>/`
-   into `<artifact>/components/<name>/`, stamping `__APP_NAME__` and
-   `__PARAM_<NAME>__` (values from the app's `params:` map). Validate declared
-   params against the descriptor (unknown → error; required missing → error).
-3. Generate four noop slot components `components/_c1../_c4/kustomization.yaml`
-   (minimal `kind: Component`, no resources).
-4. Generate the wrapper `install/kustomization.yaml`:
-
-```yaml
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - ../overlays/librepod
-components:
-  - ../components/_c1
-  - ../components/_c2
-  - ../components/_c3
-  - ../components/_c4
-```
-
-The published artifact is signed/pushed exactly as today (same tags: `spec.version`
-and `latest`). Apps that declare no components still get slots + wrapper (uniform
-artifact shape).
-
-**Renderer emission rule:** every NEW install renders all four files (generator
-with zero component copies = a plain passthrough composite) — one runtime shape,
-no branching. Installations made before this feature keep their old three-file
-shape (sourceRef OCIRepository, `path: ./overlays/librepod`) untouched; they are
-migrated to the four-file shape the first time the user performs an action that
-re-renders their manifests (attaching/detaching a component). A republish alone
-never rewrites an installed app's manifests.
-
-App opt-in in `metadata.yaml`:
+App opt-in (`apps/<app>/metadata.yaml`):
 
 ```yaml
 spec:
   components:
-    - name: gluetun                 # no params needed; deployment target = app name
     - name: frp-expose
-      params:
-        localPort: 8083             # the app's Service port to tunnel
-        protocol: tcp
+      values:                                   # every `from: app` value of the component
+        FRP_EXPOSE_HOST: immich-server.immich.svc.cluster.local
+        FRP_EXPOSE_PORT: "2283"
 ```
 
-### 3. Install layer — renderer output
+### 2. Publish layer
 
-marketplace-ui renders four files per app into the user-apps Gogs repo (templates
-live in `metadata.yaml templates:` and flow through catalog.yaml like the existing
-three):
+- New `scripts/publish-components.sh` + `scripts/test-publish-components.sh`
+  (repo CI rule: logic in scripts, workflow YAML only wires env and calls one
+  line), invoked by new `.github/workflows/publish-components.yaml`.
+- Trigger: push to `master` and PRs touching `components/**`. Detect changed
+  component dirs (same approach as `publish-apps.yaml`).
+- Master: `flux push artifact oci://ghcr.io/<owner>/marketplace/components/<name>:<version>`
+  with `--path=./components/<name>`, then the same for `:latest`, each signed
+  with the repo's cosign key exactly as `publish-apps.yaml` signs app
+  artifacts. A manifest-only change re-pushes the same `<version>` tag (rolling
+  tag) — installs pinned to it converge on the next 10m poll.
+- PRs: `:pr-<n>` signed keyless, as apps do. Note: keyless PR artifacts fail the
+  cluster's key-based `verify`, so PR component artifacts cannot be installed on
+  a cluster through the UI — test them with a hand-written source without
+  `verify`.
+- App artifacts are **unchanged** — no vendoring, no slots, no wrapper.
 
-- `source.yaml` — unchanged (`OCIRepository marketplace-<app>`, cosign-verified,
-  tag `__VERSION__`).
-- `generator.yaml` — NEW template, `ArtifactGenerator`:
+App/component compatibility check (CI, in `validate-apps`): new
+`scripts/check-app-components.sh` + test. For every app listing components and
+for each listed component: copy the component into a temp tree at the
+generator's layout (`shared-components/<name>/`), build `overlays/librepod` with
+the component added, apply the app's `values` as substitution, and assert:
 
-```yaml
-apiVersion: source.extensions.fluxcd.io/v1beta1
-kind: ArtifactGenerator
-metadata:
-  name: marketplace-<app>
-  namespace: flux-system
-  labels: {marketplace.io/managed: "true", marketplace.io/app: "<app>"}
-spec:
-  interval: 10m
-  sources:
-    - alias: app
-      kind: OCIRepository
-      name: marketplace-<app>
-  artifacts:
-    - name: marketplace-<app>
-      copy:
-        - from: "@app/"
-          to: "@artifact/"
-        __COMPONENT_COPIES__
+- patch component → exactly one Deployment carries the target annotation and
+  gained the component's container;
+- resource component → its resources are present;
+- every `from: app` value is supplied by the app.
+
+### 3. Catalog layer
+
+`scripts/generate-catalog.sh` (+ `test-generate-catalog.sh` cases):
+
+- Top-level `components:` map built from `components/*/component.yaml`:
+  `name → {displayName, description, version, group, kind, settings, values}`.
+- Per-app `components:` list from `metadata.yaml spec.components`:
+  `[{name, values}]`. Generation fails on an unknown component name or a
+  missing `from: app` value.
+- No new per-app templates. The component-source and generator shapes are
+  platform-fixed and owned by the renderer (catalog.yaml is already ~73%
+  template bodies).
+
+The catalog's component `version` is the "latest" side of the future update
+comparison; the installed side is recorded in the cluster (below).
+
+### 4. Install layer — marketplace-ui
+
+**API.** The existing install request body gains:
+
+```json
+{ "components": [ { "name": "tailscale", "settings": { "TS_AUTHKEY": "…" }, "values": {} } ] }
 ```
 
-- `release.yaml` — `sourceRef` becomes `{kind: ExternalArtifact,
-  name: marketplace-<app>}`, `path: ./install`, and `postBuild.substitute`
-  carries `__COMPONENT_SUBSTITUTE__` below `BASE_DOMAIN`.
-- root `kustomization.yaml` — now lists source, generator, release.
+Server-side validation (400 on failure): each name is in the app's catalog
+component list; at most one per `group`; required settings present; `from:
+install` values present or defaulted and matching `pattern`; no unknown keys.
 
-Sentinels are filled by the renderer from the selection:
+**Writes, in order** (same mutex and error handling as today's install):
 
-- `__COMPONENT_COPIES__` → one stanza per selected component, **slots assigned in
-  the stable (alphabetical) order of component names** so re-renders are
-  idempotent and attach/detach never reshuffles:
+1. App settings → OpenBao `apps/<app>` (unchanged).
+2. Each selected component's settings → OpenBao `apps/<app>/<component>`.
+3. One Gogs commit with the app's files.
 
-```yaml
-        - from: "@app/components/frp-expose/**"
-          to: "@artifact/components/_c1/"
-        - from: "@app/components/gluetun/**"
-          to: "@artifact/components/_c2/"
-```
+**Files when no component is selected:** today's `source.yaml`, `release.yaml`,
+`kustomization.yaml` (and legacy `secret.yaml`), unchanged.
 
-- `__COMPONENT_SUBSTITUTE__` → `KEY: "value"` lines for every `substitute` item
-  of every selected component (resolved question answer → default → renderer-
-  generated default frozen at first render, see frp-expose).
+**Files when ≥1 component is selected:**
 
-The renderer stays a dumb template-filler — no YAML parsing, no authored patches.
-`dependsOn`, `force: true`, `prune: true`, `wait: true` carry over unchanged.
+- `source.yaml` — unchanged (app OCIRepository pinned to the app version).
+- `components.yaml` — one OCIRepository per selected component:
 
-### 4. Platform layer — source-watcher
+  ```yaml
+  apiVersion: source.toolkit.fluxcd.io/v1
+  kind: OCIRepository
+  metadata:
+    name: marketplace-<app>-<component>
+    namespace: flux-system
+    labels:
+      marketplace.io/managed: "true"
+      marketplace.io/app: "<app>"
+      marketplace.io/component: "<component>"
+  spec:
+    interval: 10m
+    url: oci://ghcr.io/librepod/marketplace/components/<component>
+    ref:
+      tag: "<catalog component version at install time>"
+    verify:
+      provider: cosign
+      secretRef:
+        name: cosign-pub
+  ```
 
-`source-watcher` (the controller implementing ArtifactGenerator) is a first-class
-flux-operator component — the installed `fluxinstances` CRD enum includes it.
-Rollout = add to `spec.components` in each cluster's FluxInstance:
+  The pinned `ref.tag` **is** the recorded installed version (goal 4). The
+  future update feature lists OCIRepositories labelled `marketplace.io/component`
+  and compares `spec.ref.tag` with the catalog.
 
-- `clusters/librepod-k3d/bootstrap/flux-instance.yaml` (bootstrap path)
-- dev + production FluxInstances
+- `generator.yaml`:
 
-Requires Flux ≥ 2.7.2; dev already runs controller v1.9.6 with the
-`externalartifacts` CRD present and `ExternalArtifact` accepted as a Kustomization
-`sourceRef` (verified on the live cluster). Trust chain: the OCIRepository remains
-the cosign-verified root; the ExternalArtifact is derived by source-watcher from
-source-controller's verified artifact storage.
+  ```yaml
+  apiVersion: source.extensions.fluxcd.io/v1beta1
+  kind: ArtifactGenerator
+  metadata:
+    name: marketplace-<app>
+    namespace: flux-system
+    labels: {marketplace.io/managed: "true", marketplace.io/app: "<app>"}
+  spec:
+    sources:
+      - alias: app
+        kind: OCIRepository
+        name: marketplace-<app>
+      - alias: <component>              # one per selected component
+        kind: OCIRepository
+        name: marketplace-<app>-<component>
+    artifacts:
+      - name: marketplace-<app>
+        originRevision: "@app"
+        copy:
+          - from: "@app/"
+            to: "@artifact/"
+          - from: "@<component>/"       # one per selected component
+            to: "@artifact/shared-components/<component>/"
+  ```
+
+  `shared-components/` is deliberately not `components/`: apps already use
+  `components/` for app-private kustomize components.
+
+- `release.yaml` — rendered from the app's template as today, then modified
+  with `js-yaml` (already a server dependency; per-app templates are not
+  edited):
+  - `spec.sourceRef` → `{kind: ExternalArtifact, name: marketplace-<app>}`
+  - `spec.components` → `["../../shared-components/<component>", …]` (sorted by
+    name for stable output)
+  - `spec.postBuild.substitute` += `APP_NAME` + every selected component's
+    values (app-supplied from the catalog, install-supplied from the request)
+- `kustomization.yaml` — the app's template output with `components.yaml` and
+  `generator.yaml` appended to `resources`.
+
+**Status, uninstall.** Unchanged code paths. Status still reads the app
+Kustomization by label; a generator or component-source failure shows as the
+Kustomization not Ready. Uninstall removes the app directory; Flux prunes the
+sources, generator (whose finalizer deletes the ExternalArtifact) and the app.
+OpenBao entries stay, as app settings do today.
+
+**UI.** `InstallDialog` gains a "Components" section, shown only when the app
+lists components:
+
+- components with a `group` render as a radio (None + members); ungrouped ones
+  as checkboxes;
+- selecting one reveals its `settings` and `from: install` values, reusing the
+  existing settings field rendering; install values are prefilled with their
+  default;
+- a new setting type `text` (multi-line, rendered as a textarea) is added to
+  `AppSettingType` for pasted configs (WireGuard, sing-box JSON). Sensitive
+  `text` values are handled like sensitive strings.
+
+### 5. Platform layer — source-watcher
+
+- Dev: done (FluxInstance `spec.components` includes `source-watcher`).
+- `clusters/librepod-k3d/bootstrap/flux-instance.yaml`: today it sets no
+  `instance.components` (chart defaults). Add `instance.components` listing
+  `source-controller`, `kustomize-controller`, `helm-controller`,
+  `notification-controller`, `source-watcher`.
+- Production: add `source-watcher` to its FluxInstance `spec.components` before
+  any component install there.
 
 ## The v1 components
 
-### egress: `gluetun`
+### `gluetun` — group `network`, kind `patch`
 
-Strategic-merge patch (stamped `__APP_NAME__`) adding to the app Deployment:
+- Native sidecar (an `initContainers` entry with `restartPolicy: Always`) on
+  the annotated Deployment: the app container starts only after gluetun's
+  startup probe passes.
+- `startupProbe`: `exec: ["/gluetun-entrypoint", "healthcheck"]` (the image's
+  own HEALTHCHECK). Not `httpGet` — the health server is loopback-only.
+- `NET_ADMIN`; `/dev/net/tun` via `hostPath` `CharDevice`.
+- `VPN_SERVICE_PROVIDER=custom`, `VPN_TYPE=wireguard`; the WireGuard config
+  comes from setting `WG_CONFIG` (`text`, sensitive, required) in Secret
+  `gluetun-settings`, mounted as a file at the path gluetun's custom provider
+  reads (builder: confirm the current path in gluetun's docs).
+- `FIREWALL_OUTBOUND_SUBNETS: "10.42.0.0/16,10.43.0.0/16"` (k3s default pod and
+  service CIDRs, hard-coded with a comment). Without it, cluster-local traffic
+  (other Services, CoreDNS) is dropped.
+- Known limitations (help text): LAN / device-IP destinations go into the
+  tunnel; DNS stays on CoreDNS, so external lookups resolve via the node
+  (potential DNS leak).
 
-- **Native sidecar** (initContainers entry, `restartPolicy: Always`) — starts
-  before the app container and stays running.
-- `qdm12/gluetun` image, tag pinned in the component's own `images:` + renovate.
-- `securityContext.capabilities: [NET_ADMIN]`; `/dev/net/tun` via hostPath
-  charDevice (fallback: privileged mknod init container — decide in e2e; Kata
-  runtime interaction is a flagged risk).
-- `VPN_SERVICE_PROVIDER=custom` + the user's WireGuard config: setting
-  `GLUETUN_WG_CONFIG` (sensitive, required) mounted as a file via the
-  `<app>-settings` Secret (subPath → `/gluetun/wg-custom.conf`).
-- `FIREWALL_OUTBOUND_SUBNETS: "10.42.0.0/16,10.43.0.0/16"` — **the correctness
-  critical bit**: without it the tunnel swallows cluster-local traffic (firefly
-  bot → firefly-iii Service, CoreDNS) and the app breaks while "on VPN".
-  Platform-standard k3s CIDRs, hardcoded in the component with an inline comment.
-- `startupProbe` on gluetun's control-server health endpoint → the app container
-  cannot start until the tunnel is up (native sidecar semantics), replacing any
-  hand-rolled gate container.
+### `sing-box` — group `network`, kind `patch`
 
-Known limitation (accepted): cluster DNS stays on CoreDNS; external lookups
-resolve via the node (potential DNS leak). Fine for IP-blocked services; deeper
-censorship resistance is a follow-up.
+- Native sidecar; `NET_ADMIN` + `/dev/net/tun`.
+- Setting `CONFIG` (`text`, sensitive, required) — full sing-box JSON, mounted at
+  `/etc/sing-box/config.json`; command `sing-box run -c /etc/sing-box/config.json`.
+- No startup gate (the config is opaque). Routing rules, including direct
+  routes for the cluster CIDRs, are the user's responsibility (help text says
+  so).
 
-### egress: `sing-box`
+### `tailscale` — group `network`, kind `patch` (extracted from collie + remnawave)
 
-Same patch shape. Setting `SINGBOX_CONFIG` (sensitive, required — full JSON
-config paste) mounted to `/etc/sing-box/config.json`; container runs
-`sing-box run -c /etc/sing-box/config.json`. Tun-mode config is user-supplied, so
-routing rules (including cluster-CIDR direct rules) are the user's responsibility
-— the dialog help text says so. No startup gate (config is opaque); the app's own
-retries cover the gap (self-heal posture).
+Based on collie's version (the one validated in production, including the
+re-enrolment fix):
 
-### expose: `frp-expose`
+- Regular sidecar container `tailscale` (containerboot), `runAsUser: 0`,
+  `NET_ADMIN`, `/dev/net/tun` `hostPath`.
+- Env (ConfigMap from `tailscale.env`): `TS_USERSPACE=false`,
+  `TS_ACCEPT_DNS=false`, `TS_STATE_DIR=/var/lib/tailscale`, `TS_KUBE_SECRET=""`
+  (no Kubernetes API use, so no RBAC and no ServiceAccount change),
+  `TS_AUTH_ONCE=true` (no re-enrolment on restart), `TS_ENABLE_HEALTH_CHECK=true`,
+  `TS_NO_LOGS_NO_SUPPORT=true`, `TS_HOSTNAME=${APP_NAME}` default.
+- Settings (`tailscale-settings` Secret): `TS_AUTHKEY` (sensitive, required),
+  `TS_EXTRA_ARGS` (optional, e.g. `--login-server=https://…` for headscale),
+  `TS_HOSTNAME` (optional override).
+- State: PVC `tailscale-state` (component resource) mounted at
+  `/var/lib/tailscale`.
+- `startupProbe`: `httpGet /healthz` on port 9002.
+- DNS: collie's MagicDNS-first `dnsPolicy: None` + `dnsConfig` (nameservers
+  `100.100.100.100`, `10.43.0.10`; search `ts.${BASE_DOMAIN:=libre.pod}`;
+  `timeout: 1`, `attempts: 2`) so the app resolves tailnet names and degrades to
+  CoreDNS within ~1s if the sidecar is down.
+- Image: `tailscale/tailscale` `v1.104.2` (the newer of the two app pins).
+- Does **not** set `serviceAccountName`.
 
-Resource-only component (works for **any** app type — nothing patches the pod):
+### `frp-expose` — no group, kind `resource` (extracted from headscale)
 
 ```yaml
 apiVersion: frp.zufardhiyaulhaq.com/v1alpha1
 kind: Upstream
 metadata:
-  # Proxy name must be unique per relay across all devices sharing it — defaults
-  # to the app name for single-device relays, renderer appends a random suffix
-  # (frozen at first render) when the user doesn't choose one.
-  name: ${FRP_PROXY_NAME:-__APP_NAME__}
+  # Registered with frps as the proxy name; must be unique per relay.
+  name: ${FRP_EXPOSE_SUBDOMAIN:=app}
 spec:
-  client: ${FRP_CLIENT:-libreport}
-  __PARAM_PROTOCOL__:
-    host: __APP_NAME__.__APP_NAME__.svc.cluster.local
-    port: __PARAM_LOCAL_PORT__
-    server:
-      port: ${FRP_REMOTE_PORT:-0}   # 0 = relay auto-assign
+  client: libreport
+  http:
+    host: ${FRP_EXPOSE_HOST:=localhost}
+    port: ${FRP_EXPOSE_PORT:=80}
+    subdomain: ${FRP_EXPOSE_SUBDOMAIN:=app}
+    healthCheck:
+      type: tcp
+      timeoutSeconds: 3
+      intervalSeconds: 10
+      maxFailed: 3
+    transport:
+      useEncryption: true
+      useCompression: true
 ```
 
-- App params (publish-stamped): `localPort` (required), `protocol` (`tcp`|`udp`).
-- Per-install substitute: `FRP_REMOTE_PORT` (default 0 = auto-assign);
-  `FRP_PROXY_NAME` — renderer-generated default `<app>-<6-char-random>`, frozen
-  into release.yaml at first render (proxy names must be unique per relay; never
-  re-randomize on re-render); `FRP_CLIENT` default `libreport`, not surfaced in
-  the dialog v1.
-- frp-operator watches Upstreams cluster-wide; the CR lives in the app namespace.
+- Values: `FRP_EXPOSE_HOST` and `FRP_EXPOSE_PORT` (`from: app`, the in-cluster
+  Service FQDN and port); `FRP_EXPOSE_SUBDOMAIN` (`from: install`, default the
+  app name, DNS-label pattern). Subdomain = proxy name, so two devices sharing a
+  relay must pick different subdomains; a collision shows up as the Upstream /
+  frpc reporting the name taken.
+- Public address: `https://<subdomain>.${FRP_DOMAIN}`; TLS is terminated at the
+  relay, which forwards plain HTTP to frps' vhost port (headscale's setup).
+- The health check is `tcp` (generic) rather than headscale's `http /health`.
+- Version: `1.0.0`, hand-bumped.
+- Known limit: SSO (Casdoor) login does not work through the relay (Casdoor is
+  only on the local domain); apps with their own login work. Apps whose only
+  login is Traefik forward-auth are exposed without a login — user's choice.
 
-## Post-install attach/detach
+## Migration (big-bang, downtime accepted)
 
-The app's Manage page shows the same component section as the install dialog.
-Saving re-renders `generator.yaml` (± one copy stanza) and `release.yaml`
-(± substitute lines) and commits — the existing Gogs commit path. Consequences:
+| App | Change | Existing install |
+|---|---|---|
+| collie | Delete `components/tailscale`, its overlay `components:` entry and `images:` pin; drop `TS_*` from `settings`; move `serviceAccountName: default` (its own legacy-SA workaround) into `base/`; annotate the Deployment; `spec.components: [{name: tailscale}]` | Reinstall with tailscale selected. New state PVC → the node enrols again (needs a fresh auth key); its old tailnet node becomes stale |
+| remnawave | Delete `components/tailscale` (incl. its SA/Role/RoleBinding/PVC) and the commented overlay reference; annotate the Deployment; `spec.components: [{name: tailscale}]` | Reinstall if tailscale is wanted |
+| headscale | Delete `components/frp-upstreams` and its overlay entry; `spec.components: [{name: frp-expose, values: {FRP_EXPOSE_HOST: headscale.headscale.svc.cluster.local, FRP_EXPOSE_PORT: "80"}}]`; replace the literal `headscale.` host in `server_url` (`base/config.yaml`), headplane `public_url` and the SSOClient redirect URI with `${FRP_EXPOSE_SUBDOMAIN:=headscale}.` | Reinstall with frp-expose selected and subdomain `headscale` (otherwise remote clients cannot reach it) |
+| firefly-iii-telegram-bot | Annotate the Deployment; `spec.components: [{name: gluetun}, {name: sing-box}]` | n/a (new capability) |
+| immich | `spec.components: [{name: frp-expose, values: {FRP_EXPOSE_HOST: immich-server.immich.svc.cluster.local, FRP_EXPOSE_PORT: "2283"}}]` | n/a |
 
-- Attaching frp-expose never restarts the app pod (rendered Deployment unchanged).
-- Attaching gluetun rolls the pod once (spec genuinely changed).
-- Detaching prunes the Upstream CR / sidecar via normal Flux pruning.
-- Switching egress component (gluetun ↔ sing-box) = swap one copy stanza.
+These five are the v1 opt-ins (my call); other apps opt in later by adding the
+annotation and a `spec.components` entry. App-artifact changes from the table
+ship as rolling re-pushes of the current app tags (no version bump needed for a
+big-bang migration).
 
-Uninstall of the app removes all four files; pruning cascades (Kustomization →
-app resources; generator → ExternalArtifacts via ownership).
+## Failure modes
 
-## Catalog & UI
-
-- `generate-catalog.sh` merges each app's `spec.components` with the descriptors
-  from `./components/*/component.yaml` and emits a resolved `components:` block
-  per app entry (displayName, description, group, settings, substitute,
-  params-consumed). The UI reads only catalog.yaml, as today.
-- Install dialog: a "Components" section — `group: egress` renders as a radio
-  (none / gluetun / sing-box), ungrouped components as checkboxes; selecting one
-  reveals its `settings` + `substitute` fields inline.
-- Settings storage: component settings items are resolved and stored into the
-  app's existing OpenBao entry (prefixed keys), never a separate entry; the
-  install stays one-click if nothing is selected and no required items fire.
-- API: `POST /installed-apps/:name/components` with the selection + answers;
-  idempotent; server-side validation that each selected component is in the
-  app's catalog list and group constraints hold.
-
-## Update policy (deliberate decision)
-
-Component content changes republish every supporting app's artifact under the
-**same** `spec.version` tag (mutable tag) plus `latest`. Installed clusters pick
-the new digest up via the OCIRepository's 10m poll and converge silently —
-component fixes roll to existing installs without user action. This is aligned
-with the "self-heal, never nag" product philosophy, and is chosen over
-component-visible versioning (YAGNI). App `spec.version` bumps remain the only
-user-visible version signal. The spec accepts the consequence: `ref.tag` no
-longer implies byte-frozen content for component-bearing apps.
-
-## Failure modes & guardrails
-
-| Risk | Guardrail |
+| Risk | Handling |
 |---|---|
-| source-watcher is v1beta1/young | Official fluxcd project w/ e2e; failure is a stalled install (retries), never data loss; contained to clusters that opted into components |
-| Slot overwrite leaves stale files | Noop slots are a single `kustomization.yaml`, overwritten by the selected component's own `kustomization.yaml`; e2e asserts the composite contains the sidecar |
-| Component patch dangles (app Deployment renamed) | `assemble` test renders `./install` with each supported component dropped into `_c1` and asserts the patch target exists in output — publish-time failure, not a user's |
-| Renderer re-randomizes defaults (frp proxy name) | Renderer reads current release.yaml from Gogs before rewriting; defaults frozen at first render; golden-file unit tests |
-| `/dev/net/tun` unavailable (Kata, hardened nodes) | Flagged e2e risk on representative node runtimes; fallback mknod init container documented |
-| User pastes broken WG/sing-box config | Sidecar CrashLoops, Flux retries; UI surfaces pod health on the Manage page (existing signals) — matches platform error philosophy (human-supplied credential = legitimate human loop) |
-| Existing installs churn | Renderer only rewrites manifests when the user acts; republish alone never touches an installed app's manifests |
+| source-watcher is v1beta1 and fast-moving | Only installs with components depend on it; plain installs never do. Failures stall that one app (retries), no data loss |
+| Component source tag missing / verify fails | ArtifactGenerator not Ready → app Kustomization not Ready → app shows Error; reinstall without the component |
+| Patch target missing (app renamed its Deployment or dropped the annotation) | `check-app-components.sh` fails the app's PR in CI |
+| Broken WG / sing-box config or bad tailscale auth key | Sidecar crash-loops or never passes its startup probe; the app shows Error. Human-supplied credential → reinstall with a fixed value |
+| Two network components on one pod | Prevented: one `network` group, validated server-side |
+| `/dev/net/tun` unavailable (Kata runtime, hardened nodes) | Flagged for the dev e2e; fallback (privileged mknod init container) only if a real node needs it |
+| Subdomain collision on a shared relay | Visible in Upstream/frpc status; reinstall with another subdomain |
+| Flux bump turns on strict substitution | Component `${VAR}`s all carry defaults (author rule) |
 
 ## Testing
 
-1. `scripts/test-assemble-app.sh` — fixture app + fixture components: asserts
-   vendoring, sentinel stamping, param validation errors, slot/wrapper generation,
-   and `kustomize build` of (a) noop composite, (b) each component in `_c1`,
-   asserting the expected resource/container appears in output.
-2. Renderer unit tests (golden files): generator.yaml per selection shape; stable
-   slot ordering; substitute line generation; frozen defaults on re-render.
-3. Catalog test: components block merges descriptor fields correctly.
-4. E2E on dev (`verify-app` flow): firefly-iii-telegram-bot + gluetun (real WG
-   conf against a test tunnel), immich + frp-expose (Upstream registered, relay
-   port reachable), attach/detach cycles on both.
+1. `scripts/test-publish-components.sh` — change detection, tag selection
+   (version vs `pr-<n>`), dry-run push commands.
+2. `scripts/test-check-app-components.sh` — fixture app + fixture patch and
+   resource components: annotated target gains the container; un-annotated
+   sibling untouched; missing annotation fails; missing app value fails.
+3. `scripts/test-generate-catalog.sh` — components map and per-app lists;
+   unknown component and missing value fail.
+4. Server unit tests — golden files for 0, 1 and 2 selected components
+   (`components.yaml`, `generator.yaml`, patched `release.yaml` and
+   `kustomization.yaml`); validation errors (unknown, two in a group, missing
+   required, bad pattern); OpenBao writes per component; no component secret
+   lands in `apps/<app>`.
+5. Client tests — Components section renders radio/checkboxes, reveals fields
+   on selection, `text` type renders a textarea; payload shape.
+6. E2E on dev (verify-app flow / UI): hand-written generator smoke first; then
+   firefly-iii-telegram-bot + gluetun against a real WireGuard endpoint
+   (outbound IP changes, Firefly still reachable), collie + tailscale (joins
+   headscale, MagicDNS resolves), headscale + frp-expose (reachable at
+   `https://headscale.<relay domain>`), immich + frp-expose.
 
 ## Rollout order
 
-1. FluxInstance `+source-watcher` on dev; smoke-test one hand-written generator.
-2. `assemble-app.sh` + tests; publish workflow integration; catalog changes.
-3. `components/gluetun`, `components/sing-box`, `components/frp-expose` +
-   opt-ins (firefly-iii-telegram-bot: gluetun+sing-box; immich: frp-expose).
-4. UI: dialog section, renderer sentinels, Manage attach/detach API.
-5. E2E on dev; FluxInstance rollout to production clusters.
+1. Dev smoke test: one hand-written ArtifactGenerator composing an installed
+   app with a hand-pushed component artifact; confirm the Kustomization builds
+   with `spec.components`.
+2. `components/` (gluetun, sing-box, tailscale, frp-expose) + publish scripts
+   and workflow + `check-app-components.sh` in validate-apps.
+3. Catalog generation.
+4. marketplace-ui: API validation, renderer, OpenBao writes, dialog, `text`
+   setting type.
+5. App migrations (table above), k3d bootstrap FluxInstance, dev e2e, then
+   production FluxInstance and reinstalls of collie / headscale.
+
+## Left to the builder
+
+- gluetun's current custom-WireGuard config file path and env names.
+- Exact ExternalSecret `key` form for nested OpenBao paths (confirm the store
+  resolves `apps/<app>/<component>` like `apps/<app>`).
+- How `FRP_DOMAIN` reaches the substitution map on a UI install (headscale uses
+  it today; confirm the mechanism on a live install before relying on it in the
+  dialog's address hint).
+- Renovate config grouping for a component's descriptor version + `images:` pin.
+- Field-level UI copy and layout inside the Components section.
 
 ## Naming
 
-User-facing and repo-facing term is **component** (`./components/`,
-`spec.components`, catalog `components:`, UI "Components"). Docs and code must
-say **kustomize component** when referring to `kind: Component` to avoid the
-collision.
+User- and repo-facing term: **component** (`components/`, `spec.components`,
+catalog `components:`, UI "Components"). Say **kustomize component** for
+`kind: Component`. In the generated artifact, shared components live under
+`shared-components/` to stay apart from app-private `components/`.
