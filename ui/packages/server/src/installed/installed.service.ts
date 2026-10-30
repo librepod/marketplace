@@ -17,6 +17,8 @@ import { FluxStatusService } from './flux-status.service';
 import { SystemAppsService } from './system-apps.service';
 import { LaunchUrlService } from './launch-url.service';
 import { resolveSettings, storedToRequest } from './install-settings';
+import { resolveComponents } from './install-components';
+import { renderComponentFiles } from './component-files';
 import { OpenBaoClient, OpenBaoMisconfiguredError, OpenBaoUnavailableError } from './openbao.client';
 import { LegacySecretMirror } from './legacy-secret-mirror';
 import { NodeAddressService } from './node-address.service';
@@ -241,6 +243,14 @@ export class InstalledService {
       // regenerates nothing (see resolveForWrite).
       const settingsToWrite = app.settings ? await this.resolveForWrite({ ...app, settings: app.settings }, body) : null;
 
+      // 3a. Shared components picked in the dialog: validated now so a bad selection is
+      // a 400 before anything is written. Their settings go to their own OpenBao entries
+      // (apps/<app>/<component>), never into the app's.
+      const selection = resolveComponents(app, body);
+      if (!selection.ok) {
+        throw new BadRequestException({ message: 'Some settings need attention', errors: selection.errors });
+      }
+
       // 3b. Platform values. DEVICE_IP (the node's LAN address — e.g. a VPN's
       // endpoint host) costs a Kubernetes read, so only templates that ask for
       // it pay. Resolved once the settings validate (a malformed body is a 400,
@@ -253,14 +263,6 @@ export class InstalledService {
         vars.DEVICE_IP = await this.nodeAddress.internalIp();
       }
 
-      if (settingsToWrite) {
-        try {
-          await this.openBao.writeAppSettings(appName, settingsToWrite);
-        } catch (err) {
-          this.throwSettingsStoreError(err, appName);
-        }
-      }
-
       // 4. Legacy generated secrets join the substitution map
       if (app.secrets && app.secrets.length > 0) {
         for (const secret of app.secrets) {
@@ -270,11 +272,10 @@ export class InstalledService {
         }
       }
 
-      // 5. Render every file and write them as ONE commit. Ordering no longer
-      // matters ("Pitfall 3" was about the root kustomization.yaml naming an
-      // app dir before its files existed) — atomicity now comes from the commit,
-      // and Flux auto-generates its kustomization from the tree.
-      const files: Record<string, string> = {
+      // 5. Render every file. Rendering is pure and runs before the first write, so a
+      // render failure (a release that is not a Kustomization, a component value
+      // colliding with a substitute key) leaves no OpenBao entry or commit behind.
+      let files: Record<string, string> = {
         'source.yaml': this.renderTemplate(app.templates.source, vars),
         'release.yaml': this.renderTemplate(app.templates.release, vars),
         'kustomization.yaml': this.renderTemplate(app.templates.kustomization, vars),
@@ -282,6 +283,41 @@ export class InstalledService {
       if (app.templates.secret) {
         files['secret.yaml'] = this.renderTemplate(app.templates.secret, vars);
       }
+      if (selection.components.length > 0) {
+        try {
+          files = { ...files, ...renderComponentFiles(appName, selection.components, {
+            release: files['release.yaml'],
+            kustomization: files['kustomization.yaml'],
+          }) };
+        } catch (err) {
+          this.logger.error(`could not compose components for ${appName}: ${(err as Error).message}`);
+          throw new InternalServerErrorException(`Couldn't install ${app.displayName} with these components.`);
+        }
+      }
+
+      // 6. OpenBao first, so the ExternalSecrets find their entries as soon as Flux
+      // applies the app: the app's own entry, then one per component that has settings
+      // (even an empty one, so its ExternalSecret resolves).
+      if (settingsToWrite) {
+        try {
+          await this.openBao.writeAppSettings(appName, settingsToWrite);
+        } catch (err) {
+          this.throwSettingsStoreError(err, appName);
+        }
+      }
+      for (const c of selection.components) {
+        if (!c.hasSettings) continue;
+        try {
+          await this.openBao.writeAppSettings(`${appName}/${c.name}`, c.settings);
+        } catch (err) {
+          this.throwSettingsStoreError(err, appName);
+        }
+      }
+
+      // 7. Write all files as ONE commit. Ordering no longer matters ("Pitfall 3"
+      // was about the root kustomization.yaml naming an app dir before its files
+      // existed) — atomicity now comes from the commit, and Flux auto-generates its
+      // kustomization from the tree.
       await this.repo.writeApp(appName, files);
 
       return { success: true, message: `${app.displayName} is being deployed` };

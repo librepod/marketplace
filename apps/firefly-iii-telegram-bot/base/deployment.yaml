@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: firefly-iii-telegram-bot
+  annotations:
+    librepod.org/component-target: "true"
 spec:
   replicas: 1
   strategy:

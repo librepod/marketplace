@@ -375,3 +375,120 @@ describe('InstallDialog', () => {
     expect(await screen.findByLabelText('Access token')).toHaveValue('old')
   })
 })
+
+describe('InstallDialog components', () => {
+  const dnsLabel = '^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$'
+  const withComponents: CatalogApp = {
+    ...app,
+    settings: { items: [{ name: 'RENOVATE_TOKEN', label: 'Access token', required: true }] },
+    components: [
+      {
+        name: 'tailscale', displayName: 'Tailscale', description: 'Join your tailnet', version: 'v1', group: 'network', kind: 'patch',
+        settings: [
+          { name: 'TS_AUTHKEY', label: 'Tailnet auth key', required: true, sensitive: true },
+          { name: 'TS_EXTRA_ARGS', label: 'Extra flags' },
+        ],
+        values: [{ name: 'TS_HOSTNAME', from: 'install', label: 'Tailnet hostname', default: 'renovate', pattern: dnsLabel }],
+      },
+      {
+        name: 'gluetun', displayName: 'VPN egress', description: 'WireGuard tunnel', version: 'v3', group: 'network', kind: 'patch',
+        settings: [{ name: 'WG_CONFIG', label: 'WireGuard config', type: 'text', required: true, sensitive: true }],
+        values: [],
+      },
+      {
+        name: 'frp-expose', displayName: 'Public exposure', description: 'Publish on the relay', version: '1.0.0', kind: 'resource',
+        values: [
+          { name: 'FRP_EXPOSE_HOST', from: 'app', default: 'h.svc' },
+          { name: 'FRP_EXPOSE_SUBDOMAIN', from: 'install', label: 'Public subdomain', default: 'renovate', pattern: dnsLabel },
+        ],
+      },
+    ],
+  }
+
+  it('renders a radio group for network components and a checkbox for frp-expose', async () => {
+    mockApi()
+    renderDialog(withComponents)
+    await screen.findByLabelText('Access token')
+    expect(screen.getAllByRole('radio').map((r) => (r as HTMLInputElement).labels?.[0].textContent)).toEqual([
+      'None', 'Tailscale', 'VPN egress',
+    ])
+    expect(screen.getByRole('checkbox', { name: 'Public exposure' })).toBeInTheDocument()
+  })
+
+  it("reveals a component's fields only when selected", async () => {
+    mockApi()
+    renderDialog(withComponents)
+    await screen.findByLabelText('Access token')
+    expect(screen.queryByLabelText('Tailnet auth key')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('radio', { name: 'Tailscale' }))
+    expect(screen.getByLabelText('Tailnet auth key')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('radio', { name: 'None' }))
+    expect(screen.queryByLabelText('Tailnet auth key')).not.toBeInTheDocument()
+  })
+
+  it('sends selected components with their settings and values', async () => {
+    const fetchSpy = mockApi()
+    renderDialog(withComponents)
+    await userEvent.type(await screen.findByLabelText('Access token'), 'tok')
+    await userEvent.click(screen.getByRole('radio', { name: 'Tailscale' }))
+    await userEvent.type(screen.getByLabelText('Tailnet auth key'), 'tskey')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Public exposure' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Install' }))
+
+    await waitFor(() => expect(submits(fetchSpy)).toHaveLength(1))
+    expect(sentBody(fetchSpy).components).toEqual([
+      { name: 'tailscale', settings: { TS_AUTHKEY: 'tskey', TS_EXTRA_ARGS: '' }, values: { TS_HOSTNAME: 'renovate' } },
+      { name: 'frp-expose', settings: {}, values: { FRP_EXPOSE_SUBDOMAIN: 'renovate' } },
+    ])
+  })
+
+  it('omits components from the request when none is selected', async () => {
+    const fetchSpy = mockApi()
+    renderDialog(withComponents)
+    await userEvent.type(await screen.findByLabelText('Access token'), 'tok')
+    await userEvent.click(screen.getByRole('button', { name: 'Install' }))
+    await waitFor(() => expect(submits(fetchSpy)).toHaveLength(1))
+    expect(sentBody(fetchSpy)).not.toHaveProperty('components')
+  })
+
+  it('prefills install values with the catalog default', async () => {
+    mockApi()
+    renderDialog(withComponents)
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Public exposure' }))
+    expect(screen.getByLabelText('Public subdomain')).toHaveValue('renovate')
+  })
+
+  it('shows components.<c>.<NAME> errors at the field and whole-component ones in the alert', async () => {
+    mockApi({
+      submit: reply({
+        message: 'Some settings need attention',
+        errors: [
+          { name: 'components.tailscale.TS_AUTHKEY', message: 'Required' },
+          { name: 'components', message: 'Pick at most one network component' },
+        ],
+      }, 400),
+    })
+    renderDialog(withComponents)
+    await userEvent.type(await screen.findByLabelText('Access token'), 'tok')
+    await userEvent.click(screen.getByRole('radio', { name: 'Tailscale' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Install' }))
+
+    const field = await screen.findByLabelText('Tailnet auth key')
+    await waitFor(() => expect(field).toHaveAccessibleDescription(/Required/))
+    expect(screen.getByRole('alert')).toHaveTextContent('Pick at most one network component')
+  })
+
+  it('renders text settings as a textarea', async () => {
+    mockApi()
+    renderDialog(withComponents)
+    await userEvent.click(await screen.findByRole('radio', { name: 'VPN egress' }))
+    expect(screen.getByLabelText('WireGuard config').tagName).toBe('TEXTAREA')
+  })
+
+  it('does not show components in edit mode', async () => {
+    mockApi({ stored: { settings: { RENOVATE_TOKEN: 'x' }, custom: [] } })
+    renderDialog(withComponents, 'edit')
+    await screen.findByLabelText('Access token')
+    expect(screen.queryByText('Components')).not.toBeInTheDocument()
+  })
+})

@@ -4,7 +4,7 @@ metadata:
   name: headscale
 spec:
   displayName: "Headscale"
-  description: "Self-hosted Tailscale control server — one tailnet for all your devices"
+  description: "Self-hosted Tailscale control server — one tailnet for all your devices. Pick a public exposure component so devices outside your network can join; without one, headscale uses its local address."
   icon: "https://raw.githubusercontent.com/juanfont/headscale/main/docs/logo.png"
   category: "Network"
   website: "https://github.com/juanfont/headscale"
@@ -17,6 +17,12 @@ spec:
     type: oci-kustomize
     url: "oci://ghcr.io/librepod/marketplace/apps/headscale"
     path: ./overlays/librepod
+
+  components:
+    - name: frp-expose
+      values:
+        FRP_EXPOSE_HOST: headscale.headscale.svc.cluster.local
+        FRP_EXPOSE_PORT: "80"
 
   dependencies:
     required:
@@ -70,12 +76,11 @@ spec:
         # OIDC client_id is a literal in config.yaml and the client secret is
         # read from a file (client_secret_path) mounted from the
         # controller-provisioned Secret/headscale-sso in the headscale namespace.
-        # Only ${BASE_DOMAIN}/${FRP_DOMAIN} need Flux substitution — no
-        # substituteFrom and no cross-namespace Secret.
+        # Only ${BASE_DOMAIN} needs Flux substitution here (an exposure component
+        # adds PUBLIC_HOST) — no substituteFrom and no cross-namespace Secret.
         postBuild:
           substitute:
             BASE_DOMAIN: "${BASE_DOMAIN}"
-            FRP_DOMAIN: "${FRP_DOMAIN}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization

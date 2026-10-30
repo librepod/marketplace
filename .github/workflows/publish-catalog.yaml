@@ -14,6 +14,7 @@ on:
     branches: [master]
     paths:
       - 'apps/*/metadata.yaml'
+      - 'components/*/component.yaml'
       - 'apps/catalog-artifact/**'
       # The gate asserts the rendered ConfigMap matches what the deployment
       # mounts, so a deployment-side rename of that reference must re-run it.
@@ -25,7 +26,7 @@ on:
   # OCI artifacts don't exist yet — and a transiently failed catalog push is
   # never re-triggered. workflow_run fires only for runs on the default branch.
   workflow_run:
-    workflows: [Publish App Artifacts]
+    workflows: [Publish App Artifacts, Publish Component Artifacts]
     types: [completed]
 
 # A merge that bumps an app typically fires both the push and workflow_run

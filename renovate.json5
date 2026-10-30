@@ -9,12 +9,12 @@
   // no auto-merge — a human still reviews and merges each one.
   prHourlyLimit: 0,
   prConcurrentLimit: 0,
-  kustomize: { managerFilePatterns: ["/apps/.*/overlays/.*/kustomization\\.ya?ml/"] },
+  kustomize: { managerFilePatterns: ["/apps/.*/overlays/.*/kustomization\\.ya?ml/", "/components/.*/kustomization\\.ya?ml/"] },
   flux: { managerFilePatterns: ["/apps/.*/base/ocirepository\\.ya?ml/", "/infrastructure/system-apps/marketplace-ui\\.ya?ml/"] },
   customManagers: [
     {
       customType: "regex",
-      managerFilePatterns: ["/apps/.*/metadata\\.yaml/"],
+      managerFilePatterns: ["/apps/.*/metadata\\.yaml/", "/components/.*/component\\.yaml/"],
       matchStrings: [
         // datasource + depName are required; registryUrl + extractVersion are
         // optional trailing fields (used by the classic-helm and github-releases
@@ -27,7 +27,7 @@
     // --- Scope: only track apps/. Everything else (ui/ npm, .github/ actions,
     // go.mod) is disabled — the mission is app image/chart updates.
     // Re-enable those areas deliberately later if desired.
-    { matchFileNames: ["**/*", "!apps/**"], enabled: false },
+    { matchFileNames: ["**/*", "!apps/**", "!components/**"], enabled: false },
 
     // Bootstrap pin for marketplace-ui: the one infrastructure file Renovate
     // manages. Scoped by file — the file contains exactly one OCIRepository.
@@ -69,7 +69,7 @@
     // different group names, so the same version bump opens TWO PRs per app.
     // Extracting index 1 of the split path ("<app>") collapses every file under
     // apps/<app>/ into one group → one PR per app.
-    { matchFileNames: ["apps/*/**"], groupName: "{{lookup (split packageFileDir '/') 1}}" },
+    { matchFileNames: ["apps/*/**", "components/*/**"], groupName: "{{lookup (split packageFileDir '/') 1}}" },
 
     // --- Major bumps get the e2e label + their own PR.
     { matchUpdateTypes: ["major"], addLabels: ["renovate-e2e"] },

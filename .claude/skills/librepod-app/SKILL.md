@@ -1056,6 +1056,21 @@ Prefer `valkey/valkey` over the redis image (BSD-3, actively maintained; ships a
 
 ---
 
+## Shared components
+
+Optional networking pieces (VPN egress, tailscale, FRP exposure) live once in
+`components/<name>/` and are composed into an app at install. Never vendor a copy
+into an app. To let an app offer one:
+
+- Annotate exactly one Deployment in `base/` with
+  `librepod.org/component-target: "true"` (needed for `patch` components; the app's
+  workload must be a plain Deployment, not inside a HelmRelease).
+- List it in `metadata.yaml` under `spec.components: [{name, values}]`, giving
+  every `from: app` value the component declares.
+- Run `nix-shell shell.nix --run 'bash scripts/check-app-components.sh <app>'`.
+
+Authoring rules and the descriptor format: `components/README.md`.
+
 ## Conventions
 
 ### ConfigMap — always use generators, never literals

@@ -114,6 +114,18 @@ describe('CatalogService', () => {
     });
   });
 
+  describe('components', () => {
+    it('joins components from the catalog file', () => {
+      const app = service.findOne('litellm');
+      expect(app?.components?.[0].name).toBe('frp-expose');
+      expect(app?.components?.[0].values.find((v) => v.name === 'FRP_EXPOSE_SUBDOMAIN')?.default).toBe('litellm');
+    });
+
+    it('omits the field for apps without components', () => {
+      expect(service.findOne('vaultwarden')).not.toHaveProperty('components');
+    });
+  });
+
   describe('findAllIncludingSystem()', () => {
     it('returns the whole catalog — the system-apps panel enriches these and keeps the cluster-managed ones', () => {
       const all = service.findAllIncludingSystem();

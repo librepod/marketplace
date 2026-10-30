@@ -21,7 +21,6 @@ images:
   newTag: 0.6.3
 
 components:
-  - ../../components/frp-upstreams
   - ../../components/headplane
   - ../../components/bootstrap-api-key
 

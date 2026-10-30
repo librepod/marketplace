@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
 import { ErrorBlock } from "@/components/ErrorBlock"
 import { StatusBadge } from "@/components/StatusBadge"
-import { InstallDialog, hasInstallQuestions } from "@/components/InstallDialog"
+import { InstallDialog, hasComponents, hasInstallQuestions } from "@/components/InstallDialog"
 import { NotFoundPage } from "./NotFoundPage"
 import { Loader2, ExternalLink, Lock, Settings } from "lucide-react"
 import { useInstallApp } from "@/hooks/useInstallApp"
@@ -124,6 +124,8 @@ export function AppDetailPage() {
   // Apps with install questions ask first; the rest stay one-click. Generated-only apps
   // have nothing to ask (their secrets are machine-made), so they stay one-click too.
   const asksQuestions = hasInstallQuestions(data?.settings)
+  // Components alone also open the install dialog (they are picked there).
+  const asksInstall = asksQuestions || hasComponents(data)
 
   if (!name) return <NotFoundPage title="App not found" description="This app doesn't exist in the catalog." />
   if (isPending) return <DetailSkeleton />
@@ -190,7 +192,7 @@ export function AppDetailPage() {
                 <>
                   <Button
                     onClick={() => {
-                      if (asksQuestions) {
+                      if (asksInstall) {
                         installMutation.reset()
                         setInstallDialogOpen(true)
                       } else {
@@ -204,7 +206,7 @@ export function AppDetailPage() {
                     )}
                     {installMutation.isPending ? 'Installing...' : 'Install App'}
                   </Button>
-                  {asksQuestions && (
+                  {asksInstall && (
                     <InstallDialog
                       app={data}
                       open={installDialogOpen}

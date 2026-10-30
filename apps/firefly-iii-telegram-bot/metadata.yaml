@@ -49,6 +49,10 @@ spec:
         generate:
           length: 32
 
+  components:
+    - name: gluetun
+    - name: sing-box
+
   templates:
     source: |
       apiVersion: source.toolkit.fluxcd.io/v1

@@ -1,0 +1,18 @@
+apiVersion: marketplace/v1
+kind: ComponentDefinition
+metadata:
+  name: gluetun
+spec:
+  displayName: "VPN egress (gluetun, WireGuard)"
+  description: "Routes the app's outbound traffic through a WireGuard tunnel you provide. Traffic to LAN and device-IP destinations also goes into the tunnel, and DNS stays on the cluster resolver, so external lookups may leak."
+  # renovate: datasource=docker depName=qmcgaw/gluetun
+  version: "v3.41.3"
+  group: network
+  kind: patch
+  settings:
+    - name: WG_CONFIG
+      label: "WireGuard config"
+      description: "Full WireGuard config file (the [Interface] and [Peer] sections)"
+      type: text
+      required: true
+      sensitive: true

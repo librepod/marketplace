@@ -576,6 +576,112 @@ describe('InstalledService', () => {
     expect(mockRepo.writeApp).toHaveBeenCalledTimes(1);
   });
 
+  describe('install() with components', () => {
+    const dnsLabel = '^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$';
+    const componentApp = {
+      ...settingsApp,
+      release: undefined,
+      templates: {
+        ...settingsApp.templates,
+        release: [
+          'apiVersion: kustomize.toolkit.fluxcd.io/v1',
+          'kind: Kustomization',
+          'metadata:',
+          '  name: marketplace-renovate',
+          'spec:',
+          '  sourceRef:',
+          '    kind: OCIRepository',
+          '    name: marketplace-renovate',
+          '  postBuild:',
+          '    substitute:',
+          '      BASE_DOMAIN: "${BASE_DOMAIN}"',
+          '',
+        ].join('\n'),
+      },
+      components: [
+        {
+          name: 'tailscale',
+          displayName: 'Tailscale',
+          description: 'd',
+          version: 'v1.104.2',
+          group: 'network',
+          kind: 'patch',
+          settings: [{ name: 'TS_AUTHKEY', required: true, sensitive: true }],
+          values: [{ name: 'TS_HOSTNAME', from: 'install', default: 'renovate', pattern: dnsLabel }],
+        },
+      ],
+    };
+    const pick = { components: [{ name: 'tailscale', settings: { TS_AUTHKEY: 'k' } }] };
+
+    beforeEach(() => {
+      mockCatalogService.findOne.mockReturnValue(componentApp);
+      mockRepo.listInstalledApps.mockResolvedValue([]);
+    });
+
+    it('writes component settings to apps/<app>/<component> and never into apps/<app>', async () => {
+      await service.install('renovate', { settings: { RENOVATE_TOKEN: 't' }, ...pick });
+
+      expect(mockOpenBao.writeAppSettings.mock.calls).toEqual([
+        ['renovate', { RENOVATE_TOKEN: 't', LOG_FORMAT: 'json' }],
+        ['renovate/tailscale', { TS_AUTHKEY: 'k' }],
+      ]);
+      const appCalls = mockOpenBao.writeAppSettings.mock.calls.filter(([name]) => name === 'renovate');
+      expect(JSON.stringify(appCalls)).not.toContain('TS_AUTHKEY');
+    });
+
+    it('commits generator.yaml and components.yaml in the one writeApp call', async () => {
+      await service.install('renovate', { settings: { RENOVATE_TOKEN: 't' }, ...pick });
+
+      expect(mockRepo.writeApp).toHaveBeenCalledTimes(1);
+      const [, files] = mockRepo.writeApp.mock.calls[0];
+      expect(Object.keys(files).sort()).toEqual([
+        'components.yaml', 'generator.yaml', 'kustomization.yaml', 'release.yaml', 'source.yaml',
+      ]);
+      expect(files['release.yaml']).toContain('ExternalArtifact');
+      expect(files['release.yaml']).toContain('INSTANCE_NAME');
+      expect(files['release.yaml']).toContain('libre.pod');
+      expect(Object.values(files).join('\n')).not.toContain('"k"');
+    });
+
+    it('keeps plain installs byte-identical', async () => {
+      await service.install('renovate', { settings: { RENOVATE_TOKEN: 't' } });
+      const [, plain] = mockRepo.writeApp.mock.calls[0];
+      mockRepo.writeApp.mockClear();
+      await service.install('renovate', { settings: { RENOVATE_TOKEN: 't' }, components: [] });
+      const [, empty] = mockRepo.writeApp.mock.calls[0];
+
+      expect(empty).toEqual(plain);
+      expect(Object.keys(plain)).not.toContain('generator.yaml');
+      expect(plain['release.yaml']).toBe(componentApp.templates.release.replace('${BASE_DOMAIN}', 'libre.pod'));
+    });
+
+    it('fails a substitute-key collision before any write', async () => {
+      mockCatalogService.findOne.mockReturnValue({
+        ...componentApp,
+        components: [
+          {
+            ...componentApp.components[0],
+            values: [{ name: 'BASE_DOMAIN', from: 'install', default: 'renovate', pattern: dnsLabel }],
+          },
+        ],
+      });
+
+      await expect(service.install('renovate', { settings: { RENOVATE_TOKEN: 't' }, ...pick })).rejects.toBeInstanceOf(
+        InternalServerErrorException,
+      );
+      expect(mockOpenBao.writeAppSettings).not.toHaveBeenCalled();
+      expect(mockRepo.writeApp).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 for an invalid selection before any write', async () => {
+      await expect(
+        service.install('renovate', { settings: { RENOVATE_TOKEN: 't' }, components: [{ name: 'tailscale' }] }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(mockOpenBao.writeAppSettings).not.toHaveBeenCalled();
+      expect(mockRepo.writeApp).not.toHaveBeenCalled();
+    });
+  });
+
   describe('uninstall()', () => {
     it('uninstall removes the app directory (INST-02)', async () => {
       mockRepo.listInstalledApps.mockResolvedValue(['vaultwarden']);

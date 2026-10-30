@@ -9,6 +9,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as yaml from 'js-yaml';
 import { CatalogApp, CatalogFile } from './catalog.types';
+import { joinComponents } from './components';
 
 @Injectable()
 export class CatalogService implements OnModuleInit, OnModuleDestroy {
@@ -63,7 +64,12 @@ export class CatalogService implements OnModuleInit, OnModuleDestroy {
       // authoritative layer; that static filter is its cold-start fallback, so
       // the category must mirror it. `Infrastructure` is a regular user-facing
       // category.
-      this.apps = catalog.apps ?? [];
+      this.apps = (catalog.apps ?? []).map(({ components: refs, ...app }) => {
+        const components = joinComponents(app.name, refs, catalog.components, (msg) =>
+          this.logger.warn(msg),
+        );
+        return components.length ? { ...app, components } : app;
+      });
       this.loadedOnce = true;
       this.reloadFailed = false;
       this.lastGoodAt = new Date();

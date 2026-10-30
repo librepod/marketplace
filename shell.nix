@@ -12,5 +12,6 @@ pkgs.mkShell {
     pkgs.kubectl
     pkgs.curl
     pkgs.jq
+    pkgs.yq-go
   ];
 }

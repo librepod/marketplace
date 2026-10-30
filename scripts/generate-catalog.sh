@@ -134,7 +134,36 @@ ENTRY
     echo "      settings:${SETTINGS_INLINE:+ $SETTINGS_INLINE}" >> "$CATALOG_FILE"
     if [ -n "$SETTINGS_CONTENT" ]; then echo "$SETTINGS_CONTENT" >> "$CATALOG_FILE"; fi
   fi
+
+  # Shared-component opt-ins, verbatim (same indent as settings). Value checks
+  # live in scripts/check-app-components.sh, which gates PRs; here only a name
+  # with no components/<name>/component.yaml fails, since the installer would
+  # have nothing to join.
+  COMPONENTS_CONTENT=$(awk '/^  components:/ { found=1; next } found && /^  [a-z]/ { exit } found { print }' "$metadata_file" \
+    | sed -e 's/^[[:space:]]*$//' -e '/./s/^/        /')
+  if [ -n "$COMPONENTS_CONTENT" ]; then
+    for cname in $(awk '/^  components:/ { found=1; next } found && /^  [a-z]/ { exit } found && /^    - name:/ { print $3 }' "$metadata_file" | tr -d '"'); do
+      if [ ! -f "$REPO_ROOT/components/$cname/component.yaml" ]; then
+        echo "ERROR: $app_name lists unknown component \"$cname\"" >&2; exit 1
+      fi
+    done
+    echo "      components:" >> "$CATALOG_FILE"
+    echo "$COMPONENTS_CONTENT" >> "$CATALOG_FILE"
+  fi
 done
+
+# Top-level components map: each component's spec block, nested one level.
+# Emitted only when the repo has components.
+COMPONENT_FILES=("$REPO_ROOT"/components/*/component.yaml)
+if [ -e "${COMPONENT_FILES[0]}" ]; then
+  echo "components:" >> "$CATALOG_FILE"
+  for component_file in "${COMPONENT_FILES[@]}"; do
+    component_name=$(basename "$(dirname "$component_file")")
+    echo "  ${component_name}:" >> "$CATALOG_FILE"
+    awk '/^spec:/ { found=1; next } found && /^[a-z]/ { exit } found { print }' "$component_file" \
+      | sed -e 's/^[[:space:]]*$//' -e '/./s/^/  /' >> "$CATALOG_FILE"
+  done
+fi
 
 # The version sentinel is __VERSION__ (substituted above). "<version>" is the
 # misspelling the app-authoring skill used to document — it matches nothing and

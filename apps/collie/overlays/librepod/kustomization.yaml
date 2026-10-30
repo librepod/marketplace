@@ -8,14 +8,9 @@ resources:
 - ingressroute.yaml
 - networkpolicy.yaml
 
-components:
-- ../../components/tailscale
-
 images:
 - name: ghcr.io/cyxou/collie-lead
   newTag: 1.24.1
-- name: tailscale/tailscale
-  newTag: v1.104.2
 
 patches:
 - path: ./patch-storage-class.yaml

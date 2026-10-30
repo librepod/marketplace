@@ -1,0 +1,59 @@
+# Name is a placeholder: the kustomization selects the annotated Deployment.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: placeholder
+spec:
+  template:
+    spec:
+      initContainers:
+        # Native sidecar: the app container starts only after gluetun's
+        # startup probe passes, so the app never runs outside the tunnel.
+        - name: gluetun
+          image: qmcgaw/gluetun
+          imagePullPolicy: IfNotPresent
+          restartPolicy: Always
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+            capabilities:
+              add: ["NET_ADMIN"]
+          env:
+            - name: VPN_SERVICE_PROVIDER
+              value: custom
+            - name: VPN_TYPE
+              value: wireguard
+            # Keep the pod's own nameserver so the app still resolves cluster
+            # names; gluetun's built-in DNS server would shadow CoreDNS.
+            - name: DNS_SERVER
+              value: "off"
+            - name: DNS_KEEP_NAMESERVER
+              value: "on"
+            # k3s default pod and service CIDRs. Without them gluetun's
+            # firewall drops cluster-local traffic (Services, CoreDNS).
+            - name: FIREWALL_OUTBOUND_SUBNETS
+              value: "10.42.0.0/16,10.43.0.0/16"
+          # The image's own HEALTHCHECK; its health server binds loopback only,
+          # so an httpGet probe from the kubelet cannot reach it.
+          startupProbe:
+            exec:
+              command: ["/gluetun-entrypoint", "healthcheck"]
+            periodSeconds: 5
+            failureThreshold: 60
+          volumeMounts:
+            - name: tun
+              mountPath: /dev/net/tun
+            - name: gluetun-wireguard
+              mountPath: /gluetun/wireguard
+              readOnly: true
+      volumes:
+        - name: tun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice
+        - name: gluetun-wireguard
+          secret:
+            secretName: gluetun-settings
+            items:
+              - key: WG_CONFIG
+                path: wg0.conf

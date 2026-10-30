@@ -1,0 +1,25 @@
+# Tailscale sidecar for the annotated Deployment (librepod.org/component-target).
+# No RBAC resources: the node identity lives in tailscaled.state on the
+# tailscale-state PVC (TS_KUBE_SECRET explicitly empty in tailscale.env), so
+# containerboot never talks to the Kubernetes API.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - externalsecret.yaml
+  - pvc.yaml
+
+configMapGenerator:
+  - name: tailscale-env
+    envs:
+      - tailscale.env
+
+images:
+  - name: tailscale/tailscale
+    newTag: v1.104.2
+
+patches:
+  - path: patch-deployment.yaml
+    target:
+      kind: Deployment
+      annotationSelector: librepod.org/component-target=true

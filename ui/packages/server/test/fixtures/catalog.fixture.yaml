@@ -51,6 +51,11 @@ apps:
     icon: "https://example.com/litellm.png"
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/litellm"
+    components:
+      - name: frp-expose
+        values:
+          FRP_EXPOSE_HOST: litellm.litellm.svc.cluster.local
+          FRP_EXPOSE_PORT: 4000
   - name: nfs-provisioner
     version: "1.0.0"
     displayName: "NFS Provisioner"
@@ -59,3 +64,19 @@ apps:
     icon: "https://example.com/nfs.png"
     sourceType: oci-kustomize
     sourceUrl: "oci://ghcr.io/librepod/marketplace/apps/nfs-provisioner"
+components:
+  frp-expose:
+    displayName: "Public HTTPS exposure"
+    description: "Publishes the app on a relay subdomain"
+    version: "1.0.0"
+    kind: resource
+    values:
+      - name: FRP_EXPOSE_HOST
+        from: app
+      - name: FRP_EXPOSE_PORT
+        from: app
+      - name: FRP_EXPOSE_SUBDOMAIN
+        from: install
+        label: "Public subdomain"
+        default: "{app}"
+        pattern: "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
