@@ -27,7 +27,7 @@ export interface InstallResult {
 }
 
 /** Type of an install question's answer. Answers always travel and are stored as text. */
-export type AppSettingType = 'string' | 'boolean' | 'number';
+export type AppSettingType = 'string' | 'boolean' | 'number' | 'text'; // text = multi-line
 
 /**
  * One install-time question (metadata.yaml spec.settings.items[]). Only questions an app
@@ -75,6 +75,41 @@ export interface CustomVariable {
 export interface InstallRequest {
   settings?: Record<string, string>;
   custom?: CustomVariable[];
+  /** Shared components picked in the dialog; omitted or empty = none. */
+  components?: ComponentRequest[];
+}
+
+/** A non-secret component input: asked in the dialog (`install`) or supplied by the app (`app`). */
+export interface ComponentValueDef {
+  name: string;
+  from: 'install' | 'app';
+  label?: string;
+  description?: string;
+  default?: string;
+  pattern?: string;
+}
+
+/** A shared component as published in catalog.yaml `components:`. */
+export interface ComponentDefinition {
+  displayName: string;
+  description: string;
+  version: string;
+  group?: string;
+  kind: 'patch' | 'resource';
+  settings?: AppSettingItem[];
+  values?: ComponentValueDef[];
+}
+
+/** A component as offered for one app: `values[].default` is final ({app} filled, app values applied). */
+export interface AppComponent extends ComponentDefinition {
+  name: string;
+  values: ComponentValueDef[];
+}
+
+export interface ComponentRequest {
+  name: string;
+  settings?: Record<string, string>;
+  values?: Record<string, string>;
 }
 
 /**
@@ -116,6 +151,8 @@ export interface CatalogApp {
   secrets?: AppSecretDef[];
   // Install questions + custom-variable opt-in; apps with this open the install dialog.
   settings?: AppSettings;
+  // Optional shared components this app lists, joined with their definitions.
+  components?: AppComponent[];
 }
 
 export interface CatalogFile {

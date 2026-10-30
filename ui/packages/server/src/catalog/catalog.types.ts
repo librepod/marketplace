@@ -3,7 +3,15 @@
  * Kept here for server-internal use. Shared interface (CatalogApp) also
  * exported from @librepod/shared for client consumption.
  */
-import type { AppStatus, AppTemplate, AppSecretDef, AppSettings, InstallResult } from '@librepod/shared';
+import type {
+  AppComponent,
+  AppStatus,
+  AppTemplate,
+  AppSecretDef,
+  AppSettings,
+  ComponentDefinition,
+  InstallResult,
+} from '@librepod/shared';
 
 export type { AppStatus };
 export type { AppTemplate, AppSecretDef, InstallResult };
@@ -24,7 +32,16 @@ export interface CatalogApp {
   templates?: AppTemplate;
   secrets?: AppSecretDef[];
   settings?: AppSettings;
+  components?: AppComponent[];
 }
+
+/** An app's opt-in as written in metadata.yaml, before the join with the definitions. */
+export interface AppComponentRef {
+  name: string;
+  values?: Record<string, string | number | boolean>;
+}
+
+export type RawCatalogApp = Omit<CatalogApp, 'components'> & { components?: AppComponentRef[] };
 
 export interface CatalogFile {
   apiVersion: string;
@@ -32,5 +49,6 @@ export interface CatalogFile {
   metadata: {
     generatedAt: string;
   };
-  apps: CatalogApp[];
+  apps: RawCatalogApp[];
+  components?: Record<string, ComponentDefinition>;
 }
