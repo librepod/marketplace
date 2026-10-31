@@ -7,7 +7,7 @@ metadata:
   # Registered with frps as the proxy name; must be unique per relay.
   name: ${FRP_EXPOSE_SUBDOMAIN:=app}
 spec:
-  client: libreport
+  client: ${FRP_EXPOSE_CLIENT:=libreport}
   http:
     host: ${FRP_EXPOSE_HOST:=localhost}
     port: ${FRP_EXPOSE_PORT:=80}

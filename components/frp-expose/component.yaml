@@ -5,7 +5,7 @@ metadata:
 spec:
   displayName: "Public HTTPS exposure (FRP relay)"
   description: "Publishes the app at https://<subdomain>.<relay domain>, with TLS terminated at the relay. SSO login does not work through the relay, and an app whose only login is SSO forward-auth is exposed without one."
-  version: "1.0.1"
+  version: "1.0.2"
   group: exposure
   kind: resource
   values:
@@ -24,6 +24,12 @@ spec:
       label: "Relay domain"
       description: "The relay's base domain; the app is served at <subdomain>.<relay domain>"
       pattern: "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)+$"
+    - name: FRP_EXPOSE_CLIENT
+      from: install
+      label: "FRP client"
+      description: "The frp-operator Client to attach through; must be the one connected to the relay domain above (e.g. libreport = mow1, libreport-ee1 = ee1)"
+      default: "libreport"
+      pattern: "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
     # The exposure contract: apps read their public hostname from PUBLIC_HOST only.
     - name: PUBLIC_HOST
       from: derived
