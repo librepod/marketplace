@@ -5,8 +5,3 @@ namespace: frp-operator
 
 resources:
 - ../../base
-
-patches:
-- path: ./patch-helmrelease.yaml
-  target:
-    kind: HelmRelease
