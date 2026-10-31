@@ -14,14 +14,16 @@ spec:
     strategy:
       name: RetryOnFailure
       retryInterval: 3m
-  # The fork chart is an OCI artifact, so reference the OCIRepository via
-  # chartRef. spec.chart.spec.sourceRef only accepts HelmRepository/
-  # GitRepository/Bucket (per the HelmRelease CRD enum) — NOT OCIRepository — so
-  # chartRef is the only way to consume an OCIRepository-sourced chart. The
-  # chart version is pinned in the OCIRepository's ref.semver (~1.7.0).
-  chartRef:
-    kind: OCIRepository
-    name: frp-operator-charts
-  values:
-    operator:
-      replica: 1
+  # No frpc pin: the operator hardcodes fatedier/frpc (v0.71.1 at v0.15.0),
+  # no chart override — relays' frps must match or UDP relay silently breaks.
+  chart:
+    spec:
+      chart: frp-operator
+      # Exact pin — chart patch releases can change the baked appVersion.
+      # No lockstep with the app version (chart 1.13.0 ships app 0.15.0), so
+      # spec.version in metadata.yaml is hand-coupled to this pin: move both
+      # in the same change.
+      version: "1.13.0"
+      sourceRef:
+        kind: HelmRepository
+        name: frp-operator-charts

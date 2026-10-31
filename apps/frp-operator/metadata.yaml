@@ -9,9 +9,10 @@ spec:
   category: "System"
   website: "https://github.com/zufardhiyaulhaq/frp-operator"
 
-  # renovate: datasource=docker depName=ghcr.io/librepod/frp-operator
-  # serge: notesRepo=librepod/frp-operator
-  version: "v0.9.0"
+  # Hand-coupled to the chart pin in base/helmrelease.yaml (chart 1.13.0
+  # bakes operator v0.15.0; no lockstep, so no renovate annotation — move both
+  # in the same change).
+  version: "v0.15.0"
 
   source:
     type: oci-kustomize

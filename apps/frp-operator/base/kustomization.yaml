@@ -11,5 +11,5 @@ labels:
 
 resources:
 - namespace.yaml
-- ocirepository.yaml
+- helmrepository.yaml
 - helmrelease.yaml

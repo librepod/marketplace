@@ -1,0 +1,12 @@
+# Upstream chart repo (https://github.com/zufardhiyaulhaq/frp-operator).
+# The former LibrePod fork (subdomain on HTTPS Upstreams, configurable frpc
+# image) is obsolete: upstream v0.15.0 covers the feature set — `subdomain` on
+# HTTP/HTTPS/TCPMUX Upstreams, optional `customDomains` — and pins its own
+# frpc.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: frp-operator-charts
+spec:
+  interval: 24h
+  url: https://zufardhiyaulhaq.com/frp-operator/charts/releases/
