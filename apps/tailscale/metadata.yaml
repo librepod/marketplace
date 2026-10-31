@@ -18,6 +18,36 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/tailscale"
     path: ./overlays/librepod
 
+  settings:
+    allowCustom: true
+    items:
+      - name: TS_AUTHKEY
+        label: "Tailnet auth key"
+        description: "Pre-auth key that joins this device to your tailnet (Tailscale admin console, or `headscale preauthkeys create` on a headscale tailnet)."
+        type: string
+        required: true
+        sensitive: true
+      - name: TS_HOSTNAME
+        label: "Tailnet hostname"
+        description: "The node name this device takes in the tailnet."
+        type: string
+        default: "librepod"
+        required: false
+        sensitive: false
+      - name: TS_EXTRA_ARGS
+        label: "Extra tailscale up flags"
+        description: "For a headscale tailnet: --login-server=https://headscale.<your-domain> (a headscale installed on this device answers there). Leave empty for Tailscale SaaS; add --advertise-exit-node to also be an exit node."
+        type: string
+        required: false
+        sensitive: false
+      - name: TS_ROUTES
+        label: "Advertised routes"
+        description: "Subnet CIDRs this device advertises into the tailnet (comma-separated) — makes it a subnet router. Defaults to the cluster's pod and service CIDRs (k3s defaults), so tailnet peers can reach cluster Services directly. Leave empty for a plain client. Routes apply once enabled in the control server (Tailscale admin console or Headplane routes)."
+        type: string
+        default: "10.42.0.0/16,10.43.0.0/16"
+        required: false
+        sensitive: false
+
   dependencies:
     required:
       - kind: StorageClass
@@ -60,12 +90,6 @@ spec:
         path: ./overlays/librepod
         prune: true
         wait: true
-        postBuild:
-          substitute:
-            TS_HOSTNAME: "${TS_HOSTNAME}"
-            TS_EXTRA_ARGS: "${TS_EXTRA_ARGS}"
-            TS_AUTHKEY: "${TS_AUTHKEY}"
-            TS_ROUTES: "${TS_ROUTES}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization
