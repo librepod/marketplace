@@ -23,15 +23,11 @@ spec:
           image: tailscale/tailscale
           imagePullPolicy: IfNotPresent
           envFrom:
-            - configMapRef:
-                name: tailscale-env
             - secretRef:
-                # Install settings from OpenBao (TS_AUTHKEY, TS_HOSTNAME,
-                # TS_EXTRA_ARGS, TS_ROUTES). LAST so they win over any future
-                # .env default; keys absent from the entry are simply not set.
+                # Install settings (TS_AUTHKEY & co.) from OpenBao.
                 # Non-optional on purpose: the pod waits in
-                # CreateContainerConfigError until ESO has synced the entry —
-                # containerboot must never boot without its auth key.
+                # CreateContainerConfigError until ESO has synced —
+                # containerboot must never boot keyless.
                 name: tailscale-settings
           # NOTE: TS_ACCEPT_DNS and TS_USERSPACE are intentionally unset,
           # taking containerboot's defaults:

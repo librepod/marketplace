@@ -88,9 +88,6 @@ spec:
         path: ./overlays/librepod
         prune: true
         wait: true
-        postBuild:
-          substitute:
-            BASE_DOMAIN: "${BASE_DOMAIN}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization

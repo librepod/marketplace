@@ -9,11 +9,6 @@ labels:
     pairs:
       app.kubernetes.io/name: tailscale
 
-configMapGenerator:
-  - name: tailscale-env
-    envs:
-      - tailscale.env
-
 resources:
   - namespace.yaml
   - serviceaccount.yaml
