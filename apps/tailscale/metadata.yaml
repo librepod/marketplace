@@ -19,6 +19,7 @@ spec:
     path: ./overlays/librepod
 
   settings:
+    allowCustom: true
     items:
       - name: TS_AUTHKEY
         label: "Tailnet auth key"
