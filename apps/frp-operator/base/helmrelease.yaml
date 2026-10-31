@@ -14,6 +14,8 @@ spec:
     strategy:
       name: RetryOnFailure
       retryInterval: 3m
+  # No frpc pin: the operator hardcodes fatedier/frpc (v0.71.1 at v0.15.0),
+  # no chart override — relays' frps must match or UDP relay silently breaks.
   chart:
     spec:
       chart: frp-operator
@@ -25,13 +27,3 @@ spec:
       sourceRef:
         kind: HelmRepository
         name: frp-operator-charts
-      interval: 12h
-  values:
-    # The frpc version is owned by the operator, not this chart: upstream
-    # v0.15.0 hardcodes fatedier/frpc:v0.71.1 (controllers/client_controller.go)
-    # and exposes NO override — the fork's spec.podTemplate.image /
-    # frpc.defaultImage do not exist upstream. Relay servers must run a
-    # matching frps — frpc/frps version skew can silently break UDP relay,
-    # and the WireGuard remote-access path rides a UDP upstream.
-    operator:
-      replica: 1
