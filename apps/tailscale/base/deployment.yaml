@@ -25,11 +25,16 @@ spec:
           envFrom:
             - configMapRef:
                 name: tailscale-env
-          # NOTE: TS_ACCEPT_DNS and TS_USERSPACE are intentionally omitted.
-          # FluxCD's postBuild.substitute does text-level replacement — bare
-          # "true"/"false" values become YAML booleans, which the API rejects
-          # for both ConfigMap.data and EnvVar.value.
-          # When unset, containerboot defaults:
+            - secretRef:
+                # Install settings from OpenBao (TS_AUTHKEY, TS_HOSTNAME,
+                # TS_EXTRA_ARGS, TS_ROUTES). LAST so they win over any future
+                # .env default; keys absent from the entry are simply not set.
+                # Non-optional on purpose: the pod waits in
+                # CreateContainerConfigError until ESO has synced the entry —
+                # containerboot must never boot without its auth key.
+                name: tailscale-settings
+          # NOTE: TS_ACCEPT_DNS and TS_USERSPACE are intentionally unset,
+          # taking containerboot's defaults:
           # - TS_ACCEPT_DNS=false — override with --accept-dns in TS_EXTRA_ARGS.
           # - TS_USERSPACE=true — tailscaled runs with userspace networking:
           #   no tailscale0 interface or tailnet routes on the node, so

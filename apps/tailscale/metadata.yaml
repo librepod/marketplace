@@ -18,6 +18,34 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/tailscale"
     path: ./overlays/librepod
 
+  settings:
+    items:
+      - name: TS_AUTHKEY
+        label: "Tailnet auth key"
+        description: "Pre-auth key that joins this device to your tailnet (Tailscale admin console, or `headscale preauthkeys create` on a headscale tailnet)."
+        type: string
+        required: true
+        sensitive: true
+      - name: TS_HOSTNAME
+        label: "Tailnet hostname"
+        description: "The node name this device takes in the tailnet."
+        type: string
+        default: "librepod"
+        required: false
+        sensitive: false
+      - name: TS_EXTRA_ARGS
+        label: "Extra tailscale up flags"
+        description: "For a headscale tailnet: --login-server=https://headscale.example.com. Leave empty for Tailscale SaaS."
+        type: string
+        required: false
+        sensitive: false
+      - name: TS_ROUTES
+        label: "Advertised routes"
+        description: "Subnet CIDRs this device advertises into the tailnet (e.g. 192.168.1.0/24, comma-separated) — makes it a subnet router. Leave empty for a plain client. For an exit node add --advertise-exit-node to the extra flags instead."
+        type: string
+        required: false
+        sensitive: false
+
   dependencies:
     required:
       - kind: StorageClass
@@ -62,10 +90,7 @@ spec:
         wait: true
         postBuild:
           substitute:
-            TS_HOSTNAME: "${TS_HOSTNAME}"
-            TS_EXTRA_ARGS: "${TS_EXTRA_ARGS}"
-            TS_AUTHKEY: "${TS_AUTHKEY}"
-            TS_ROUTES: "${TS_ROUTES}"
+            BASE_DOMAIN: "${BASE_DOMAIN}"
     kustomization: |
       apiVersion: kustomize.config.k8s.io/v1beta1
       kind: Kustomization

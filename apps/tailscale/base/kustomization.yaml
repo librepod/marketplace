@@ -20,4 +20,5 @@ resources:
   - role.yaml
   - rolebinding.yaml
   - pvc.yaml
+  - externalsecret.yaml
   - deployment.yaml
