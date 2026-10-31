@@ -59,14 +59,17 @@ function checkAnswer(item: AppSettingItem, value: string): string | undefined {
  * the value already in the OpenBao entry (`stored` — a reinstall keeps the running secret),
  * then the default, then a fresh random value (`rng`). Custom variables are added as given.
  * The returned map replaces the stored entry whole, so stored keys claimed by no item are
- * dropped. Values are never transformed: they are stored verbatim and never pass through
- * `${VAR}` substitution.
+ * dropped. Question answers and defaults get `${BASE_DOMAIN}` substituted when `baseDomain`
+ * is given (the same value template rendering uses), so a catalog default can address an
+ * on-device service by the device's own domain. Everything else is stored verbatim;
+ * custom variables never pass through substitution.
  */
 export function resolveSettings(
   settings: AppSettings,
   body: unknown,
   stored?: Record<string, string> | null,
   rng: (length: number) => string = defaultRng,
+  baseDomain?: string,
 ): ResolveResult {
   const request = body ?? {};
   if (!isPlainObject(request)) {
@@ -102,9 +105,14 @@ export function resolveSettings(
     // keeps narrowing it down to the `rng` call.
     const gen = item.generate;
     const generated = (raw === undefined || raw === '') && gen !== undefined;
+    // Substitution covers the raw answer too: the dialog prefills the default text, so an
+    // untouched (or old-client) field arrives carrying the placeholder. Generated values are
+    // machine-made or reused from storage and never contain it.
     const value = generated
       ? (stored?.[item.name] ?? defaultValue ?? rng(gen.length))
-      : (raw ?? defaultValue ?? '');
+      : baseDomain
+        ? (raw ?? defaultValue ?? '').replaceAll('${BASE_DOMAIN}', baseDomain)
+        : (raw ?? defaultValue ?? '');
     if (value === '') {
       if (item.required) errors.push({ name: item.name, message: 'Required' });
       continue;

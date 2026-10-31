@@ -8,6 +8,7 @@ import type {
   CatalogApp,
   InstallRequest,
 } from "@librepod/shared"
+import { useConfig } from "@/hooks/useConfig"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
@@ -79,9 +80,16 @@ function componentFields(component: AppComponent): AppSettingItem[] {
 /** A bare YAML `default:` is null: no default, never the text "null". */
 const hasDefault = (item: AppSettingItem) => item.default !== undefined && item.default !== null
 
-/** A switch always has an answer, so a boolean without a default starts as "false". */
-function initialValue(item: AppSettingItem): string {
-  if (hasDefault(item)) return String(item.default)
+/**
+ * A switch always has an answer, so a boolean without a default starts as "false".
+ * `${BASE_DOMAIN}` in a default is expanded with the device's own domain (the server does
+ * the same on save, so an untouched or stale prefill still stores the resolved URL).
+ */
+function initialValue(item: AppSettingItem, baseDomain?: string): string {
+  if (hasDefault(item)) {
+    const value = String(item.default)
+    return baseDomain ? value.replaceAll("${BASE_DOMAIN}", baseDomain) : value
+  }
   return item.type === "boolean" ? "false" : ""
 }
 
@@ -299,12 +307,14 @@ function InstallForm({
   mutation,
   mode,
   onClose,
+  baseDomain,
 }: {
   app: CatalogApp
   stored: AppSettingsValues
   mutation: SettingsMutation
   mode: Mode
   onClose: () => void
+  baseDomain?: string
 }) {
   const settings = app.settings ?? {}
   // Generated items are machine-made secrets the server resolves — the dialog never asks.
@@ -314,7 +324,7 @@ function InstallForm({
     .sort((a, b) => Number(!!b.required) - Number(!!a.required))
   // Stored answer first (a reinstall or an edit starts from what is saved), then the default.
   const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(items.map((item) => [item.name, stored.settings[item.name] ?? initialValue(item)])),
+    Object.fromEntries(items.map((item) => [item.name, stored.settings[item.name] ?? initialValue(item, baseDomain)])),
   )
   const [rows, setRows] = useState<CustomRow[]>(() => stored.custom.map((v, i) => ({ id: i + 1, ...v })))
   const [nextRowId, setNextRowId] = useState(stored.custom.length + 1)
@@ -326,7 +336,7 @@ function InstallForm({
   const offered = mode === "install" ? (app.components ?? []) : []
   const [picked, setPicked] = useState<string[]>([])
   const [componentValues, setComponentValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(offered.flatMap((c) => componentFields(c).map((item) => [`${c.name}.${item.name}`, initialValue(item)]))),
+    Object.fromEntries(offered.flatMap((c) => componentFields(c).map((item) => [`${c.name}.${item.name}`, initialValue(item, baseDomain)]))),
   )
   const chosen = offered.filter((c) => picked.includes(c.name))
   const toggleComponent = (name: string, on: boolean) =>
@@ -555,8 +565,17 @@ function SettingsBody({
 }) {
   // An app with components but no questions has no settings entry to read (the endpoint 404s).
   const stored = useAppSettings(app.name, !!app.settings)
-  if (!app.settings) return <InstallForm app={app} stored={NO_STORED} mutation={mutation} mode={mode} onClose={onClose} />
-  if (stored.data) return <InstallForm app={app} stored={stored.data} mutation={mutation} mode={mode} onClose={onClose} />
+  // The device's own domain expands ${BASE_DOMAIN} in default prefills. The form waits for it
+  // (cached for the session, so only the first dialog pays) so a prefill shows the resolved
+  // value; if /api/config fails it renders anyway and the server's substitution on save still
+  // stores the resolved value.
+  const config = useConfig()
+  const domainReady = config.isSuccess || config.isError
+  const baseDomain = config.data?.baseDomain
+  if (!app.settings && domainReady)
+    return <InstallForm app={app} stored={NO_STORED} mutation={mutation} mode={mode} onClose={onClose} baseDomain={baseDomain} />
+  if (stored.data && domainReady)
+    return <InstallForm app={app} stored={stored.data} mutation={mutation} mode={mode} onClose={onClose} baseDomain={baseDomain} />
   if (stored.isError) {
     return (
       <div className="grid gap-4">

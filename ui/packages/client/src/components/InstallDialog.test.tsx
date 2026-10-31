@@ -60,13 +60,21 @@ function renderDialog(subject: CatalogApp = app, mode?: 'install' | 'edit') {
 const reply = (body: unknown, status = 200) =>
   ({ ok: status < 400, status, json: async () => body }) as Response
 
-/** GET /api/apps/renovate/settings answers `stored`; any other method answers `submit`. */
+/** GET /api/config answers the device domain (useConfig); GET /api/apps/renovate/settings
+ *  answers `stored`; any other method answers `submit`. */
 function mockApi({
+  baseDomain = 'device.example',
   stored = { settings: {}, custom: [] },
   storedStatus = 200,
   submit = reply({ success: true, message: 'ok' }),
-}: { stored?: AppSettingsValues; storedStatus?: number; submit?: Response | Promise<Response> } = {}) {
+}: {
+  baseDomain?: string
+  stored?: AppSettingsValues
+  storedStatus?: number
+  submit?: Response | Promise<Response>
+} = {}) {
   return vi.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
+    if (String(input).endsWith('/api/config')) return reply({ baseDomain })
     if ((init?.method ?? 'GET') !== 'GET') return submit
     expect(input).toBe('/api/apps/renovate/settings')
     return reply(stored, storedStatus)
@@ -326,6 +334,26 @@ describe('InstallDialog', () => {
     renderDialog()
     await screen.findByLabelText('Access token')
     expect((screen.getByLabelText(/Log format/) as HTMLSelectElement).value).toBe('json')
+  })
+
+  it("expands ${BASE_DOMAIN} in a default with the device's own domain", async () => {
+    mockApi({ baseDomain: 'cluster.test' })
+    renderDialog({
+      ...app,
+      settings: {
+        items: [
+          {
+            name: 'TS_EXTRA_ARGS',
+            label: 'Extra flags',
+            default: '--login-server=https://headscale.${BASE_DOMAIN}',
+          },
+        ],
+      },
+    })
+
+    expect(await screen.findByLabelText(/Extra flags/)).toHaveValue(
+      '--login-server=https://headscale.cluster.test',
+    )
   })
 
   it('shows an error and no form when the stored settings cannot be loaded', async () => {
