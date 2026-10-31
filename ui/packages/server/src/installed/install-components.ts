@@ -27,20 +27,9 @@ type ResolveComponentsResult =
   | { ok: true; components: ResolvedComponent[] }
   | { ok: false; errors: FieldError[] };
 
-function resolveOne(
-  def: AppComponent,
-  entry: ComponentRequest,
-  errors: FieldError[],
-  baseDomain?: string,
-): ResolvedComponent {
+function resolveOne(def: AppComponent, entry: ComponentRequest, errors: FieldError[]): ResolvedComponent {
   const scope = `components.${def.name}`;
-  const settingsResult = resolveSettings(
-    { items: def.settings ?? [] },
-    { settings: entry.settings ?? {} },
-    null,
-    undefined,
-    baseDomain,
-  );
+  const settingsResult = resolveSettings({ items: def.settings ?? [] }, { settings: entry.settings ?? {} }, null);
   let settings: Record<string, string> = {};
   if (settingsResult.ok) {
     settings = { ...settingsResult.values };
@@ -94,7 +83,7 @@ function resolveOne(
 }
 
 /** Validates the install request's `components` against the app's catalog component list. */
-export function resolveComponents(app: CatalogApp, body: unknown, baseDomain?: string): ResolveComponentsResult {
+export function resolveComponents(app: CatalogApp, body: unknown): ResolveComponentsResult {
   const request = isPlainObject(body) ? body : {};
   const asked = request.components ?? [];
   if (!Array.isArray(asked)) {
@@ -124,7 +113,7 @@ export function resolveComponents(app: CatalogApp, body: unknown, baseDomain?: s
   }
 
   const components = chosen
-    .map(({ def, entry }) => resolveOne(def, entry, errors, baseDomain))
+    .map(({ def, entry }) => resolveOne(def, entry, errors))
     .sort((a, b) => a.name.localeCompare(b.name));
   return errors.length > 0 ? { ok: false, errors } : { ok: true, components };
 }

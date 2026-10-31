@@ -140,11 +140,6 @@ export class InstalledService {
     return { ...app, settings: app.settings };
   }
 
-  /** The device's public domain: substituted into templates and settings answers alike. */
-  private baseDomain(): string {
-    return this.configService.get<string>('BASE_DOMAIN', 'libre.pod');
-  }
-
   /**
    * The request body resolved into the full entry to write. The stored entry is read first
    * so generated questions reuse what the last write stored (NFS volumes survive a
@@ -160,13 +155,7 @@ export class InstalledService {
     } catch (err) {
       this.throwSettingsStoreError(err, app.name);
     }
-    const resolved = resolveSettings(
-      app.settings,
-      body,
-      stored,
-      undefined,
-      this.baseDomain(),
-    );
+    const resolved = resolveSettings(app.settings, body, stored);
     if (!resolved.ok) {
       throw new BadRequestException({ message: 'Some settings need attention', errors: resolved.errors });
     }
@@ -257,7 +246,7 @@ export class InstalledService {
       // 3a. Shared components picked in the dialog: validated now so a bad selection is
       // a 400 before anything is written. Their settings go to their own OpenBao entries
       // (apps/<app>/<component>), never into the app's.
-      const selection = resolveComponents(app, body, this.baseDomain());
+      const selection = resolveComponents(app, body);
       if (!selection.ok) {
         throw new BadRequestException({ message: 'Some settings need attention', errors: selection.errors });
       }
@@ -268,7 +257,7 @@ export class InstalledService {
       // not a node error) and before any write: a failed lookup is a retryable
       // 503 that leaves no OpenBao entry or commit behind.
       const vars: Record<string, string> = {
-        BASE_DOMAIN: this.baseDomain(),
+        BASE_DOMAIN: this.configService.get<string>('BASE_DOMAIN', 'libre.pod'),
       };
       if (Object.values(app.templates).some((t) => t?.includes('${DEVICE_IP}'))) {
         vars.DEVICE_IP = await this.nodeAddress.internalIp();

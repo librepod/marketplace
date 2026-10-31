@@ -35,9 +35,8 @@ spec:
         sensitive: false
       - name: TS_EXTRA_ARGS
         label: "Extra tailscale up flags"
-        description: "Defaults to the login server of a headscale installed on this device. Clear it for Tailscale SaaS; add --advertise-exit-node to also be an exit node."
+        description: "For a headscale tailnet: --login-server=https://headscale.<your-domain> (a headscale installed on this device answers there). Leave empty for Tailscale SaaS; add --advertise-exit-node to also be an exit node."
         type: string
-        default: "--login-server=https://headscale.${BASE_DOMAIN}"
         required: false
         sensitive: false
       - name: TS_ROUTES

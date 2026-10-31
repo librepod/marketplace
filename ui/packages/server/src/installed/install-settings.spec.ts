@@ -12,8 +12,8 @@ const renovate: AppSettings = {
   ],
 };
 
-function ok(settings: AppSettings, body: unknown, baseDomain?: string): Record<string, string> {
-  const result = resolveSettings(settings, body, undefined, undefined, baseDomain);
+function ok(settings: AppSettings, body: unknown): Record<string, string> {
+  const result = resolveSettings(settings, body);
   if (!result.ok) throw new Error(`expected ok, got ${JSON.stringify(result.errors)}`);
   return result.values;
 }
@@ -70,41 +70,6 @@ describe('resolveSettings', () => {
       };
       expect(ok(settings, {})).toEqual({ ENABLED: 'false', PORT: '8080', LEVEL: '2' });
       expect(ok(settings, { settings: { LEVEL: '3' } }).LEVEL).toBe('3');
-    });
-
-    describe('${BASE_DOMAIN} substitution', () => {
-      const login: AppSettings = {
-        items: [{ name: 'TS_EXTRA_ARGS', default: '--login-server=https://headscale.${BASE_DOMAIN}' }],
-      };
-
-      it('expands the device domain in defaults when one is given', () => {
-        expect(ok(login, {}, 'cluster.test')).toEqual({
-          TS_EXTRA_ARGS: '--login-server=https://headscale.cluster.test',
-        });
-      });
-
-      it('expands it in answers too: an untouched prefill still stores the resolved value', () => {
-        expect(ok(login, { settings: { TS_EXTRA_ARGS: 'https://${BASE_DOMAIN}/x' } }, 'cluster.test')).toEqual({
-          TS_EXTRA_ARGS: 'https://cluster.test/x',
-        });
-      });
-
-      it('stores values verbatim when no domain is given', () => {
-        expect(ok(login, {})).toEqual({ TS_EXTRA_ARGS: '--login-server=https://headscale.${BASE_DOMAIN}' });
-      });
-
-      it('never substitutes custom variables, and an empty answer still clears', () => {
-        const settings: AppSettings = { allowCustom: true, items: [{ name: 'URL', default: 'x.${BASE_DOMAIN}' }] };
-        const result = resolveSettings(
-          settings,
-          { settings: { URL: '' }, custom: [{ name: 'A', value: '${BASE_DOMAIN}' }] },
-          undefined,
-          undefined,
-          'cluster.test',
-        );
-        if (!result.ok) throw new Error(`expected ok, got ${JSON.stringify(result.errors)}`);
-        expect(result.values).toEqual({ A: '${BASE_DOMAIN}' });
-      });
     });
 
     it('requires required questions', () => {
