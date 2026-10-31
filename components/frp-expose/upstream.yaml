@@ -12,11 +12,10 @@ spec:
     host: ${FRP_EXPOSE_HOST:=localhost}
     port: ${FRP_EXPOSE_PORT:=80}
     subdomain: ${FRP_EXPOSE_SUBDOMAIN:=app}
-    healthCheck:
-      type: tcp
-      timeoutSeconds: 3
-      intervalSeconds: 10
-      maxFailed: 3
+    # No healthCheck: the CRD only supports type http + a required path, and a
+    # shared component can't know each app's health endpoint (headscale's
+    # /health is app-specific). It's optional and informational for a
+    # single-backend proxy, so omit it rather than guess a path.
     transport:
       useEncryption: true
       useCompression: true

@@ -5,7 +5,7 @@ metadata:
 spec:
   displayName: "Public HTTPS exposure (FRP relay)"
   description: "Publishes the app at https://<subdomain>.<relay domain>, with TLS terminated at the relay. SSO login does not work through the relay, and an app whose only login is SSO forward-auth is exposed without one."
-  version: "1.0.0"
+  version: "1.0.1"
   group: exposure
   kind: resource
   values:
