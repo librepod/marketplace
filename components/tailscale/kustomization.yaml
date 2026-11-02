@@ -16,7 +16,7 @@ configMapGenerator:
 
 images:
   - name: tailscale/tailscale
-    newTag: v1.104.2
+    newTag: v1.104.4
 
 patches:
   - path: patch-deployment.yaml
