@@ -10,7 +10,7 @@ spec:
   website: "https://github.com/cyxou/firefly-iii-telegram-bot"
 
   # renovate: datasource=docker depName=ghcr.io/cyxou/firefly-iii-telegram-bot extractVersion=^v(?<version>.+)$
-  version: "3.0.0"
+  version: "3.1.1"
 
   source:
     type: oci-kustomize
@@ -35,6 +35,12 @@ spec:
       - name: FIREFLY_URL
         label: "Firefly III URL"
         description: "Public URL of your Firefly III instance (e.g. https://firefly-iii.example.com). Leave empty to use the Firefly III app installed on this device"
+        type: string
+        required: false
+        sensitive: false
+      - name: DEFAULT_ASSET_ACCOUNT_ID
+        label: "Default asset account ID"
+        description: "Firefly asset account id used as the default source for transactions until a user picks their own in /settings. The id is the number at the end of the account's page URL in the Firefly III UI."
         type: string
         required: false
         sensitive: false
