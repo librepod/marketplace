@@ -10,7 +10,7 @@ spec:
   website: "https://github.com/cyxou/firefly-iii-telegram-bot"
 
   # renovate: datasource=docker depName=ghcr.io/cyxou/firefly-iii-telegram-bot extractVersion=^v(?<version>.+)$
-  version: "3.1.1"
+  version: "3.2.0"
 
   source:
     type: oci-kustomize
