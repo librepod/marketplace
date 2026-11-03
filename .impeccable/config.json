@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "instrument serif",
+        "createdAt": "2026-11-03T08:17:39.443Z",
+        "reason": "diagram-design skill's default skin mandates Instrument Serif for titles (skill style-guide.md); user confirmed 'keep default' skin at the style gate"
+      }
+    ]
+  }
+}
