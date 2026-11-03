@@ -8,6 +8,6 @@ resources:
 
 images:
 - name: ghcr.io/cyxou/firefly-iii-telegram-bot
-  newTag: v3.0.0
+  newTag: v3.1.1
 - name: valkey/valkey
   newTag: 8.1-alpine
