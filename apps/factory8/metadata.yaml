@@ -25,7 +25,7 @@ spec:
   # it must NOT envFrom the settings Secret wholesale, or the sandbox GH_TOKEN would
   # land in the worker's environment (upstream design: the worker holds no GitHub
   # token). Custom variables therefore only reach the worker when the worker
-  # references them explicitly — today: F8_BANDS, F8_PLUGIN (the ship flow's
+  # references them explicitly — today: FACTORY8_BANDS, FACTORY8_PLUGIN (the ship flow's
   # settings, added as free-form custom variables).
   settings:
     allowCustom: true
@@ -50,17 +50,17 @@ spec:
         description: "Key sent as ANTHROPIC_AUTH_TOKEN to the gateway (e.g. a LiteLLM virtual key)."
         required: true
         sensitive: true
-      - name: F8_IMAGES
+      - name: FACTORY8_IMAGES
         label: "Sandbox images"
         description: "JSON map of repository URL → sandbox image. Each repo the factory works on needs an entry pointing at its Kata sandbox image."
         type: string
         default: '{"https://github.com/factory8/factory8": "ghcr.io/factory8/sandbox:0.1.0"}'
         required: true
-      - name: F8_MODEL
+      - name: FACTORY8_MODEL
         label: "Author model"
         description: "LiteLLM model name the author agents use."
         default: "glm-5.3"
-      - name: F8_REVIEW_MODEL
+      - name: FACTORY8_REVIEW_MODEL
         label: "Reviewer model"
         description: "LiteLLM model name the reviewer agents use (must differ from the author model)."
         default: "glm-5.3-flash"

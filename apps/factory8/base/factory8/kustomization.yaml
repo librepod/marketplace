@@ -16,4 +16,7 @@ resources:
 - externalsecret.yaml
 
 components:
-- components/postgres
+# App-root component (apps/factory8/components/postgres), outside base/ by
+# convention — included here so it inherits this kustomization's namespace
+# transformer (factory8) and the root's labels.
+- ../../components/postgres

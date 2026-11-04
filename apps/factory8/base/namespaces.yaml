@@ -9,4 +9,4 @@ metadata:
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: f8-sandboxes
+  name: factory8-sandboxes
