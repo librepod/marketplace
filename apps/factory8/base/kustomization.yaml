@@ -22,16 +22,15 @@ configMapGenerator:
   - factory8.env
 
 resources:
-- namespaces.yaml
+- namespace.yaml
 - serviceaccount.yaml
 - deployment.yaml
 - externalsecret.yaml
-- rbac.yaml
-- externalsecret-sandbox.yaml
 
 components:
 - ../components/postgres
 - ../components/temporal
+- ../components/factory8-sandboxes
 
 patches:
 # configMapGenerator output has no namespace field — pin the worker's and

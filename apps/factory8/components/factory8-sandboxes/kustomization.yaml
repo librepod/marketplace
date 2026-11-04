@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# The data plane's install-time prerequisites, all in namespace
+# factory8-sandboxes: the Namespace itself, the worker's Role/RoleBinding
+# there, and the sandbox settings Secret. (The sandbox pods and PVCs are
+# created by the worker at run time.) A component works for a non-app
+# namespace only because the root sets no `namespace:` — see the header
+# comment in base/kustomization.yaml.
+
+resources:
+- namespace.yaml
+- rbac.yaml
+- externalsecret-sandbox.yaml
