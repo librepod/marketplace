@@ -1,0 +1,135 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: factory8
+spec:
+  displayName: "Factory8"
+  description: >-
+    Self-hosted AI software factory: Temporal workflows drive agent CLIs inside
+    Kata microVM sandboxes to turn GitHub issues into draft PRs. The Temporal
+    Web UI is served at temporal.<base-domain> (SSO). The f8 CLI (from the
+    Factory8 repo) reaches Temporal at temporal-frontend.factory8.svc.cluster.local:7233
+    over Tailscale, or via `kubectl -n factory8 port-forward svc/temporal-frontend 7233`.
+  icon: "https://avatars.githubusercontent.com/u/345433894?v=4&s=200"
+  category: "Development"
+  website: "https://github.com/factory8/factory8"
+
+  version: "0.1.0"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/factory8"
+    path: ./overlays/librepod
+
+  # The worker deliberately consumes only named keys (see base/factory8/deployment.yaml):
+  # it must NOT envFrom the settings Secret wholesale, or the sandbox GH_TOKEN would
+  # land in the worker's environment (upstream design: the worker holds no GitHub
+  # token). Custom variables therefore only reach the worker when the worker
+  # references them explicitly — today: F8_BANDS, F8_PLUGIN (the ship flow's
+  # settings, added as free-form custom variables).
+  settings:
+    allowCustom: true
+    items:
+      - name: DB_PASSWORD
+        label: "Database password"
+        description: "PostgreSQL password for Temporal's default and visibility stores. Generated once per install."
+        sensitive: true
+        generate:
+          length: 40
+      - name: GH_TOKEN
+        label: "GitHub token"
+        description: "Classic PAT with repo scope. Used inside the Kata sandboxes to read the issue, clone, push the branch and open the draft PR."
+        required: true
+        sensitive: true
+      - name: ANTHROPIC_BASE_URL
+        label: "Model gateway URL"
+        description: "Anthropic-compatible API endpoint the sandboxes call. Defaults to an in-cluster LiteLLM (install the litellm app first)."
+        default: "http://litellm.litellm.svc.cluster.local:4000"
+      - name: ANTHROPIC_AUTH_TOKEN
+        label: "Model gateway key"
+        description: "Key sent as ANTHROPIC_AUTH_TOKEN to the gateway (e.g. a LiteLLM virtual key)."
+        required: true
+        sensitive: true
+      - name: F8_IMAGES
+        label: "Sandbox images"
+        description: "JSON map of repository URL → sandbox image. Each repo the factory works on needs an entry pointing at its Kata sandbox image."
+        type: string
+        default: '{"https://github.com/factory8/factory8": "ghcr.io/factory8/sandbox:0.1.0"}'
+        required: true
+      - name: F8_MODEL
+        label: "Author model"
+        description: "LiteLLM model name the author agents use."
+        default: "glm-5.3"
+      - name: F8_REVIEW_MODEL
+        label: "Reviewer model"
+        description: "LiteLLM model name the reviewer agents use (must differ from the author model)."
+        default: "glm-5.3-flash"
+
+  dependencies:
+    required:
+      - kind: IngressController
+        description: "Traefik (provided by traefik app)"
+      - kind: StorageClass
+        description: "nfs-client (provided by nfs-provisioner app)"
+      - kind: SSOProvider
+        description: "Casdoor SSO (provided by casdoor-sso-controller)"
+      # Soft dependencies, deliberately NOT dependsOn gates (same reasoning as
+      # firefly-iii-data-importer): the marketplace has no app→app install-order
+      # mechanism, and hard-gating on marketplace-kata-containers /
+      # marketplace-litellm would wedge this Kustomization in "installing"
+      # forever on a cluster without them. The control plane (Postgres, Temporal,
+      # UI, worker) comes up healthy without either; only runtime sandboxes need
+      # them:
+      - kind: RuntimeClass
+        description: "kata RuntimeClass (provided by kata-containers app) — required for sandboxes at run time, needs a node with /dev/kvm"
+      - kind: LLMGateway
+        description: "LiteLLM (provided by litellm app) — the model gateway the sandboxes call, unless ANTHROPIC_BASE_URL points elsewhere"
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-factory8
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "factory8"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/factory8
+        ref:
+          tag: "__VERSION__"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-factory8
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "factory8"
+      spec:
+        dependsOn:
+          - name: traefik
+          - name: storage
+          - name: casdoor-sso-controller
+        force: true
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-factory8
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+        postBuild:
+          substitute:
+            BASE_DOMAIN: "${BASE_DOMAIN}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml

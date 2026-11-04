@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Deviation from the flat single-namespace base: this app owns TWO namespaces
+# (factory8 control plane + f8-sandboxes data plane). A root-level `namespace:`
+# is impossible here — kustomize's namespace transformer rewrites even nested
+# sub-kustomizations and renames foreign Namespace objects to the configured
+# name — so the root carries only labels, and each child directory is its own
+# kustomization owning its namespace. Overlay resources that target the control
+# plane therefore spell `namespace: factory8` explicitly.
+
+labels:
+- includeSelectors: true
+  includeTemplates: true
+  pairs:
+    app.kubernetes.io/name: factory8
+
+resources:
+- namespaces.yaml
+- factory8/
+- f8-sandboxes/
