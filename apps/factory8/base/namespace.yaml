@@ -1,0 +1,6 @@
+# Temporal, Postgres and the worker. The data-plane namespace lives in
+# components/factory8-sandboxes.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: factory8

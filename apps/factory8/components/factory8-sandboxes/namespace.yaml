@@ -1,0 +1,6 @@
+# Runs' sandboxes: one Kata pod and one PVC per SDLC step, created by the worker
+# at run time (not part of the install beyond the namespace, RBAC and Secret).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: factory8-sandboxes

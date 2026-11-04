@@ -1,0 +1,53 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Flat two-namespace base: this app owns factory8 (control plane) and
+# factory8-sandboxes (data plane), which rules out the root `namespace:`
+# shorthand — kustomize's namespace transformer overrides even explicit
+# namespaces on regular resources and renames foreign Namespace objects
+# (verified: Namespace factory8-sandboxes becomes a duplicate `factory8` →
+# ID conflict). Every resource therefore carries an explicit
+# metadata.namespace, and the generated ConfigMaps — the one thing generators
+# cannot namespace — get theirs from the patches below.
+
+labels:
+- includeSelectors: true
+  includeTemplates: true
+  pairs:
+    app.kubernetes.io/name: factory8
+
+configMapGenerator:
+- name: factory8
+  envs:
+  - factory8.env
+
+resources:
+- namespace.yaml
+- serviceaccount.yaml
+- deployment.yaml
+- externalsecret.yaml
+
+components:
+- ../components/postgres
+- ../components/temporal
+- ../components/factory8-sandboxes
+
+patches:
+# configMapGenerator output has no namespace field — pin the worker's and
+# postgres's ConfigMaps to the control-plane namespace (see header comment).
+# The name regexes match the PRE-hash generator names (patches run before the
+# hash suffix is added), so `factory8.*`, not `factory8-.*`.
+- target:
+    kind: ConfigMap
+    name: factory8.*
+  patch: |-
+    - op: add
+      path: /metadata/namespace
+      value: factory8
+- target:
+    kind: ConfigMap
+    name: postgres.*
+  patch: |-
+    - op: add
+      path: /metadata/namespace
+      value: factory8

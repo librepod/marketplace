@@ -1,0 +1,25 @@
+# SSO for the Temporal Web UI: the controller provisions the Casdoor application
+# and writes Secret `temporal-sso` (TEMPORAL_AUTH_CLIENT_ID / _CLIENT_SECRET),
+# which the chart feeds to the UI via web.additionalEnvSecretName.
+# ${BASE_DOMAIN} is expanded by Flux postBuild.substitute at deploy time (and
+# by the controller as a fallback); it must stay in lockstep with
+# TEMPORAL_AUTH_CALLBACK_URL in patch-helmrelease.yaml.
+apiVersion: marketplace.librepod.org/v1alpha1
+kind: SSOClient
+metadata:
+  name: temporal-sso
+  namespace: factory8
+spec:
+  clientId: temporal
+  organization: librepod
+  casdoorPolicy: retain
+  grantTypes: [authorization_code, refresh_token]
+  tokenFormat: JWT-Standard
+  expireInHours: 168
+  redirectUris:
+    - "https://temporal.${BASE_DOMAIN}/auth/sso/callback"
+  output:
+    secretName: temporal-sso
+    keys:
+      clientId: TEMPORAL_AUTH_CLIENT_ID
+      clientSecret: TEMPORAL_AUTH_CLIENT_SECRET

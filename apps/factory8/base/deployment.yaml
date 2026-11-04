@@ -1,0 +1,60 @@
+# The Temporal worker: manages sandboxes in factory8-sandboxes, holds no GitHub token.
+# Upstream design (DEP-6): the sandbox credentials (GH_TOKEN, ANTHROPIC_*) live
+# only in the factory8-sandbox Secret in factory8-sandboxes, read by the sandbox pods.
+# That is why this Deployment does NOT envFrom factory8-settings — it takes the
+# settings it needs as named secretKeyRefs, so GH_TOKEN never reaches the worker.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: factory8-worker
+  namespace: factory8
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: factory8-worker
+  template:
+    metadata:
+      labels:
+        app: factory8-worker
+    spec:
+      serviceAccountName: factory8-worker
+      containers:
+        - name: worker
+          image: ghcr.io/factory8/worker
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: factory8
+          env:
+            - name: FACTORY8_IMAGES
+              valueFrom:
+                secretKeyRef:
+                  name: factory8-settings
+                  key: FACTORY8_IMAGES
+            - name: FACTORY8_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: factory8-settings
+                  key: FACTORY8_MODEL
+            - name: FACTORY8_REVIEW_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: factory8-settings
+                  key: FACTORY8_REVIEW_MODEL
+            # The ship flow's settings (FACTORY8_BANDS JSON, FACTORY8_PLUGIN URL) are not
+            # settings items; users add them as custom variables, which land in
+            # the same Secret. Optional: absent on installs that never ship —
+            # the basic issue→PR flow needs neither.
+            - name: FACTORY8_BANDS
+              valueFrom:
+                secretKeyRef:
+                  name: factory8-settings
+                  key: FACTORY8_BANDS
+                  optional: true
+            - name: FACTORY8_PLUGIN
+              valueFrom:
+                secretKeyRef:
+                  name: factory8-settings
+                  key: FACTORY8_PLUGIN
+                  optional: true
