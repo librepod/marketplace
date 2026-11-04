@@ -4,6 +4,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: factory8-worker
+  namespace: factory8-sandboxes
 rules:
   - apiGroups: [""]
     resources: [pods]
@@ -16,6 +17,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: factory8-worker
+  namespace: factory8-sandboxes
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role

@@ -21,7 +21,7 @@ spec:
     url: "oci://ghcr.io/librepod/marketplace/apps/factory8"
     path: ./overlays/librepod
 
-  # The worker deliberately consumes only named keys (see base/factory8/deployment.yaml):
+  # The worker deliberately consumes only named keys (see base/deployment.yaml):
   # it must NOT envFrom the settings Secret wholesale, or the sandbox GH_TOKEN would
   # land in the worker's environment (upstream design: the worker holds no GitHub
   # token). Custom variables therefore only reach the worker when the worker
