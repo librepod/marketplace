@@ -34,6 +34,25 @@ for n in ${NAMES[@]+"${NAMES[@]}"}; do
   [ -f "components/$n/component.yaml" ] || { echo "unknown component: $n" >&2; exit 2; }
 done
 
+# Rekor flakiness: the tlog POST can land server-side while cosign's client
+# times out waiting for the inclusion proof; cosign's internal retry then
+# fails with "an equivalent entry already exists". A fresh top-level
+# invocation signs cleanly (repeat-signing the same digest was verified to
+# succeed), so retry before giving up. COSIGN_RETRY_SLEEP=0 for tests.
+sign() { # <digest> [cosign args...]
+  local digest="$1" out n; shift
+  for n in 1 2 3; do
+    if out=$(cosign sign --yes "$@" "$digest" 2>&1); then
+      echo "$out"
+      return 0
+    fi
+    echo "cosign sign attempt $n/3 for $digest failed: $out" >&2
+    [ "$n" -eq 3 ] || sleep "${COSIGN_RETRY_SLEEP:-$((n * 5))}"
+  done
+  echo "cosign sign gave up after 3 attempts for $digest" >&2
+  return 1
+}
+
 push() { # <name> <tag>
   local ref="oci://${OCI_REPO}/$1:$2"
   if [ "$PUSH" -eq 0 ]; then
@@ -49,9 +68,9 @@ push() { # <name> <tag>
     --output json | jq -r '.repository + "@" + .digest')
   echo "Signing $digest"
   if [ -n "$PR" ]; then
-    cosign sign --yes "$digest"
+    sign "$digest"
   else
-    cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$digest"
+    sign "$digest" --key env://COSIGN_PRIVATE_KEY
   fi
 }
 
