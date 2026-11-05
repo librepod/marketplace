@@ -13,3 +13,30 @@ patches:
     target:
       kind: Deployment
       annotationSelector: librepod.org/component-target=true
+  # A mixed inbound is an opt-in proxy: nothing routes through it unless a
+  # client is pointed at it. Point the app container (containers/0) at the
+  # sidecar so its HTTP clients (Bun, Go, curl — not Node's fetch, which needs
+  # NODE_USE_ENV_PROXY=1 app-side) egress via sing-box; cluster-local traffic
+  # stays direct via NO_PROXY.
+  # ponytail: append-only — JSON Patch has no upsert; an app defining these
+  # env names itself, or lacking an env list, fails the component build (caught
+  # by check-app-components.sh).
+  - target:
+      kind: Deployment
+      annotationSelector: librepod.org/component-target=true
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: HTTP_PROXY
+          value: http://127.0.0.1:11080
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: HTTPS_PROXY
+          value: http://127.0.0.1:11080
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: NO_PROXY
+          value: localhost,127.0.0.1,.svc.cluster.local,.cluster.local,10.42.0.0/16,10.43.0.0/16
