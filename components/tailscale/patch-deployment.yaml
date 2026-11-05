@@ -6,25 +6,32 @@ metadata:
 spec:
   template:
     spec:
-      # MagicDNS first: it answers tailnet names and forwards the rest; CoreDNS
-      # second is consulted on SERVFAIL, or once MagicDNS has not answered
-      # within the timeout (tailscaled down or restarting), so a sidecar outage
-      # costs each lookup ~1s instead of the resolver's default 5s. The search
-      # domain is the MagicDNS base domain the headscale app configures
-      # (ts.<BASE_DOMAIN>). dnsPolicy None drops the pod's cluster search list,
-      # so it is restated: apps reach their own Services by short name. This
-      # assumes the namespace equals INSTANCE_NAME, true for every app today.
-      # 10.43.0.10 (CoreDNS) is k3s's default service-CIDR address.
+      # Cluster search domains first, MagicDNS base domain (ts.<BASE_DOMAIN>,
+      # as the headscale app configures) LAST. Order is load-bearing: the
+      # system's coredns-custom rewrite maps every *.<BASE_DOMAIN> name —
+      # including *.ts.<BASE_DOMAIN> — to traefik, so a cluster short name
+      # resolved under the ts search domain gets a confidently wrong A record
+      # (traefik's ClusterIP) and the resolver never falls through to
+      # .svc.cluster.local (remnawave → postgres P1001 this way). With cluster
+      # domains first, short names hit their own Services; bare tailnet node
+      # names still resolve via the last search entry after a few fast
+      # NXDOMAINs. MagicDNS (100.100.100.100) answers tailnet names and
+      # SERVFAILs the rest; CoreDNS second is the fallback, and without an
+      # upstream configured in the tailnet DNS config it serves every cluster
+      # lookup. dnsPolicy None drops the pod's cluster search list, so it is
+      # restated: this assumes the namespace equals INSTANCE_NAME, true for
+      # every app today. 10.43.0.10 (CoreDNS) is k3s's default service-CIDR
+      # address.
       dnsPolicy: None
       dnsConfig:
         nameservers:
           - 100.100.100.100
           - 10.43.0.10
         searches:
-          - ts.${BASE_DOMAIN:=libre.pod}
           - ${INSTANCE_NAME:=app}.svc.cluster.local
           - svc.cluster.local
           - cluster.local
+          - ts.${BASE_DOMAIN:=libre.pod}
         options:
           - name: timeout
             value: "1"
