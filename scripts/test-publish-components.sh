@@ -29,12 +29,15 @@ git -C "$T" -c user.name=t -c user.email=t@t commit -qm first
 echo "# touched" >> "$T/components/a/component.yaml"
 git -C "$T" -c user.name=t -c user.email=t@t commit -qam second
 
-# A fake flux proves nothing is pushed without --push.
+# A fake flux proves nothing is pushed without --push; in --push mode it emits
+# the JSON the script feeds to jq.
 cat > "$TMP/bin/flux" <<EOF
 #!/bin/sh
 touch "$TMP/flux-called"
+echo '{"repository":"ghcr.io/test/components/a","digest":"sha256:deadbeef"}'
 EOF
 chmod +x "$TMP/bin/flux"
+command -v jq >/dev/null || fail "jq not in PATH"
 
 run() { ( cd "$T" && PATH="$TMP/bin:$PATH" bash scripts/publish-components.sh "$@" ) >"$TMP/out" 2>"$TMP/err" && RC=0 || RC=$?; }
 
@@ -73,7 +76,34 @@ no_push_by_default() {
   grep -q '^DRY RUN: flux push artifact oci://' "$TMP/out" || fail "no_push_by_default: no DRY RUN line"
 }
 
-for t in changed_only pr_tag all_strips_comment unknown_name empty_version no_push_by_default; do
+sign_retries_then_succeeds() {
+  cat > "$TMP/bin/cosign" <<'EOF'
+#!/bin/sh
+n=$(cat "$FAKE_COSIGN_STATE" 2>/dev/null || echo 0)
+n=$((n+1)); echo "$n" > "$FAKE_COSIGN_STATE"
+[ "$n" -ge 3 ] || { echo "Error: dial tcp: connection refused" >&2; exit 1; }
+EOF
+  chmod +x "$TMP/bin/cosign"
+  rm -f "$TMP/cosign-state" "$TMP/flux-called"
+  FAKE_COSIGN_STATE="$TMP/cosign-state" COSIGN_RETRY_SLEEP=0 run --push --pr 7 a
+  [ "$RC" -eq 0 ] || fail "sign_retries: exit $RC: $(cat "$TMP/err")"
+  [ "$(cat "$TMP/cosign-state")" -eq 3 ] || fail "sign_retries: expected 3 calls, got $(cat "$TMP/cosign-state")"
+  [ -e "$TMP/flux-called" ] || fail "sign_retries: flux was not called"
+}
+sign_persistent_failure_fails() {
+  # The Rekor 409 race: if it survives every retry, the run must fail loudly.
+  cat > "$TMP/bin/cosign" <<'EOF'
+#!/bin/sh
+echo "Error: signing bundle: createLogEntryConflict an equivalent entry already exists in the transparency log" >&2
+exit 1
+EOF
+  chmod +x "$TMP/bin/cosign"
+  COSIGN_RETRY_SLEEP=0 run --push --pr 7 a
+  [ "$RC" -ne 0 ] || fail "sign_persistent: expected nonzero exit"
+  grep -q "gave up after 3 attempts" "$TMP/err" || fail "sign_persistent: no give-up message: $(cat "$TMP/err")"
+}
+
+for t in changed_only pr_tag all_strips_comment unknown_name empty_version no_push_by_default sign_retries_then_succeeds sign_persistent_failure_fails; do
   "$t"; echo "ok $t"
 done
 echo PASS

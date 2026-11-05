@@ -4,7 +4,7 @@ metadata:
   name: sing-box
 spec:
   displayName: "VPN egress (sing-box)"
-  description: "Runs a sing-box sidecar with the full config you paste. Routing is entirely yours, including direct routes for the cluster CIDRs, or cluster-local traffic breaks."
+  description: "Runs a sing-box sidecar with the full config you paste. Your config must include a proxy inbound (mixed/http/socks) on 127.0.0.1:11080 — the app automatically gets HTTP_PROXY/HTTPS_PROXY pointed at it, with cluster-local traffic kept direct. Everything past that inbound (outbounds, selectors, route rules) is entirely yours."
   # renovate: datasource=docker depName=ghcr.io/sagernet/sing-box
   version: "v1.14.4"
   group: network
