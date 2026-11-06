@@ -23,6 +23,7 @@ spec:
   # NFS-surviving postgres data (converge-db-password re-heals any drift) and
   # admin JWTs stay valid.
   settings:
+    allowCustom: true
     items:
       - name: APP_SECRET
         label: "App secret"
@@ -36,6 +37,12 @@ spec:
         sensitive: true
         generate:
           length: 40
+      - name: SUB_PUBLIC_DOMAIN
+        label: "Public subscription URL"
+        description: "Public subscription URL to serve subscriptions from (bare domain, no scheme/path) for end-users."
+        sensitive: false
+        required: false
+        type: string
 
   components:
     - name: tailscale
