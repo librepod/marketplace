@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: remnawave-admin
+
+labels:
+- includeSelectors: true
+  includeTemplates: true
+  pairs:
+    app.kubernetes.io/name: remnawave-admin
+
+configMapGenerator:
+- name: remnawave-admin
+  envs:
+  - remnawave-admin.env
+
+resources:
+- namespace.yaml
+- externalsecret.yaml
+- deployment-bot.yaml
+- deployment-web-backend.yaml
+- deployment-web-frontend.yaml
+- service-bot.yaml
+- service-web-backend.yaml
+- service-web-frontend.yaml
+- pvc.yaml

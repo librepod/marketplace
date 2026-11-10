@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remnawave-admin-web-backend
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: web-backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: web-backend
+    spec:
+      containers:
+        - name: remnawave-admin-web-backend
+          image: ghcr.io/case211/remnawave-admin-web-backend
+          imagePullPolicy: IfNotPresent
+          # Upstream compose command — the backend image may share its
+          # entrypoint with the bot image, so run uvicorn explicitly
+          command: ["python", "-m", "uvicorn", "web.backend.main:app", "--host", "0.0.0.0", "--port", "8081", "--no-access-log", "--log-level", "warning", "--ws", "websockets", "--ws-per-message-deflate", "true"]
+          ports:
+            - name: http
+              containerPort: 8081
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: remnawave-admin-settings
+                  key: DB_PASSWORD
+            - name: DATABASE_URL
+              value: postgresql://remnawave:$(DB_PASSWORD)@remnawave-admin-db:5432/remnawave_bot
+          envFrom:
+            - configMapRef:
+                name: remnawave-admin
+            - secretRef:
+              name: remnawave-admin-settings # LAST
+          readinessProbe:
+            httpGet:
+              path: /api/v2/health
+              port: 8081
+            periodSeconds: 15
+            failureThreshold: 20 # ~5 min: first boot runs DB migrations
+          livenessProbe:
+            httpGet:
+              path: /api/v2/health
+              port: 8081
+            initialDelaySeconds: 180
+            periodSeconds: 30
+            failureThreshold: 5
+          volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+            - name: geoip
+              mountPath: /app/geoip
+            - name: backups
+              mountPath: /app/backups
+            - name: plugins
+              mountPath: /app/plugins
+            - name: mail-certs
+              mountPath: /app/certs
+      volumes:
+        - name: logs
+          emptyDir: {}
+        - name: geoip
+          emptyDir: {}
+        - name: mail-certs
+          # Self-signed mail TLS certs regenerate per pod; the mail server is
+          # disabled by default and users with real certs mount their own
+          emptyDir: {}
+        - name: backups
+          persistentVolumeClaim:
+            claimName: remnawave-admin-backups
+        - name: plugins
+          persistentVolumeClaim:
+            claimName: remnawave-admin-plugins
