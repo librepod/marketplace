@@ -12,13 +12,7 @@ spec:
   - websecure
   routes:
   - kind: Rule
-    match: Host(`remnawave-admin.${BASE_DOMAIN:=libre.pod}`) && PathPrefix(`/api`)
-    priority: 100
-    services:
-    - name: remnawave-admin-web-backend
-      port: 8081
-  - kind: Rule
-    match: Host(`remnawave-admin.${BASE_DOMAIN:=libre.pod}`) && PathPrefix(`/ws`)
+    match: Host(`remnawave-admin.${BASE_DOMAIN:=libre.pod}`) && (PathPrefix(`/api`) || PathPrefix(`/ws`))
     priority: 100
     services:
     - name: remnawave-admin-web-backend
