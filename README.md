@@ -164,10 +164,12 @@ frpc — temporarily removed from system apps; requires FRP auth token that shou
 ## 🔑 First Run: Claim Your Device
 
 A fresh LibrePod is set up from a browser, on the device's own address. Once the
-system apps are up, open `http://<device-ip>`.
+system apps are up, open `http://<device-ip>` — on a LibrePod OS device,
+`http://librepod.local` works too.
 
-1. **Get the setup code.** Only someone with access to the cluster can read it —
-   that is what makes you the owner:
+1. **Get the setup code.** Only someone with access to the device can read it —
+   that is what makes you the owner. On a LibrePod OS device it is printed on
+   the sticker. On any other cluster, read it from the log:
 
    ```bash
    kubectl -n marketplace-ui logs deploy/marketplace-ui | grep "setup code"
@@ -191,7 +193,7 @@ warning — the root CA isn't trusted yet), or an SSH tunnel:
 `ssh -L 8080:<device-private-ip>:80 you@<device-public-ip>`, then open
 `http://127.0.0.1:8080`.
 
-**Lost a password or a VPN key, or abandoned setup?** `reset-onboarding` gives a new setup code and reopens the wizard. It keeps your account, apps, app data, VPN peers and every machine credential. To recover a forgotten password: run it, enter the new code, keep your username, and set a new password.
+**Lost a password or a VPN key, or abandoned setup?** `reset-onboarding` gives a new setup code (on a LibrePod OS device, the sticker's code again) and reopens the wizard. It keeps your account, apps, app data, VPN peers and every machine credential. To recover a forgotten password: run it, enter the new code, keep your username, and set a new password.
 
 
 ```bash

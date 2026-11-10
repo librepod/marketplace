@@ -49,8 +49,10 @@ no Docker knowledge, no env vars, no manual volume mounts.
   plain-HTTP raw IP by design; the wizard never attempts SSO over IP, and the AuthGate
   redirect chain must never fire for an un-onboarded or IP-bound visitor.
 - Proof of ownership: a 12-character setup code marketplace-ui creates on first start and
-  prints to its log. Claiming needs it (and nothing else), so does continuing in another
-  browser, and it dies when onboarding finishes; `reset-onboarding` issues a new one.
+  prints to its log — on a LibrePod OS device, the code the OS minted at install and printed
+  on the sticker. Claiming needs it (and nothing else), so does continuing in another
+  browser, and it dies when onboarding finishes; `reset-onboarding` issues a new one (the
+  sticker's code again: it never changes). The sticker's QR link prefills it (`#code=`).
   `reset-onboarding` gives a new setup code and reopens the wizard. It keeps your account, apps, app data, VPN peers and every machine credential. To recover a forgotten password: run it, enter the new code, keep your username, and set a new password.
 - Identities: the owner's SSO account is the only human credential. Casdoor's built-in
   `admin` password is machine-generated, stored readable in OpenBao `system/admin` and kept

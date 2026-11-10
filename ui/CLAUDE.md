@@ -290,6 +290,13 @@ account password is the only human credential.
   slow OpenBao blocks the sign-in.
 - `reset-onboarding` (`/usr/local/bin` in the image) runs `dist/onboarding/reset-onboarding.cli.js`:
   new code, `open`, generation + 1, account kept.
+- **Device code (LibrePod OS sticker):** the OS publishes Secret `librepod-setup-code` (key `code`),
+  mounted optional at `SETUP_CODE_FILE`. A new record and every reset take it instead of a random
+  code; an `open` record adopts it whenever it arrives (the pod may start first); `claimed`/`finished`
+  are never changed. A file that is not a setup code throws (status `waiting`) — never a random code
+  that stops matching the sticker. Absent file = any other cluster, behaviour as before.
+- **LAN arrival:** `librepod.local` / `librepod-N.local` (the OS's avahi name) count as `arrival: 'ip'`,
+  and `ingressroute-ip.yaml` routes them — except where that name is `BASE_DOMAIN` (k3d).
 - `BOOTSTRAP_MODE_OVERRIDE` forces the state (Tier 1: `finished`) and skips record creation.
 
 ### Catalog (`CatalogService`)
