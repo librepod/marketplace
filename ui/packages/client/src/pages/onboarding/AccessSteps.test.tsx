@@ -55,8 +55,23 @@ describe("ClaimStep", () => {
     expect(screen.getByRole("button", { name: /continue/i })).toBeVisible()
   })
 
+  it("takes the code from the sticker's link (#code=) and drops it from the address bar", () => {
+    window.history.replaceState(null, "", "/?x=1#code=7kqm-x3rt-9vhc")
+    render(<ClaimStep resuming={false} onClaimed={vi.fn()} />)
+    expect(screen.getByLabelText("Setup code")).toHaveValue("7kqm-x3rt-9vhc")
+    expect(window.location.hash).toBe("")
+    expect(window.location.search).toBe("?x=1")
+  })
+
+  it("starts empty without a link", () => {
+    window.history.replaceState(null, "", "/")
+    render(<ClaimStep resuming={false} onClaimed={vi.fn()} />)
+    expect(screen.getByLabelText("Setup code")).toHaveValue("")
+  })
+
   it("says where the code is", () => {
     render(<ClaimStep resuming={false} onClaimed={vi.fn()} />)
+    expect(screen.getByText(/printed on the sticker/i)).toBeInTheDocument()
     expect(screen.getByText('kubectl -n marketplace-ui logs deploy/marketplace-ui | grep "setup code"')).toBeInTheDocument()
     // reset-onboarding prints its code to the exec stream, not the log the command above reads
     expect(screen.getByText(/use the code it printed instead/)).toBeInTheDocument()
