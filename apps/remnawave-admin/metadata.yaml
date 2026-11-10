@@ -20,6 +20,11 @@ spec:
     path: ./overlays/librepod
 
   settings:
+    # Upstream documents many more env vars than LibrePod pins (pool tuning,
+    # locale/timezone, trusted proxies, mail, notifications) — open the free-form
+    # custom env section for powerusers; values ride the settings Secret last in
+    # envFrom and override .env defaults.
+    allowCustom: true
     items:
       - name: BOT_TOKEN
         label: "Telegram bot token"
