@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: remnawave-admin
+
+resources:
+- ../../base
+- ingressroute.yaml
+
+images:
+# Upstream publishes no semver image tags — only `latest` + unordered commit
+# SHAs (the 5.2.1 release commit was pushed [skip ci] with no image build).
+# Digests pin what `latest` shipped at scaffold time. spec.version in
+# metadata.yaml is the nearest upstream release and must move with these
+# digests, by hand, in the same change.
+- name: ghcr.io/case211/remnawave-admin
+  # renovate: datasource=docker depName=ghcr.io/case211/remnawave-admin
+  digest: sha256:7fbea781d0d1f30c714fb3c31e7b0569df6f200baea9128173fceb5f7e7ceec6
+- name: ghcr.io/case211/remnawave-admin-web-backend
+  # renovate: datasource=docker depName=ghcr.io/case211/remnawave-admin-web-backend
+  digest: sha256:d7432e38f7f8c76d0ac8424857c004d540adb2580ab230067d748480e91e03ce
+- name: ghcr.io/case211/remnawave-admin-web-frontend
+  # renovate: datasource=docker depName=ghcr.io/case211/remnawave-admin-web-frontend
+  digest: sha256:70fa8e97e5b647ac3a7b2e620125da4eafc021549ceba30f01b7a73732146ffc
+- name: postgres
+  # renovate: datasource=docker depName=postgres
+  newTag: 16-alpine
+
+# Multi-doc strategic-merge patch: each document matches its PVC by its own
+# metadata.name (patches.target is not allowed with multi-doc patch files).
+patches:
+- path: ./patch-storage-class.yaml
