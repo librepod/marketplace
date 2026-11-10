@@ -27,3 +27,12 @@ spec:
             httpGet:
               path: /
               port: 80
+          volumeMounts:
+            - name: logs
+              # Upstream nginx config logs to /app/logs/nginx_access.log; the
+              # dir does not exist in the image — same emptyDir the bot and
+              # web-backend mount
+              mountPath: /app/logs
+      volumes:
+        - name: logs
+          emptyDir: {}
