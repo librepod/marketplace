@@ -1,7 +1,8 @@
+import { readFile } from 'node:fs/promises';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OpenBaoCasMismatchError, OpenBaoClient } from '../installed/openbao.client';
-import { formatSetupCode, generateSetupCode } from './setup-code';
+import { formatSetupCode, generateSetupCode, isSetupCode, normalizeSetupCode } from './setup-code';
 
 export type StoredState = 'open' | 'claimed' | 'finished';
 
@@ -151,14 +152,16 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
     return true;
   }
 
-  /** `reset-onboarding` (spec §6): a new code, state open, generation + 1. Keeps the
-   * account; clears claimedAt/finishedAt. Also repairs a missing or malformed record.
-   * The operator's command wins whatever the record holds: no check-and-set. */
+  /** `reset-onboarding` (spec §6): a new code — or the device code, which never changes —
+   * state open, generation + 1. Keeps the account; clears claimedAt/finishedAt. Also
+   * repairs a missing or malformed record. The operator's command wins whatever the
+   * record holds: no check-and-set. */
   async reset(): Promise<string> {
+    const device = await this.deviceCode();
     const old = (await this.bao.readEntry(this.mount, RECORD_PATH))?.data ?? {};
     const record: StoredRecord = {
       state: 'open',
-      code: generateSetupCode(),
+      code: device ?? generateSetupCode(),
       generation: (count(old.generation) ?? 0) + 1,
       account: text(old.account),
       accountGeneration: count(old.accountGeneration),
@@ -180,14 +183,27 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
     await this.bao.writeEntry(this.mount, ADMIN_PATH, { password }, opts);
   }
 
-  /** Reads the record, creating it when missing: open, a fresh code, generation 1.
-   * Check-and-set (cas 0), so two pods starting together cannot both create a code. */
+  /** Reads the record, creating it when missing: open, the device code or a fresh one,
+   * generation 1. Check-and-set (cas 0), so two pods starting together cannot both
+   * create a code. An open record takes the device code whenever it arrives — the pod
+   * may start before LibrePod OS published it — so an open device always answers to
+   * its sticker; a claimed or finished one is never changed. */
   private async ensure(): Promise<OnboardingRecord> {
+    const device = await this.deviceCode();
     const existing = await this.read();
+    if (existing && device && existing.state === 'open' && existing.code !== device) {
+      try {
+        await this.save({ ...existing, code: device });
+      } catch (err) {
+        if (!(err instanceof OpenBaoCasMismatchError)) throw err;
+        return this.ensure(); // written meanwhile: decide again on what is there now
+      }
+      return { ...existing, code: device, version: existing.version + 1 };
+    }
     if (existing) return existing;
     const now = new Date().toISOString();
     const fresh: OnboardingRecord = {
-      state: 'open', code: generateSetupCode(), generation: 1, account: null, accountGeneration: null,
+      state: 'open', code: device ?? generateSetupCode(), generation: 1, account: null, accountGeneration: null,
       createdAt: now, claimedAt: null, finishedAt: null, version: 0,
     };
     try {
@@ -199,6 +215,26 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
       return winner;
     }
     return { ...fresh, version: 1 };
+  }
+
+  /** The code LibrePod OS provisioned for this device (printed on its sticker), from the
+   * optional Secret mount; null on any other cluster or before the Secret exists. A file
+   * that is not a setup code throws: a random code would silently stop matching the sticker. */
+  private async deviceCode(): Promise<string | null> {
+    const file = this.config.get<string>('SETUP_CODE_FILE');
+    if (!file) return null;
+    let raw: string;
+    try {
+      raw = await readFile(file, 'utf8');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw err;
+    }
+    const code = normalizeSetupCode(raw);
+    if (!isSetupCode(code)) {
+      throw new Error(`${file} is not a setup code — check /var/lib/librepod/setup-code on the device`);
+    }
+    return code;
   }
 
   private async read(): Promise<OnboardingRecord | null> {

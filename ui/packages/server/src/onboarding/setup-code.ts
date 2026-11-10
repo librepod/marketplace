@@ -24,6 +24,11 @@ export function normalizeSetupCode(input: string): string {
   return input.toUpperCase().replace(/[\s-]/g, '');
 }
 
+/** A stored-form code: SETUP_CODE_LENGTH characters of the alphabet. */
+export function isSetupCode(code: string): boolean {
+  return code.length === SETUP_CODE_LENGTH && [...code].every((c) => SETUP_CODE_ALPHABET.includes(c));
+}
+
 /** Constant-time comparison of a typed code with the stored one (hashing first
  * makes the lengths equal, which timingSafeEqual requires). */
 export function setupCodeMatches(input: unknown, code: string): boolean {
