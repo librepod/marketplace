@@ -36,7 +36,7 @@ spec:
             - configMapRef:
                 name: remnawave-admin
             - secretRef:
-              name: remnawave-admin-settings # LAST
+                name: remnawave-admin-settings # LAST
           readinessProbe:
             httpGet:
               path: /api/v2/health
