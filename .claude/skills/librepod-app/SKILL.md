@@ -538,7 +538,7 @@ spec:
   # live here — LibrePod's tuned defaults stay in the app's `.env`
   # (one owner per variable, never both). `BASE_DOMAIN` and `DEVICE_IP` are reserved.
   settings:
-    # allowCustom: true             # Only when users may add free-form env vars (default: closed)
+    # allowCustom: true             # Open when upstream supports env vars beyond the app's pins (see Settings contract)
     items:
       - name: SETTING_NAME           # The env var / secret key the app consumes
         label: "Human-readable label"
@@ -700,7 +700,12 @@ How an app receives credentials and user-chosen configuration. Declare them in `
 ```yaml
 settings:
   allowCustom: true         # Offer the free-form "custom environment variables" section.
-                            # Omitted = closed (the default, and right for most apps).
+                            # Omitted = closed (the default).
+                            # WHEN to open: set true whenever upstream supports env vars
+                            # beyond those this app pins (.env defaults + settings items) —
+                            # powerusers get the lever for everything upstream documents
+                            # that LibrePod chose not to surface. Closed only when there
+                            # are no meaningful extra env vars (see Rules below).
   items:
     - name: VAR_NAME        # The env var / secret key the app consumes
       label: "..."          # Dialog title
@@ -724,6 +729,7 @@ settings:
 
 - **`BASE_DOMAIN` and `DEVICE_IP` are reserved** — never a question, never a custom variable. They flow to the manifests via `postBuild.substitute`.
 - **One owner per variable.** A variable is either a `.env` default or a `settings` item, never both: the `.env` is the tuned default the app ships with, a settings item is a deliberate install question or machine secret. Listing both means the settings value silently shadows the `.env` (the settings Secret is last in `envFrom`).
+- **Open `allowCustom` when upstream has more env vars than the app pins.** Compare upstream's documented env surface (`.env.example`, docs, compose file) against what this app declares (`.env` + settings items). If upstream documents meaningful vars the app doesn't pin — pool sizes, timezones, proxy lists, feature flags — set `allowCustom: true`; users can then set them at install or later, and they ride the settings Secret last in `envFrom`, overriding `.env` defaults. Closed is correct only when every meaningful env var is already pinned or the app has no env-based configuration beyond what's declared.
 - Apps whose items are **all `generate:`** and that do not set `allowCustom` remain **one-click** — the install dialog never opens, since generated items are hidden and there is nothing to ask.
 
 ### Storage and delivery
