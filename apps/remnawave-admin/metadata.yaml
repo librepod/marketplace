@@ -1,0 +1,125 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: remnawave-admin
+spec:
+  displayName: "Remnawave Admin"
+  description: "Telegram bot and web panel for Remnawave: anti-abuse, node monitoring, notifications and backups"
+  icon: "https://github.com/Case211/remnawave-admin.png"
+  category: "Network"
+  website: "https://github.com/Case211/remnawave-admin"
+
+  # Nearest upstream release; the deployed images are digest-pinned in the
+  # overlay (upstream ships no semver image tags). No renovate annotation —
+  # version and digests move together by hand.
+  version: "5.2.1"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/remnawave-admin"
+    path: ./overlays/librepod
+
+  settings:
+    # Upstream documents many more env vars than LibrePod pins (pool tuning,
+    # locale/timezone, trusted proxies, mail, notifications) — open the free-form
+    # custom env section for powerusers; values ride the settings Secret last in
+    # envFrom and override .env defaults.
+    allowCustom: true
+    items:
+      - name: BOT_TOKEN
+        label: "Telegram bot token"
+        description: "Token from @BotFather for the admin bot"
+        required: true
+        sensitive: true
+      - name: API_TOKEN
+        label: "Remnawave panel API token"
+        description: "API token created in the Remnawave panel"
+        required: true
+        sensitive: true
+      - name: ADMINS
+        label: "Administrator Telegram IDs"
+        description: "Comma-separated numeric Telegram IDs (get yours from @userinfobot)"
+        required: true
+      - name: TELEGRAM_BOT_USERNAME
+        label: "Bot username"
+        description: "Bot username without @ — required for Telegram login on the web panel"
+        required: true
+      - name: API_BASE_URL
+        label: "Remnawave panel URL"
+        description: "Address of the Remnawave panel API. The default targets the marketplace remnawave app running in-cluster; change it if your panel lives elsewhere."
+        default: "http://remnawave.remnawave.svc.cluster.local"
+      - name: MAXMIND_LICENSE_KEY
+        label: "MaxMind license key (optional)"
+        description: "Enables local GeoIP databases (instant, unlimited lookups). Without it ip-api.com is used (~1000 requests/day)."
+        sensitive: true
+      - name: WEB_SECRET_KEY
+        sensitive: true
+        generate:
+          length: 64
+      - name: DB_PASSWORD
+        sensitive: true
+        generate:
+          length: 32
+      - name: WEBHOOK_SECRET
+        sensitive: true
+        generate:
+          length: 64
+      - name: INTERNAL_API_SECRET
+        sensitive: true
+        generate:
+          length: 64
+
+  dependencies:
+    required:
+      - kind: IngressController
+        description: "Traefik (provided by traefik app)"
+      - kind: StorageClass
+        description: "nfs-client (provided by nfs-provisioner app)"
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-remnawave-admin
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "remnawave-admin"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/remnawave-admin
+        ref:
+          tag: "__VERSION__"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-remnawave-admin
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "remnawave-admin"
+      spec:
+        dependsOn:
+          - name: traefik
+          - name: storage
+        force: true
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-remnawave-admin
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+        postBuild:
+          substitute:
+            BASE_DOMAIN: "${BASE_DOMAIN}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml

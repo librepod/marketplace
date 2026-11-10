@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: remnawave-admin-bot
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/component: bot
+  ports:
+    - port: 8080
+      targetPort: webhook
+      protocol: TCP
+      name: webhook

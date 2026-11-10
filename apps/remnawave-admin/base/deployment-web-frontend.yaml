@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remnawave-admin-web-frontend
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: web-frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: web-frontend
+    spec:
+      containers:
+        - name: remnawave-admin-web-frontend
+          image: ghcr.io/case211/remnawave-admin-web-frontend
+          imagePullPolicy: IfNotPresent
+          # Static React build; the browser calls same-origin /api/* routed to
+          # the backend by the IngressRoute — no env needed
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+          volumeMounts:
+            - name: logs
+              # Upstream nginx config logs to /app/logs/nginx_access.log; the
+              # dir does not exist in the image — same emptyDir the bot and
+              # web-backend mount
+              mountPath: /app/logs
+      volumes:
+        - name: logs
+          emptyDir: {}
