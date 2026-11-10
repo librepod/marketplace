@@ -1,0 +1,80 @@
+# Component resources hardcode BOTH labels (name + component) so they do not
+# depend on the composing kustomization's transformers.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remnawave-admin-db
+  labels:
+    app.kubernetes.io/name: remnawave-admin
+    app.kubernetes.io/component: postgres
+spec:
+  replicas: 1
+  strategy:
+    # Single writer on an NFS-backed PVC: RollingUpdate's surge pod would mount
+    # the same NFS export while the old process still runs and corrupt the
+    # data directory
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: remnawave-admin
+      app.kubernetes.io/component: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: remnawave-admin
+        app.kubernetes.io/component: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+          envFrom:
+            - configMapRef:
+                name: remnawave-admin
+          env:
+            # Settings key DB_PASSWORD maps onto the env var the official
+            # image consumes
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: remnawave-admin-settings
+                  key: DB_PASSWORD
+          volumeMounts:
+            # 16-alpine stores data at the legacy path (the /var/lib/postgresql
+            # mount-point rule applies to postgres >= 18 only)
+            - name: data
+              mountPath: /var/lib/postgresql/data
+        - name: converge-db-password
+          image: postgres
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: remnawave-admin
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: remnawave-admin-settings
+                  key: DB_PASSWORD
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              until psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c '\q' 2>/dev/null; do
+                sleep 1
+              done
+              printf "ALTER USER %s PASSWORD :'pw';\n" "$POSTGRES_USER" | \
+                psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+                  -v on_error_stop=1 -v pw="$POSTGRES_PASSWORD"
+              while sleep 3600; do :; done
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: remnawave-admin-db-data
+# converge-db-password: NFS-backed PVCs survive PVC deletion, so a reinstall can
+# bind a data dir whose initdb password predates the settings entry. Loopback
+# pg_hba trust lets the sidecar ALTER USER the stored password to the declared
+# one on every boot. Do not modify the script — every deviation (${} braces,
+# psql -c with :'vars', missing -d) broke a real install somewhere.
