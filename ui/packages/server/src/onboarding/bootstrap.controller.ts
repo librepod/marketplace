@@ -44,6 +44,13 @@ function hostOf(req: Request): string {
 }
 
 const isIpv6 = (host: string) => host.includes(':') && IPV6.test(host);
+/** The device's mDNS name (LibrePod OS avahi); a second LibrePod on the LAN gets librepod-2.local. */
+const MDNS_NAME = /^librepod(-[0-9]+)?\.local$/i;
+
+/** Reached the way a fresh device is — its IP or its mDNS name — rather than the domain.
+ * The mDNS name is the domain where a cluster uses it as BASE_DOMAIN (k3d). */
+const isLanArrival = (host: string, baseDomain: string) =>
+  IPV4.test(host) || isIpv6(host) || (MDNS_NAME.test(host) && host.toLowerCase() !== baseDomain);
 
 /** An IP literal another device could dial: not loopback, link-local or unspecified. */
 function dialable(host: string): boolean {
@@ -80,10 +87,11 @@ export class BootstrapController {
   @Get('status')
   async status(@Req() req: Request): Promise<OnboardingStatus> {
     const host = hostOf(req);
+    const baseDomain = this.config.get<string>('BASE_DOMAIN', 'libre.pod');
     const status: OnboardingStatus = {
       state: 'waiting',
-      arrival: IPV4.test(host) || isIpv6(host) ? 'ip' : 'domain',
-      baseDomain: this.config.get<string>('BASE_DOMAIN', 'libre.pod'),
+      arrival: isLanArrival(host, baseDomain) ? 'ip' : 'domain',
+      baseDomain,
       session: false,
       account: null,
       previousAccount: null,
