@@ -6,6 +6,9 @@ import { CatalogPage } from "./pages/CatalogPage"
 import { AppDetailPage } from "./pages/AppDetailPage"
 import { MyAppsPage } from "./pages/MyAppsPage"
 import { NotFoundPage } from "./pages/NotFoundPage"
+import { takeCodeFromLink } from "./pages/onboarding/api"
+
+takeCodeFromLink()
 
 export const router = createBrowserRouter([
   {

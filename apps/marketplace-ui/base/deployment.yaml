@@ -53,6 +53,10 @@ spec:
             # .git-credentials. Disposable: rebuilt on demand.
             - name: user-apps-work
               mountPath: /var/lib/user-apps
+            # The setup code LibrePod OS minted at install (SETUP_CODE_FILE).
+            - name: setup-code
+              mountPath: /etc/librepod-setup-code
+              readOnly: true
           startupProbe:
             httpGet:
               path: /api/health
@@ -105,6 +109,14 @@ spec:
         - name: user-apps-git-credentials
           secret:
             secretName: user-apps-git-auth
+            optional: true
+        # Published by LibrePod OS (modules/onboarding) — the code on the device's
+        # sticker. Absent on any other cluster: the server then generates the code.
+        # Optional for the same reason as the catalog: if the pod starts first,
+        # kubelet fills the volume later and an open onboarding record adopts it.
+        - name: setup-code
+          secret:
+            secretName: librepod-setup-code
             optional: true
         - name: user-apps-work
           emptyDir: {}

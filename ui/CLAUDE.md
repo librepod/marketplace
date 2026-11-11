@@ -290,6 +290,15 @@ account password is the only human credential.
   slow OpenBao blocks the sign-in.
 - `reset-onboarding` (`/usr/local/bin` in the image) runs `dist/onboarding/reset-onboarding.cli.js`:
   new code, `open`, generation + 1, account kept.
+- **Device code (LibrePod OS sticker):** the OS publishes Secret `librepod-setup-code` (key `code`),
+  mounted optional at `SETUP_CODE_FILE`. A new record and every reset take it instead of a random
+  code; an `open` record adopts it whenever it arrives (the pod may start first); `claimed`/`finished`
+  are never changed and never read the file. A file that is not a setup code throws where a code is
+  chosen (an open device reads `waiting`, `reset-onboarding` fails) — never a random code that stops
+  matching the sticker. The sticker's code is printed, so it never changes: it is never logged (the
+  log line points at the sticker). Absent file = any other cluster, behaviour as before.
+- **LAN arrival:** `librepod.local` / `librepod-N.local` (the OS's avahi name) count as `arrival: 'ip'`,
+  and `ingressroute-ip.yaml` routes them — except where that name is `BASE_DOMAIN` (k3d).
 - `BOOTSTRAP_MODE_OVERRIDE` forces the state (Tier 1: `finished`) and skips record creation.
 
 ### Catalog (`CatalogService`)
@@ -412,6 +421,7 @@ Restart / Users) marked with `SoonTag`. All status dots read from the single
 | `WGEASY_BASE_URL` | (empty) | in-cluster wg-easy for the wizard's peer endpoints |
 | `ROOT_CA_PATH` | (empty) | the mounted root CA served by `GET /api/bootstrap/ca` |
 | `OPENBAO_SYSTEM_MOUNT` | `system` | KV v2 mount holding the onboarding record and `admin` |
+| `SETUP_CODE_FILE` | (empty) | the device's setup code from LibrePod OS (the sticker), the optional Secret `librepod-setup-code` mount. Unset or no file ⇒ a random code |
 | `BOOTSTRAP_MODE_OVERRIDE` | (empty) | **test seam only** (Tier 1): forces the onboarding state and skips record creation |
 | `OPENBAO_ADDR` | (empty) | settings store for install questions. Unset ⇒ installing an app that has `settings` returns 503; other apps are unaffected |
 | `OPENBAO_AUTH_MOUNT` | `kubernetes` | OpenBao Kubernetes auth mount |

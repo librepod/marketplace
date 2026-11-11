@@ -9,6 +9,19 @@ export function validPassword(p: string): boolean {
 /** Where the setup code is printed — any shell with kubectl access to the device. */
 export const SETUP_CODE_COMMAND = 'kubectl -n marketplace-ui logs deploy/marketplace-ui | grep "setup code"'
 
+let linkedCode: string | null = null
+
+/** The sticker's QR link carries the code as `#code=…`: a fragment never reaches a server,
+ *  so the code is in no access log. Run once at load, before the router reads the URL: the
+ *  code moves to memory for ClaimStep and off the address bar (history, shared links)
+ *  whichever screen the link lands on. history.state is kept — the router's index lives there. */
+export function takeCodeFromLink(): void {
+  linkedCode = new URLSearchParams(location.hash.slice(1)).get("code")
+  if (linkedCode !== null) history.replaceState(history.state, "", location.pathname + location.search)
+}
+
+export const codeFromLink = () => linkedCode
+
 export const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
 export interface PostResult {

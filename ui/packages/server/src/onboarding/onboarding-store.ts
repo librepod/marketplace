@@ -1,7 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OpenBaoCasMismatchError, OpenBaoClient } from '../installed/openbao.client';
-import { formatSetupCode, generateSetupCode } from './setup-code';
+import { formatSetupCode, generateSetupCode, isSetupCode, normalizeSetupCode } from './setup-code';
 
 export type StoredState = 'open' | 'claimed' | 'finished';
 
@@ -151,14 +152,16 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
     return true;
   }
 
-  /** `reset-onboarding` (spec §6): a new code, state open, generation + 1. Keeps the
-   * account; clears claimedAt/finishedAt. Also repairs a missing or malformed record.
-   * The operator's command wins whatever the record holds: no check-and-set. */
+  /** `reset-onboarding` (spec §6): a new code — or the device code, which never changes —
+   * state open, generation + 1. Keeps the account; clears claimedAt/finishedAt. Also
+   * repairs a missing or malformed record. The operator's command wins whatever the
+   * record holds: no check-and-set. */
   async reset(): Promise<string> {
+    const device = this.deviceCode();
     const old = (await this.bao.readEntry(this.mount, RECORD_PATH))?.data ?? {};
     const record: StoredRecord = {
       state: 'open',
-      code: generateSetupCode(),
+      code: device ?? generateSetupCode(),
       generation: (count(old.generation) ?? 0) + 1,
       account: text(old.account),
       accountGeneration: count(old.accountGeneration),
@@ -180,14 +183,33 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
     await this.bao.writeEntry(this.mount, ADMIN_PATH, { password }, opts);
   }
 
-  /** Reads the record, creating it when missing: open, a fresh code, generation 1.
-   * Check-and-set (cas 0), so two pods starting together cannot both create a code. */
+  /** Reads the record, creating it when missing: open, the device code or a fresh one,
+   * generation 1. Check-and-set (cas 0), so two pods starting together cannot both
+   * create a code. An open record takes the device code whenever it arrives — the pod
+   * may start before LibrePod OS published it — so an open device always answers to
+   * its sticker; a claimed or finished one is never changed, and never reads the file:
+   * a broken one must not lock out a device past the code step. */
   private async ensure(): Promise<OnboardingRecord> {
     const existing = await this.read();
-    if (existing) return existing;
+    if (existing && existing.state !== 'open') return existing;
+    const device = this.deviceCode();
+    if (existing) {
+      if (!device || existing.code === device) return existing;
+      try {
+        await this.save({ ...existing, code: device });
+      } catch (err) {
+        if (!(err instanceof OpenBaoCasMismatchError)) throw err;
+        // written meanwhile: answer with that; the next cache miss adopts again if still open
+        const current = await this.read();
+        if (!current) throw err;
+        return current;
+      }
+      this.logger.log("setup code is now the one printed on this device's sticker — a code logged or printed earlier no longer works");
+      return { ...existing, code: device, version: existing.version + 1 };
+    }
     const now = new Date().toISOString();
     const fresh: OnboardingRecord = {
-      state: 'open', code: generateSetupCode(), generation: 1, account: null, accountGeneration: null,
+      state: 'open', code: device ?? generateSetupCode(), generation: 1, account: null, accountGeneration: null,
       createdAt: now, claimedAt: null, finishedAt: null, version: 0,
     };
     try {
@@ -199,6 +221,27 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
       return winner;
     }
     return { ...fresh, version: 1 };
+  }
+
+  /** The code LibrePod OS provisioned for this device (printed on its sticker), from the
+   * optional Secret mount; null on any other cluster or before the Secret exists. A file
+   * that is not a setup code throws: a random code would silently stop matching the sticker.
+   * Sync: a few bytes of a Secret mount, read only while a code is being chosen or logged. */
+  private deviceCode(): string | null {
+    const file = this.config.get<string>('SETUP_CODE_FILE');
+    if (!file) return null;
+    let raw: string;
+    try {
+      raw = readFileSync(file, 'utf8');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw err;
+    }
+    const code = normalizeSetupCode(raw);
+    if (!isSetupCode(code)) {
+      throw new Error(`${file} is not a setup code — check Secret marketplace-ui/librepod-setup-code`);
+    }
+    return code;
   }
 
   private async read(): Promise<OnboardingRecord | null> {
@@ -222,6 +265,19 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
   }
 
   private logCode(code: string): void {
+    let sticker: boolean;
+    try {
+      sticker = code === this.deviceCode();
+    } catch {
+      sticker = true; // a broken file still means a LibrePod OS device: don't risk logging its code
+    }
+    if (sticker) {
+      // The sticker's code never changes, so a log line holding it would outlive every reset.
+      this.logger.log(
+        "LibrePod setup code: the one printed on this device's sticker (also in Secret marketplace-ui/librepod-setup-code) — open http://<this device's IP> to set up",
+      );
+      return;
+    }
     this.logger.log(
       `LibrePod setup code: ${formatSetupCode(code)} — open http://<this device's IP> to set up`,
     );

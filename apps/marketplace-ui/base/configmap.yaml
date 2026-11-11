@@ -41,3 +41,6 @@ data:
   # is a Tier-1 test seam only.
   OPENBAO_ADDR: "http://openbao.openbao.svc.cluster.local:8200"
   OPENBAO_KV_MOUNT: "apps"
+  # The device's setup code from LibrePod OS (the sticker), via the optional
+  # librepod-setup-code Secret mount. Missing file = generate one, as on any cluster.
+  SETUP_CODE_FILE: "/etc/librepod-setup-code/code"

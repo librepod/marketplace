@@ -43,6 +43,7 @@ function make(o: {
   vpn?: string | Error;
   peers?: WgPeer[] | Error;
   deviceIp?: string | Error;
+  baseDomain?: string;
 } = {}) {
   const value = <T>(v: T | Error): T => {
     if (v instanceof Error) throw v;
@@ -71,7 +72,7 @@ function make(o: {
     casdoor as unknown as CasdoorAdminService,
     wgEasy as unknown as WgEasyService,
     session,
-    new ConfigService({ BASE_DOMAIN: 'libre.pod' }),
+    new ConfigService({ BASE_DOMAIN: o.baseDomain ?? 'libre.pod' }),
     installed as unknown as InstalledService,
     nodeAddress as unknown as NodeAddressService,
   );
@@ -142,6 +143,22 @@ describe('BootstrapController.status', () => {
     for (const host of ['libre.pod', 'marketplace.libre.pod', 'localhost']) {
       expect((await controller.status(req(host))).arrival).toBe('domain');
     }
+  });
+
+  it("the device's mDNS name (LibrePod OS avahi, renamed -N on a LAN conflict) is an ip arrival", async () => {
+    const { controller } = make({ record: { ...claimed, state: 'open' } });
+    for (const host of ['librepod.local', 'librepod-2.local:80', 'LibrePod.local']) {
+      expect((await controller.status(req(host))).arrival).toBe('ip');
+    }
+    for (const host of ['marketplace.librepod.local', 'printer.local', 'librepod.local.example']) {
+      expect((await controller.status(req(host))).arrival).toBe('domain');
+    }
+  });
+
+  it('…unless it is the base domain (the k3d cluster serves librepod.local as its domain)', async () => {
+    const { controller } = make({ record: { ...claimed, state: 'open' }, baseDomain: 'LibrePod.local' });
+    // in any case: Traefik's !Host() is case-insensitive, so the route already sent it to the domain
+    expect((await controller.status(req('librepod.local'))).arrival).toBe('domain');
   });
 
   it('without the onboarding cookie: the state only — nothing read from the VPN', async () => {

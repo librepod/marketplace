@@ -14,6 +14,10 @@
 # everything); every named-host route keeps default rule-length priority
 # (<100) and still redirects to https. IPv4 only — IPv6 literal hosts
 # ([::1]) are not matched.
+#
+# The device's mDNS name is the same front door: LibrePod OS advertises
+# librepod.local (librepod-2.local for a second device on the LAN), which the
+# sticker's QR code lands on. Not where it is the cluster's own domain (k3d).
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -24,7 +28,7 @@ spec:
   - websecure
   routes:
   - kind: Rule
-    match: HostRegexp(`^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$`)
+    match: HostRegexp(`^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$`) || (HostRegexp(`^librepod(-[0-9]+)?\.local$`) && !Host(`${BASE_DOMAIN:=libre.pod}`))
     priority: 200
     services:
     - name: marketplace-ui

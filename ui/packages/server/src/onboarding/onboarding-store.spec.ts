@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OnboardingStore } from './onboarding-store';
@@ -265,6 +268,109 @@ describe('OnboardingStore', () => {
       expect(kv.get('system', RECORD)).toMatchObject({ state: 'open', code, generation: 2 });
       // and the next read is fresh, not the cached record for up to 5 s more
       expect((await store.record()).generation).toBe(2);
+    });
+  });
+
+  describe('a device code provisioned by LibrePod OS (SETUP_CODE_FILE — the sticker)', () => {
+    let dir: string;
+    let file: string;
+    const withDeviceCode = (kv = new FakeKv()) => makeStore(kv, { SETUP_CODE_FILE: file });
+
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), 'setup-code-'));
+      file = join(dir, 'code');
+    });
+    afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+    it('is the code of a new record, normalized (the Secret carries it as typed: dashes, a newline)', async () => {
+      writeFileSync(file, '7kqm-x3rt-9vhc\n');
+      expect((await withDeviceCode().store.record()).code).toBe('7KQMX3RT9VHC');
+    });
+
+    it('missing (another cluster, or the Secret not there yet) → a random code, as without LibrePod OS', async () => {
+      const { code } = await withDeviceCode().store.record();
+      expect(code).toMatch(new RegExp(`^[${SETUP_CODE_ALPHABET}]{12}$`));
+    });
+
+    it('an open record adopts it when it arrives later: an open device always answers to its sticker', async () => {
+      vi.useFakeTimers({ now: new Date('2026-11-10T10:00:00Z') });
+      const kv = new FakeKv();
+      const { store } = withDeviceCode(kv);
+      const before = await store.record();
+      writeFileSync(file, '7KQMX3RT9VHC');
+      vi.advanceTimersByTime(5_001);
+      const after = await store.record();
+      expect(after).toMatchObject({ state: 'open', code: '7KQMX3RT9VHC', generation: before.generation });
+      expect(kv.get('system', RECORD)).toMatchObject({ code: '7KQMX3RT9VHC' });
+      // the code logged before no longer works: say so
+      expect(log).toHaveBeenCalledWith(expect.stringMatching(/now the one printed on this device's sticker/));
+    });
+
+    it('adopting it loses a race with another write → answers with what is stored, no retry loop', async () => {
+      const kv = new FakeKv();
+      const { store } = withDeviceCode(kv);
+      await store.record();
+      writeFileSync(file, '7KQMX3RT9VHC');
+      // a reset by the CLI lands between our read and our adopting write
+      const read = kv.readEntry.bind(kv);
+      vi.spyOn(kv, 'readEntry').mockImplementationOnce(async (mount, path) => {
+        const before = await read(mount, path);
+        await kv.writeEntry(mount, path, { ...before!.data, code: 'RESETCODE234', generation: 2 });
+        return before;
+      });
+      vi.useFakeTimers({ now: Date.now() + 5_001 });
+      expect(await store.record()).toMatchObject({ code: 'RESETCODE234', generation: 2 });
+    });
+
+    it('is never written to the log — it never changes, and a log line would outlive every reset', async () => {
+      writeFileSync(file, '7KQMX3RT9VHC');
+      const { store } = withDeviceCode();
+      await store.start();
+      store.logSetupCode(await store.record());
+      const lines = log.mock.calls.map(([line]) => String(line));
+      expect(lines.some((l) => l.includes('7KQM'))).toBe(false);
+      expect(lines.filter((l) => /setup code: the one printed on this device's sticker/.test(l))).toHaveLength(2);
+    });
+
+    it('never changes the code of a claimed or finished record', async () => {
+      for (const state of ['claimed', 'finished'] as const) {
+        const kv = new FakeKv();
+        await kv.writeEntry('system', RECORD, {
+          state, code: 'OLDCODE23456', generation: 1, account: 'alex', accountGeneration: 1,
+          createdAt: 'a', claimedAt: 'c', finishedAt: state === 'finished' ? 'f' : null,
+        });
+        writeFileSync(file, '7KQMX3RT9VHC');
+        expect((await withDeviceCode(kv).store.record()).code).toBe('OLDCODE23456');
+      }
+    });
+
+    it('reset() goes back to it — the sticker never changes', async () => {
+      writeFileSync(file, '7KQMX3RT9VHC');
+      const { store } = withDeviceCode();
+      await store.save({ ...(await store.record()), state: 'finished', finishedAt: 'f' });
+      expect(await store.reset()).toBe('7KQMX3RT9VHC');
+    });
+
+    it('a file that is not a setup code is an error, never a random code that stops matching the sticker', async () => {
+      writeFileSync(file, 'not-a-code');
+      await expect(withDeviceCode().store.record()).rejects.toThrow(/not a setup code/);
+      await expect(withDeviceCode().store.reset()).rejects.toThrow(/not a setup code/);
+    });
+
+    it('…only where a code is chosen: a claimed or finished device never reads it, so it is never locked out', async () => {
+      writeFileSync(file, 'not-a-code');
+      for (const state of ['claimed', 'finished'] as const) {
+        const kv = new FakeKv();
+        await kv.writeEntry('system', RECORD, {
+          state, code: 'OLDCODE23456', generation: 1, account: 'alex', accountGeneration: 1,
+          createdAt: 'a', claimedAt: '2026-11-10T09:00:00.000Z', finishedAt: state === 'finished' ? 'f' : null,
+        });
+        const { store } = withDeviceCode(kv);
+        await store.start();
+        expect(store.knownFinished).toBe(state === 'finished');
+        expect((await store.record()).state).toBe(state);
+        if (state === 'claimed') expect(await store.finishIfClaimed('alex')).toBe(true);
+      }
     });
   });
 

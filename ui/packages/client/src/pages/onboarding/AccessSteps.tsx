@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { MIN_PASSWORD, SETUP_CODE_COMMAND, errorText, postJson, validPassword } from "./api"
+import { MIN_PASSWORD, SETUP_CODE_COMMAND, codeFromLink, errorText, postJson, validPassword } from "./api"
 
 /** Mirrors the server's username rule. */
 const USERNAME = /^(?=.{1,39}$)[a-z0-9]+([.-][a-z0-9]+)*$/
@@ -34,7 +34,8 @@ function SetupCodeField({ id, value, onChange }: { id: string; value: string; on
         autoCapitalize="characters" spellCheck={false} value={value} onChange={(e) => onChange(e.target.value)} />
       <details className="mt-2 text-xs text-muted-foreground">
         <summary className="cursor-pointer text-foreground">Where do I find it?</summary>
-        <p className="mt-2">It is printed in this device's log. On a computer with access to the device, run:</p>
+        <p className="mt-2">On a LibrePod device it is printed on the sticker.</p>
+        <p className="mt-2">Otherwise it is in this device's log. On a computer with access to the device, run:</p>
         <code className="mt-1 block break-all rounded bg-muted p-2">{SETUP_CODE_COMMAND}</code>
         <p className="mt-2">After <code>reset-onboarding</code>, use the code it printed instead.</p>
       </details>
@@ -73,7 +74,7 @@ function PasswordFields({ idPrefix, label, password, confirm, setPassword, setCo
 /** The setup code is the only claim credential. On a claimed device (another browser,
  *  or an expired setup cookie) the same code lets this browser back in. */
 export function ClaimStep({ resuming, onClaimed }: { resuming: boolean; onClaimed: () => void }) {
-  const [code, setCode] = useState("")
+  const [code, setCode] = useState(() => codeFromLink() ?? "")
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
