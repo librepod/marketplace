@@ -19,10 +19,12 @@ spec:
       labels:
         app.kubernetes.io/name: openbao
       annotations:
-        # Bump whenever an overlay policy .hcl changes: the Job spec is
-        # immutable, so this is what makes the apply recreate (force:true) and
-        # re-run the bootstrap, which re-applies policies idempotently.
-        openbao.librepod/policies-version: "6"
+        # Bump whenever an overlay policy .hcl OR a script in the
+        # openbao-bootstrap ConfigMap changes: the Job spec is immutable
+        # (and the ConfigMap's name hash is disabled precisely so script
+        # edits don't rewrite it), so this is what makes the apply recreate
+        # (force:true) and re-run the bootstrap, which is idempotent.
+        openbao.librepod/policies-version: "7"
     spec:
       restartPolicy: Never
       serviceAccountName: openbao-bootstrap
@@ -34,6 +36,13 @@ spec:
           env:
             - name: BAO_ADDR
               value: http://openbao.openbao.svc.cluster.local:8200
+            # Caps any single bao call so a blackholed connection cannot
+            # outlive the script's own wall-clock budget (which exists to
+            # beat this Job's terminal activeDeadlineSeconds). 30s: init
+            # writes to NFS-backed pebbledb and may legitimately take
+            # seconds; status polls are sub-second.
+            - name: BAO_CLIENT_TIMEOUT
+              value: 30s
           command: ["/bin/sh", "/bootstrap/bootstrap.sh"]
           volumeMounts:
             - name: bootstrap
