@@ -1,7 +1,7 @@
-import { useEffect, useState, type FormEvent } from "react"
+import { useState, type FormEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { MIN_PASSWORD, SETUP_CODE_COMMAND, errorText, postJson, validPassword } from "./api"
+import { MIN_PASSWORD, SETUP_CODE_COMMAND, codeFromLink, errorText, postJson, validPassword } from "./api"
 
 /** Mirrors the server's username rule. */
 const USERNAME = /^(?=.{1,39}$)[a-z0-9]+([.-][a-z0-9]+)*$/
@@ -71,18 +71,10 @@ function PasswordFields({ idPrefix, label, password, confirm, setPassword, setCo
   )
 }
 
-/** The sticker's QR link carries the code as `#code=…`: a fragment never reaches a server,
- *  so the code is in no access log. */
-const codeInLink = () => new URLSearchParams(window.location.hash.slice(1)).get("code")
-
 /** The setup code is the only claim credential. On a claimed device (another browser,
  *  or an expired setup cookie) the same code lets this browser back in. */
 export function ClaimStep({ resuming, onClaimed }: { resuming: boolean; onClaimed: () => void }) {
-  const [code, setCode] = useState(() => codeInLink() ?? "")
-  // Taken into the field once; off the address bar so it isn't left in history or shared.
-  useEffect(() => {
-    if (codeInLink() !== null) history.replaceState(null, "", location.pathname + location.search)
-  }, [])
+  const [code, setCode] = useState(() => codeFromLink() ?? "")
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { render, screen, fireEvent } from "@testing-library/react"
 import { AccountStep, ClaimStep, WelcomeStep } from "@/pages/onboarding/AccessSteps"
+import { takeCodeFromLink } from "@/pages/onboarding/api"
 
 function jsonResponse(status: number, body: unknown) {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as Response
@@ -55,16 +56,19 @@ describe("ClaimStep", () => {
     expect(screen.getByRole("button", { name: /continue/i })).toBeVisible()
   })
 
-  it("takes the code from the sticker's link (#code=) and drops it from the address bar", () => {
-    window.history.replaceState(null, "", "/?x=1#code=7kqm-x3rt-9vhc")
-    render(<ClaimStep resuming={false} onClaimed={vi.fn()} />)
-    expect(screen.getByLabelText("Setup code")).toHaveValue("7kqm-x3rt-9vhc")
+  it("takes the code from the sticker's link (#code=), off the address bar and keeping the router's history state", () => {
+    window.history.replaceState({ idx: 0, key: "k" }, "", "/?x=1#code=7kqm-x3rt-9vhc")
+    takeCodeFromLink()
     expect(window.location.hash).toBe("")
     expect(window.location.search).toBe("?x=1")
+    expect(window.history.state).toEqual({ idx: 0, key: "k" })
+    render(<ClaimStep resuming={false} onClaimed={vi.fn()} />)
+    expect(screen.getByLabelText("Setup code")).toHaveValue("7kqm-x3rt-9vhc")
   })
 
   it("starts empty without a link", () => {
     window.history.replaceState(null, "", "/")
+    takeCodeFromLink()
     render(<ClaimStep resuming={false} onClaimed={vi.fn()} />)
     expect(screen.getByLabelText("Setup code")).toHaveValue("")
   })

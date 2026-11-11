@@ -156,7 +156,8 @@ describe('BootstrapController.status', () => {
   });
 
   it('…unless it is the base domain (the k3d cluster serves librepod.local as its domain)', async () => {
-    const { controller } = make({ record: { ...claimed, state: 'open' }, baseDomain: 'librepod.local' });
+    const { controller } = make({ record: { ...claimed, state: 'open' }, baseDomain: 'LibrePod.local' });
+    // in any case: Traefik's !Host() is case-insensitive, so the route already sent it to the domain
     expect((await controller.status(req('librepod.local'))).arrival).toBe('domain');
   });
 

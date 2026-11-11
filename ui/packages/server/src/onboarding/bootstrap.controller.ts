@@ -50,7 +50,7 @@ const MDNS_NAME = /^librepod(-[0-9]+)?\.local$/i;
 /** Reached the way a fresh device is — its IP or its mDNS name — rather than the domain.
  * The mDNS name is the domain where a cluster uses it as BASE_DOMAIN (k3d). */
 const isLanArrival = (host: string, baseDomain: string) =>
-  IPV4.test(host) || isIpv6(host) || (MDNS_NAME.test(host) && host.toLowerCase() !== baseDomain);
+  IPV4.test(host) || isIpv6(host) || (MDNS_NAME.test(host) && host.toLowerCase() !== baseDomain.toLowerCase());
 
 /** An IP literal another device could dial: not loopback, link-local or unspecified. */
 function dialable(host: string): boolean {
@@ -109,7 +109,8 @@ export class BootstrapController {
     // cookie (Secure, bound to the domain).
     const sso = this.session.verify(cookies?.[SESSION_COOKIE]);
     if (sso && sso.sub !== 'onboarding') {
-      // Retries the SSO callback's finish write if it failed — the only write in a GET.
+      // Retries the SSO callback's finish write if it failed. A GET's other write: record()
+      // creating the record, or an open one adopting the sticker's code.
       void this.store
         .finishIfClaimed(sso.name, sso.iat * 1000)
         .catch((err: Error) => this.logger.warn(`finishing onboarding failed: ${err.message}`));

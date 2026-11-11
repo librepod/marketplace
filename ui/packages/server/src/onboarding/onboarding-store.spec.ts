@@ -302,6 +302,34 @@ describe('OnboardingStore', () => {
       const after = await store.record();
       expect(after).toMatchObject({ state: 'open', code: '7KQMX3RT9VHC', generation: before.generation });
       expect(kv.get('system', RECORD)).toMatchObject({ code: '7KQMX3RT9VHC' });
+      // the code logged before no longer works: say so
+      expect(log).toHaveBeenCalledWith(expect.stringMatching(/now the one printed on this device's sticker/));
+    });
+
+    it('adopting it loses a race with another write → answers with what is stored, no retry loop', async () => {
+      const kv = new FakeKv();
+      const { store } = withDeviceCode(kv);
+      await store.record();
+      writeFileSync(file, '7KQMX3RT9VHC');
+      // a reset by the CLI lands between our read and our adopting write
+      const read = kv.readEntry.bind(kv);
+      vi.spyOn(kv, 'readEntry').mockImplementationOnce(async (mount, path) => {
+        const before = await read(mount, path);
+        await kv.writeEntry(mount, path, { ...before!.data, code: 'RESETCODE234', generation: 2 });
+        return before;
+      });
+      vi.useFakeTimers({ now: Date.now() + 5_001 });
+      expect(await store.record()).toMatchObject({ code: 'RESETCODE234', generation: 2 });
+    });
+
+    it('is never written to the log — it never changes, and a log line would outlive every reset', async () => {
+      writeFileSync(file, '7KQMX3RT9VHC');
+      const { store } = withDeviceCode();
+      await store.start();
+      store.logSetupCode(await store.record());
+      const lines = log.mock.calls.map(([line]) => String(line));
+      expect(lines.some((l) => l.includes('7KQM'))).toBe(false);
+      expect(lines.filter((l) => /setup code: the one printed on this device's sticker/.test(l))).toHaveLength(2);
     });
 
     it('never changes the code of a claimed or finished record', async () => {
@@ -327,6 +355,22 @@ describe('OnboardingStore', () => {
       writeFileSync(file, 'not-a-code');
       await expect(withDeviceCode().store.record()).rejects.toThrow(/not a setup code/);
       await expect(withDeviceCode().store.reset()).rejects.toThrow(/not a setup code/);
+    });
+
+    it('…only where a code is chosen: a claimed or finished device never reads it, so it is never locked out', async () => {
+      writeFileSync(file, 'not-a-code');
+      for (const state of ['claimed', 'finished'] as const) {
+        const kv = new FakeKv();
+        await kv.writeEntry('system', RECORD, {
+          state, code: 'OLDCODE23456', generation: 1, account: 'alex', accountGeneration: 1,
+          createdAt: 'a', claimedAt: '2026-11-10T09:00:00.000Z', finishedAt: state === 'finished' ? 'f' : null,
+        });
+        const { store } = withDeviceCode(kv);
+        await store.start();
+        expect(store.knownFinished).toBe(state === 'finished');
+        expect((await store.record()).state).toBe(state);
+        if (state === 'claimed') expect(await store.finishIfClaimed('alex')).toBe(true);
+      }
     });
   });
 
