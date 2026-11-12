@@ -44,8 +44,9 @@ function hostOf(req: Request): string {
 }
 
 const isIpv6 = (host: string) => host.includes(':') && IPV6.test(host);
-/** The device's mDNS name (LibrePod OS avahi); a second LibrePod on the LAN gets librepod-2.local. */
-const MDNS_NAME = /^librepod(-[0-9]+)?\.local$/i;
+/** The device's mDNS name: LibrePod OS avahi publishes <device name>.local. Any single label —
+ * the raw IP already serves anyone, whatever Host they send, so this grants nothing new. */
+const MDNS_NAME = /^[a-z0-9-]+\.local$/i;
 
 /** Reached the way a fresh device is — its IP or its mDNS name — rather than the domain.
  * The mDNS name is the domain where a cluster uses it as BASE_DOMAIN (k3d). */

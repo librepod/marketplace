@@ -165,7 +165,7 @@ frpc — temporarily removed from system apps; requires FRP auth token that shou
 
 A fresh LibrePod is set up from a browser, on the device's own address. Once the
 system apps are up, open `http://<device-ip>` — on a LibrePod OS device,
-`http://librepod.local` works too.
+`http://<device-name>.local` works too.
 
 1. **Get the setup code.** Only someone with access to the device can read it —
    that is what makes you the owner. On a LibrePod OS device it is printed on

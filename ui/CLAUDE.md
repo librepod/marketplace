@@ -297,8 +297,8 @@ account password is the only human credential.
   chosen (an open device reads `waiting`, `reset-onboarding` fails) — never a random code that stops
   matching the sticker. The sticker's code is printed, so it never changes: it is never logged (the
   log line points at the sticker). Absent file = any other cluster, behaviour as before.
-- **LAN arrival:** `librepod.local` / `librepod-N.local` (the OS's avahi name) count as `arrival: 'ip'`,
-  and `ingressroute-ip.yaml` routes them — except where that name is `BASE_DOMAIN` (k3d).
+- **LAN arrival:** any single-label `<name>.local` (the OS's avahi name is the device name) counts as
+  `arrival: 'ip'`, and `ingressroute-ip.yaml` routes it — except where that name is `BASE_DOMAIN` (k3d).
 - `BOOTSTRAP_MODE_OVERRIDE` forces the state (Tier 1: `finished`) and skips record creation.
 
 ### Catalog (`CatalogService`)

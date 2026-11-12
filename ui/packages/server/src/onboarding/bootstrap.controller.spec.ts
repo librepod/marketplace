@@ -145,12 +145,12 @@ describe('BootstrapController.status', () => {
     }
   });
 
-  it("the device's mDNS name (LibrePod OS avahi, renamed -N on a LAN conflict) is an ip arrival", async () => {
+  it("the device's mDNS name (LibrePod OS avahi: <device name>.local) is an ip arrival", async () => {
     const { controller } = make({ record: { ...claimed, state: 'open' } });
-    for (const host of ['librepod.local', 'librepod-2.local:80', 'LibrePod.local']) {
+    for (const host of ['librepod.local', 'kitchen-pod.local:80', 'LibrePod-2.local']) {
       expect((await controller.status(req(host))).arrival).toBe('ip');
     }
-    for (const host of ['marketplace.librepod.local', 'printer.local', 'librepod.local.example']) {
+    for (const host of ['marketplace.librepod.local', 'librepod.local.example']) {
       expect((await controller.status(req(host))).arrival).toBe('domain');
     }
   });
