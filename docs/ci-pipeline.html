@@ -97,7 +97,7 @@
 
     <section>
       <p class="eyebrow">01 · Our own products</p>
-      <h2>publish-&lt;product&gt; builds, release-&lt;product&gt; versions</h2>
+      <h2>publish-&lt;product&gt; builds, a release workflow versions</h2>
       <div class="diagram-container">
         <svg viewBox="0 0 1280 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="ci-products-title ci-products-desc">
           <title id="ci-products-title">Release model for self-built products</title>
@@ -178,7 +178,7 @@
             <rect x="608" y="100" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
             <text x="620" y="109" text-anchor="middle" font-size="7" letter-spacing="0.08em" fill="rgba(45,49,66,0.8)">CUT</text>
             <text x="720" y="128" text-anchor="middle" font-family="'Geist', system-ui, sans-serif" font-size="12" font-weight="600" fill="#2d3142">Cut release</text>
-            <text x="720" y="146" text-anchor="middle" font-size="9" fill="#4f5d75">release-marketplace-ui</text>
+            <text x="720" y="146" text-anchor="middle" font-size="9" fill="#4f5d75">release-self-built</text>
             <text x="720" y="160" text-anchor="middle" font-size="9" fill="#5a6580">patch|minor → release PR</text>
 
             <!-- marketplace-ui · publish -->
@@ -186,7 +186,7 @@
             <rect x="968" y="100" width="44" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
             <text x="990" y="109" text-anchor="middle" font-size="7" letter-spacing="0.08em" fill="rgba(45,49,66,0.8)">RELEASE</text>
             <text x="1080" y="128" text-anchor="middle" font-family="'Geist', system-ui, sans-serif" font-size="12" font-weight="600" fill="#2d3142">Publish release</text>
-            <text x="1080" y="146" text-anchor="middle" font-size="9" fill="#4f5d75">release-marketplace-ui</text>
+            <text x="1080" y="146" text-anchor="middle" font-size="9" fill="#4f5d75">release-self-built</text>
             <text x="1080" y="160" text-anchor="middle" font-size="9" fill="#5a6580">:X.Y.Z image + manifest · git tag</text>
 
             <!-- casdoor-sso-controller · dev builds -->
@@ -202,7 +202,7 @@
             <rect x="608" y="220" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
             <text x="620" y="229" text-anchor="middle" font-size="7" letter-spacing="0.08em" fill="rgba(45,49,66,0.8)">CUT</text>
             <text x="720" y="248" text-anchor="middle" font-family="'Geist', system-ui, sans-serif" font-size="12" font-weight="600" fill="#2d3142">Cut release</text>
-            <text x="720" y="266" text-anchor="middle" font-size="9" fill="#4f5d75">release-casdoor-sso-controller</text>
+            <text x="720" y="266" text-anchor="middle" font-size="9" fill="#4f5d75">release-self-built</text>
             <text x="720" y="280" text-anchor="middle" font-size="9" fill="#5a6580">patch|minor → release PR</text>
 
             <!-- casdoor-sso-controller · publish -->
@@ -210,7 +210,7 @@
             <rect x="968" y="220" width="44" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
             <text x="990" y="229" text-anchor="middle" font-size="7" letter-spacing="0.08em" fill="rgba(45,49,66,0.8)">RELEASE</text>
             <text x="1080" y="248" text-anchor="middle" font-family="'Geist', system-ui, sans-serif" font-size="12" font-weight="600" fill="#2d3142">Publish release</text>
-            <text x="1080" y="266" text-anchor="middle" font-size="9" fill="#4f5d75">release-casdoor-sso-controller</text>
+            <text x="1080" y="266" text-anchor="middle" font-size="9" fill="#4f5d75">release-self-built</text>
             <text x="1080" y="280" text-anchor="middle" font-size="9" fill="#5a6580">:X.Y.Z image + manifest · git tag</text>
 
             <!-- bootstrap · dev builds -->
@@ -244,7 +244,8 @@
         </svg>
       </div>
       <p class="note">Same shape for all three products: <code>publish-&lt;product&gt;</code> never writes a version,
-        and <code>release-&lt;product&gt;</code> is the only writer of <code>:X.Y.Z</code> and of the
+        and a release workflow (<code>release-self-built</code> for the two apps, <code>release-bootstrap</code>)
+        is the only writer of <code>:X.Y.Z</code> and of the
         <code>&lt;product&gt;-vX.Y.Z</code> git tag, which lands on the master commit once the artifacts are
         signed. Bootstrap has no release PR because its version lives only in git tags. A release PR also bumps
         <code>infrastructure/system-apps/&lt;app&gt;.yaml</code>, so its merge fires publish-bootstrap too, and the
@@ -359,9 +360,8 @@
           <tbody>
             <tr class="group"><th colspan="3">Our own products · publish = dev tags, release = versions</th></tr>
             <tr><td>publish-marketplace-ui</td><td>PR, merge (<code>ui/**</code>)</td><td>Image <code>:pr-N</code>; on master <code>:latest</code> + <code>:&lt;sha&gt;</code></td></tr>
-            <tr><td>release-marketplace-ui</td><td>dispatch (cut) · release PR merge (publish)</td><td>Cut: bumps <code>ui/package.json</code> and the three pins in a release PR. Publish: <code>:X.Y.Z</code> image + manifest, git tag <code>marketplace-ui-vX.Y.Z</code></td></tr>
             <tr><td>publish-casdoor-sso-controller</td><td>PR, merge (<code>casdoor-sso-controller/**</code>)</td><td>Go tests, then image <code>:pr-N</code>; on master <code>:latest</code> + <code>:&lt;sha&gt;</code></td></tr>
-            <tr><td>release-casdoor-sso-controller</td><td>dispatch (cut) · release PR merge (publish)</td><td>Same as the UI, with the Makefile <code>VERSION</code> as the code version; git tag <code>casdoor-sso-controller-vX.Y.Z</code></td></tr>
+            <tr><td>release-self-built</td><td>dispatch (cut) · release PR merge (publish)</td><td>Cut (pick the app): bumps its code version (<code>ui/package.json</code> or the Makefile <code>VERSION</code>) and the three pins in a release PR. Publish: <code>:X.Y.Z</code> image + manifest, git tag <code>&lt;app&gt;-vX.Y.Z</code></td></tr>
             <tr><td>publish-bootstrap</td><td>PR, merge (<code>clusters/**</code>, <code>infrastructure/**</code>)</td><td>Artifact <code>:pr-N</code>; on master <code>:latest</code> + <code>:0.0.0-&lt;sha&gt;</code>, then calls release-bootstrap</td></tr>
             <tr><td>release-bootstrap</td><td>called by publish-bootstrap · dispatch</td><td>Version from the pin diff since the last tag; <code>:X.Y.Z</code> artifact, git tag <code>marketplace-bootstrap-vX.Y.Z</code></td></tr>
             <tr class="group"><th colspan="3">App artifacts</th></tr>
@@ -371,7 +371,7 @@
             <tr class="group"><th colspan="3">Checks · publish nothing</th></tr>
             <tr><td>validate-apps</td><td>PR (<code>apps/**</code>, <code>components/**</code>)</td><td>Kustomize build + kubeconform</td></tr>
             <tr><td>ui-e2e</td><td>PR (<code>ui/**</code>)</td><td>Tier 1 Playwright</td></tr>
-            <tr><td>ui-e2e-cluster</td><td>nightly, merge (UI and k3d cluster paths)</td><td>Tier 2 on a k3d cluster</td></tr>
+            <tr><td>ui-e2e-cluster</td><td>nightly, merge (UI and k3d cluster paths)</td><td>Tier 2 on a k3d cluster, running this commit's UI image</td></tr>
             <tr><td>ai-review</td><td><code>@askserge</code> comment</td><td>AI review of the PR</td></tr>
             <tr class="group"><th colspan="3">Housekeeping</th></tr>
             <tr><td>renovate</td><td>cron, weekdays</td><td>Dependency bump PRs</td></tr>

@@ -627,13 +627,14 @@ spec:
 > **`:<version>` tags are immutable; only a release writes them.** Master merges
 > publish the image as `:latest` + `:<git sha>` and the manifest as `:latest`,
 > so editing `ui/`, `casdoor-sso-controller/` or `apps/<name>/` never changes
-> what a pinned cluster runs. Each app has one `release-<name>` workflow, the
-> only writer of its versions. Dispatch it (patch|minor) to cut a PR from a
+> what a pinned cluster runs. The `release-self-built` workflow is the only
+> writer of their versions. Dispatch it (app, patch|minor) to cut a PR from a
 > `release/<name>-vX.Y.Z` branch that bumps the product version and every pin
 > together; merging that PR builds the `:X.Y.Z` image and manifest from the
 > merge commit and git-tags it `<name>-vX.Y.Z` (refusing mismatched pins or an
 > already-released version). To test before releasing, use the `pr-<N>` or
-> `:<git sha>` image.
+> `:<git sha>` image. Renovate does not track them (no `# renovate:` annotation):
+> the release PR moves every pin.
 
 **Key points about `metadata.yaml`:**
 - `templates.source` — the OCIRepository FluxCD creates to pull the app artifact

@@ -2,8 +2,8 @@ name: Publish Casdoor SSO Controller
 
 # Dev builds of the casdoor-sso-controller IMAGE: tests on every PR and merge,
 # then every PR -> :pr-N, every master merge -> :latest + :<sha>. Never a
-# version: release-casdoor-sso-controller is the only writer of :X.Y.Z (issue
-# #361). The manifest artifact's :latest comes from publish-apps.yaml.
+# version: release-self-built is the only writer of :X.Y.Z (issue #361).
+# The manifest artifact's :latest comes from publish-apps.yaml.
 
 on:
   push:
@@ -71,7 +71,7 @@ jobs:
   # Publish a PR-tagged image for branch/PR testing. Unsigned by design: the dev
   # cluster runs no image-signature admission controller, so signing is unenforced
   # here and would only slow the PR run. Master tags (:latest, :<sha>) are
-  # key-signed by build-and-sign; the released :<version> by release-casdoor-sso-controller.
+  # key-signed by build-and-sign; the released :<version> by release-self-built.
   build-pr:
     needs: test
     if: github.event_name == 'pull_request'

@@ -4,7 +4,7 @@
 # tag on the release commit. This is the ONLY writer of those version tags;
 # master merges publish :latest / :<sha> only, so a released version never
 # changes under a pinned cluster (issue #361). Called by the publish job of
-# .github/workflows/release-<app>.yaml when a release PR merges.
+# .github/workflows/release-self-built.yaml when a release PR merges.
 #
 #   bash scripts/publish-release.sh release/<app>-v<X.Y.Z> [--push]
 #

@@ -1,7 +1,7 @@
 name: Publish Marketplace UI
 
 # Dev builds of the marketplace-ui IMAGE (source: ui/): every PR -> :pr-N,
-# every master merge -> :latest + :<sha>. Never a version: release-marketplace-ui
+# every master merge -> :latest + :<sha>. Never a version: release-self-built
 # is the only writer of :X.Y.Z, so a pinned cluster never gets unreleased code
 # (issue #361). The manifest artifact's :latest (source: apps/marketplace-ui/)
 # comes from publish-apps.yaml, which avoids a duplicate push + cosign 409.

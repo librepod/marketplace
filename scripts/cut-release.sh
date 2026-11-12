@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-click release cut for a self-built app: bump its code version and its
 # three pins, commit, and open a release PR. Called by the cut job of
-# .github/workflows/release-<app>.yaml (--pr) and runnable locally for testing.
+# .github/workflows/release-self-built.yaml (--pr) and runnable locally for testing.
 #
 #   bash scripts/cut-release.sh <marketplace-ui|casdoor-sso-controller> <patch|minor> [--pr]
 #
@@ -9,7 +9,7 @@
 # `git diff`, then `git checkout -- .` to discard. With --pr, commits
 # "release(<app>): vX.Y.Z" on a release/<app>-vX.Y.Z branch, pushes it, and
 # opens a PR against master (master is protected; the merge IS the release —
-# it fires release-<app>'s publish job, the sole writer of the :X.Y.Z image,
+# it fires release-self-built's publish job, the sole writer of the :X.Y.Z image,
 # manifest and <app>-vX.Y.Z git tag, and publish-bootstrap).
 #
 # Refuses to cut if the target version is already released (git-tagged), if a
@@ -111,4 +111,4 @@ git commit -m "release($APP): v$NEXT"
 git push origin "$BRANCH"
 gh pr create --base master --head "$BRANCH" \
   --title "release($APP): v$NEXT" \
-  --body "Merging bumps $APP's code version and pins to $NEXT. The merge runs release-$APP's publish job (the only writer of the \`:$NEXT\` image + manifest and the \`$APP-v$NEXT\` git tag) and publish-bootstrap."
+  --body "Merging bumps $APP's code version and pins to $NEXT. The merge runs release-self-built's publish job (the only writer of the \`:$NEXT\` image + manifest and the \`$APP-v$NEXT\` git tag) and publish-bootstrap."
