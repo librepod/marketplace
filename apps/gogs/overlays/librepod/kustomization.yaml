@@ -10,7 +10,7 @@ resources:
 
 images:
 - name: gogs/gogs
-  newTag: 0.14.3
+  newTag: 0.14.4
 # - name: postgres
 #   newTag: "16-alpine"
 
