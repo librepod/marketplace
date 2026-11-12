@@ -44,3 +44,58 @@ spec:
     # - name: init-data
     #   configMap:
     #     name: init-data
+
+  # Upstream chart (casdoor-helm-charts 3.106.0) ships a bare livenessProbe
+  # (GET /, kube defaults: no delay, timeoutSeconds 1) that kills the container
+  # ~30s in — mid-first-start-init. Casdoor creates the `built-in` org first;
+  # once it exists, later starts skip the rest of init, leaving the DB
+  # permanently without app-built-in/admin user/certs and crashlooping
+  # casdoor-sso-controller's bootstrap (issue #366). It also false-kills under
+  # load (issue #273). Upstream fixed this with a startup probe + /api/health
+  # (casdoor/casdoor@6121c737), but no released chart carries it yet; this
+  # postRender patch reproduces that fix's exact shape. DELETE this whole
+  # postRenderers block when the pinned chart ships it natively.
+  # /api/health is anonymous-200 on casdoor 3.106.0 (verified on a live
+  # deployment). NB: the container is chart-hardcoded "casdoor-helm-charts";
+  # a postRender patch that stops matching is silently ignored, so re-check
+  # this on every chart bump.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+              name: casdoor
+            patch: |-
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: casdoor
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: casdoor-helm-charts
+                        # Holds liveness+readiness off until first-start init
+                        # (org/app/admin/cert seeding on a fresh SQLite DB over
+                        # NFS) completes: budget 10s x 30 = 5 min.
+                        startupProbe:
+                          httpGet:
+                            path: /api/health
+                            port: http
+                          periodSeconds: 10
+                          timeoutSeconds: 5
+                          failureThreshold: 30
+                        livenessProbe:
+                          httpGet:
+                            path: /api/health
+                            port: http
+                          periodSeconds: 10
+                          timeoutSeconds: 5
+                          failureThreshold: 3
+                        readinessProbe:
+                          httpGet:
+                            path: /api/health
+                            port: http
+                          periodSeconds: 10
+                          timeoutSeconds: 5
+                          failureThreshold: 3
