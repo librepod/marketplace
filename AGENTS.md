@@ -58,7 +58,7 @@ boundaries, and inline bash cannot be tested without pushing to CI.
 - Destructive actions (push, dispatch, publish) are opt-in flags (`--push`) so
   the default invocation is a safe local dry run.
 
-Existing examples: `release-marketplace-ui.sh` + `test-release-marketplace-ui.sh`,
+Existing examples: `cut-release.sh` + `test-cut-release.sh`,
 `generate-catalog.sh` + `test-generate-catalog.sh`.
 
 Keep in YAML only what YAML must hold: step names, `env:` wiring, permissions,

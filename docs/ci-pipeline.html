@@ -9,8 +9,10 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
       --color-paper:   #f5f5f5;
+      --color-paper-2: #ececec;
       --color-ink:     #2d3142;
       --color-muted:   #4f5d75;
+      --color-rule:    rgba(45,49,66,0.12);
       --color-accent:  #bf4520;
       --font-sans:     'Geist', system-ui, sans-serif;
       --font-serif:    'Instrument Serif', serif;
@@ -22,11 +24,10 @@
       color: var(--color-ink);
       min-height: 100vh;
       display: flex;
-      align-items: center;
       justify-content: center;
-      padding: 3rem 2rem;
+      padding: 3rem 1rem;
     }
-    .frame { max-width: 1200px; width: 100%; }
+    .frame { max-width: 1280px; width: 100%; }
     .diagram-container { width: 100%; overflow-x: auto; }
     .eyebrow {
       font-family: var(--font-mono);
@@ -43,10 +44,43 @@
       font-weight: 400;
       letter-spacing: -0.02em;
       line-height: 1.15;
-      color: var(--color-ink);
-      margin-bottom: 1.5rem;
+      margin-bottom: 0.75rem;
     }
-    svg { width: 100%; min-width: 1064px; display: block; }
+    h2 {
+      font-family: var(--font-serif);
+      font-size: 1.4rem;
+      font-weight: 400;
+      letter-spacing: -0.01em;
+      margin-bottom: 1rem;
+    }
+    section { margin-top: 3rem; }
+    p.lede, p.note { color: var(--color-muted); line-height: 1.55; max-width: 72ch; }
+    p.lede { font-size: 0.95rem; }
+    p.note { font-size: 0.85rem; margin-top: 1rem; }
+    code { font-family: var(--font-mono); font-size: 0.92em; }
+    svg { width: 100%; min-width: 1280px; display: block; }
+    .table-wrap {
+      overflow-x: auto;
+      background: #ffffff;
+      border: 1px solid var(--color-rule);
+      border-radius: 6px;
+    }
+    table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 0.82rem; line-height: 1.45; }
+    th, td { text-align: left; vertical-align: top; padding: 0.55rem 0.9rem; border-top: 1px solid var(--color-rule); }
+    thead th, tr.group th {
+      font-family: var(--font-mono);
+      font-size: 0.62rem;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+    }
+    thead th { border-top: none; }
+    tr.group th { background: var(--color-paper-2); }
+    td:first-child { white-space: nowrap; font-family: var(--font-mono); font-weight: 500; }
+    td { color: var(--color-muted); }
+    td:first-child { color: var(--color-ink); }
+    td code { white-space: nowrap; }
     @media print {
       .diagram-container { overflow-x: visible; }
       svg { min-width: 0; }
@@ -57,262 +91,295 @@
   <div class="frame">
     <p class="eyebrow">CI/CD · LibrePod Marketplace</p>
     <h1>How a merge becomes a release</h1>
+    <p class="lede">Two kinds of things ship from this repo. The products we build ourselves get a
+      version from their release workflow and nowhere else. App artifacts for upstream
+      software publish on every merge.</p>
 
-    <div class="diagram-container">
-      <svg viewBox="0 0 1064 596" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="ci-pipeline-title ci-pipeline-desc">
-        <title id="ci-pipeline-title">LibrePod Marketplace CI/CD pipeline</title>
-        <desc id="ci-pipeline-desc">A swimlane process map showing manual, pull-request, merge, and scheduled trigger lanes feeding PR gates, then fanning out into image builds and artifact publishes that converge in the catalog and ship through GHCR to Flux clusters.</desc>
-        <defs>
-          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
-          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#bf4520"/></marker>
-          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker>
-          <marker id="arrow-sm" markerWidth="6" markerHeight="5" refX="5" refY="2.5" orient="auto"><polygon points="0 0, 6 2.5, 0 5" fill="#4f5d75"/></marker>
-          <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
-            <circle cx="11" cy="11" r="0.8" fill="rgba(45,49,66,0.10)"/>
-          </pattern>
-        </defs>
+    <section>
+      <p class="eyebrow">01 · Our own products</p>
+      <h2>publish-&lt;product&gt; builds, a release workflow versions</h2>
+      <div class="diagram-container">
+        <svg viewBox="0 0 1280 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="ci-products-title ci-products-desc">
+          <title id="ci-products-title">Release model for self-built products</title>
+          <desc id="ci-products-desc">For marketplace-ui, casdoor-sso-controller and bootstrap, a publish workflow writes only mutable dev tags on every PR and merge, while a release workflow is the only writer of the X.Y.Z version tags: for the two apps it cuts a release PR on dispatch and publishes when that PR merges; for bootstrap it runs automatically after every infrastructure merge.</desc>
+          <defs>
+            <marker id="p-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+          </defs>
 
-        <!-- ground -->
-        <rect width="100%" height="100%" fill="#f5f5f5"/>
-        <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/>
+          <rect width="100%" height="100%" fill="#f5f5f5"/>
 
-        <!-- alternating lane tints: lanes 0, 2, 4 -->
-        <rect x="140" y="36"  width="924" height="80" fill="rgba(45,49,66,0.018)"/>
-        <rect x="140" y="196" width="924" height="80" fill="rgba(45,49,66,0.018)"/>
-        <rect x="140" y="356" width="924" height="80" fill="rgba(45,49,66,0.018)"/>
+          <!-- lane tint (middle lane) and the focal band: the only writer of :X.Y.Z -->
+          <rect x="200" y="192" width="1080" height="120" fill="rgba(45,49,66,0.018)"/>
+          <rect x="936" y="20" width="288" height="412" fill="rgba(191,69,32,0.06)"/>
 
-        <!-- lane dividers + label column border -->
-        <g stroke="rgba(45,49,66,0.12)" stroke-width="0.8">
-          <line x1="0" y1="36"  x2="1064" y2="36"/>
-          <line x1="0" y1="116" x2="1064" y2="116"/>
-          <line x1="0" y1="196" x2="1064" y2="196"/>
-          <line x1="0" y1="276" x2="1064" y2="276"/>
-          <line x1="0" y1="356" x2="1064" y2="356"/>
-          <line x1="0" y1="436" x2="1064" y2="436"/>
-          <line x1="0" y1="516" x2="1064" y2="516"/>
-        </g>
-        <line x1="140" y1="36" x2="140" y2="516" stroke="rgba(45,49,66,0.20)" stroke-width="1"/>
-
-        <!-- ── arrows (before nodes) ───────────────────────────── -->
-
-        <!-- trigger: release PR enters the PR lane -->
-        <path d="M 248,76 H 302 Q 310,76 310,84 V 123" fill="none"
-              stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow-sm)"/>
-        <!-- trigger: renovate dependency PRs enter the PR lane -->
-        <path d="M 248,396 H 302 Q 310,396 310,388 V 189" fill="none"
-              stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow-sm)"/>
-
-        <!-- merge fan-out: PR gates fire builds, app publishes, bootstrap track -->
-        <path d="M 260,172 H 414 Q 422,172 422,180 V 203" fill="none"
-              stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
-        <path d="M 260,156 H 510 Q 518,156 518,164 V 203" fill="none"
-              stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
-        <path d="M 260,140 H 734 Q 742,140 742,148 V 283" fill="none"
-              stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
-
-        <!-- guard: publish-apps waits on the images -->
-        <line x1="472" y1="236" x2="483" y2="236" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
-
-        <!-- focal-in: workflow_run fan-in -->
-        <line x1="584" y1="236" x2="595" y2="236" stroke="#bf4520" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
-
-        <!-- focal-out: catalog artifact ships -->
-        <path d="M 696,236 H 882 Q 890,236 890,244 V 443" fill="none"
-              stroke="#bf4520" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
-
-        <!-- bootstrap artifacts ship -->
-        <path d="M 808,316 H 842 Q 850,316 850,324 V 443" fill="none"
-              stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
-
-        <!-- flux reconciles -->
-        <line x1="920" y1="476" x2="931" y2="476" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
-
-        <!-- ── step header chips ───────────────────────────────── -->
-        <g font-family="'Geist Mono', ui-monospace, monospace">
-          <g>
-            <rect x="190" y="8" width="16" height="16" rx="8" fill="rgba(45,49,66,0.12)"/>
-            <text x="198" y="19" text-anchor="middle" font-size="7" font-weight="600" fill="#2d3142">1</text>
-            <text x="198" y="32" text-anchor="middle" font-size="6" font-weight="500" letter-spacing="0.12em" fill="#4f5d75">TRIGGER</text>
-            <rect x="302" y="8" width="16" height="16" rx="8" fill="rgba(45,49,66,0.12)"/>
-            <text x="310" y="19" text-anchor="middle" font-size="7" font-weight="600" fill="#2d3142">2</text>
-            <text x="310" y="32" text-anchor="middle" font-size="6" font-weight="500" letter-spacing="0.12em" fill="#4f5d75">VALIDATE</text>
-            <rect x="414" y="8" width="16" height="16" rx="8" fill="rgba(45,49,66,0.12)"/>
-            <text x="422" y="19" text-anchor="middle" font-size="7" font-weight="600" fill="#2d3142">3</text>
-            <text x="422" y="32" text-anchor="middle" font-size="6" font-weight="500" letter-spacing="0.12em" fill="#4f5d75">BUILD</text>
-            <rect x="526" y="8" width="16" height="16" rx="8" fill="rgba(45,49,66,0.12)"/>
-            <text x="534" y="19" text-anchor="middle" font-size="7" font-weight="600" fill="#2d3142">4</text>
-            <text x="534" y="32" text-anchor="middle" font-size="6" font-weight="500" letter-spacing="0.12em" fill="#4f5d75">PUBLISH</text>
-            <rect x="638" y="8" width="16" height="16" rx="8" fill="rgba(191,69,32,0.20)"/>
-            <text x="646" y="19" text-anchor="middle" font-size="7" font-weight="600" fill="#bf4520">5</text>
-            <text x="646" y="32" text-anchor="middle" font-size="6" font-weight="500" letter-spacing="0.12em" fill="#bf4520">CATALOG</text>
-            <rect x="750" y="8" width="16" height="16" rx="8" fill="rgba(45,49,66,0.12)"/>
-            <text x="758" y="19" text-anchor="middle" font-size="7" font-weight="600" fill="#2d3142">6</text>
-            <text x="758" y="32" text-anchor="middle" font-size="6" font-weight="500" letter-spacing="0.12em" fill="#4f5d75">BOOTSTRAP</text>
-            <rect x="862" y="8" width="16" height="16" rx="8" fill="rgba(45,49,66,0.12)"/>
-            <text x="870" y="19" text-anchor="middle" font-size="7" font-weight="600" fill="#2d3142">7</text>
-            <text x="870" y="32" text-anchor="middle" font-size="6" font-weight="500" letter-spacing="0.12em" fill="#4f5d75">REGISTRY</text>
-            <rect x="974" y="8" width="16" height="16" rx="8" fill="rgba(45,49,66,0.12)"/>
-            <text x="982" y="19" text-anchor="middle" font-size="7" font-weight="600" fill="#2d3142">8</text>
-            <text x="982" y="32" text-anchor="middle" font-size="6" font-weight="500" letter-spacing="0.12em" fill="#4f5d75">RECONCILE</text>
+          <!-- lane dividers, label column border, dev | version divider -->
+          <g stroke="rgba(45,49,66,0.12)" stroke-width="0.8">
+            <line x1="0" y1="72" x2="1280" y2="72"/>
+            <line x1="0" y1="192" x2="1280" y2="192"/>
+            <line x1="0" y1="312" x2="1280" y2="312"/>
+            <line x1="0" y1="432" x2="1280" y2="432"/>
           </g>
-        </g>
+          <line x1="200" y1="72" x2="200" y2="432" stroke="rgba(45,49,66,0.20)" stroke-width="1"/>
+          <line x1="540" y1="72" x2="540" y2="432" stroke="rgba(45,49,66,0.20)" stroke-width="1" stroke-dasharray="4,3"/>
 
-        <!-- ── lane labels ─────────────────────────────────────── -->
-        <g font-family="'Geist Mono', ui-monospace, monospace" font-size="8" font-weight="500"
-           letter-spacing="0.08em" fill="#4f5d75" text-anchor="middle">
-          <text x="70" y="80">MANUAL</text>
-          <text x="70" y="160">ON PR</text>
-          <text x="70" y="240">ON MERGE</text>
-          <text x="70" y="320">BOOTSTRAP</text>
-          <text x="70" y="400">SCHEDULED</text>
-          <text x="70" y="480">CLUSTERS</text>
-        </g>
-
-        <!-- ── nodes ───────────────────────────────────────────── -->
-
-        <!-- Release cut · REL lane, step 1 -->
-        <g>
-          <rect x="148" y="44" width="100" height="64" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
-          <rect x="152" y="48" width="14" height="10" rx="2" fill="rgba(45,49,66,0.12)"/>
-          <text x="159" y="56" text-anchor="middle" font-size="6" font-weight="600" font-family="'Geist Mono', ui-monospace, monospace" fill="rgba(45,49,66,0.8)">REL</text>
-          <text x="198" y="70" text-anchor="middle" font-size="9" font-weight="600" font-family="'Geist', system-ui, sans-serif" fill="#2d3142">Release cut</text>
-          <text x="198" y="84" text-anchor="middle" font-size="6.5" font-family="'Geist Mono', ui-monospace, monospace" fill="#4f5d75">release-marketplace-ui</text>
-          <text x="198" y="96" text-anchor="middle" font-size="6.5" font-family="'Geist Mono', ui-monospace, monospace" fill="#5a6580">manual: patch/minor</text>
-        </g>
-
-        <!-- PR gates · PR lane, step 2 -->
-        <g>
-          <rect x="260" y="124" width="100" height="64" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
-          <rect x="264" y="128" width="14" height="10" rx="2" fill="rgba(45,49,66,0.12)"/>
-          <text x="271" y="136" text-anchor="middle" font-size="6" font-weight="600" font-family="'Geist Mono', ui-monospace, monospace" fill="rgba(45,49,66,0.8)">PR</text>
-          <text x="310" y="150" text-anchor="middle" font-size="9" font-weight="600" font-family="'Geist', system-ui, sans-serif" fill="#2d3142">PR gates</text>
-          <text x="310" y="164" text-anchor="middle" font-size="6.5" font-family="'Geist Mono', ui-monospace, monospace" fill="#4f5d75">validate-apps · ui-e2e</text>
-          <text x="310" y="176" text-anchor="middle" font-size="6.5" font-family="'Geist Mono', ui-monospace, monospace" fill="#5a6580">nix · Playwright</text>
-        </g>
-
-        <!-- Image builds · MERGE lane, step 3 -->
-        <g>
-          <rect x="372" y="204" width="100" height="64" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
-          <rect x="376" y="208" width="20" height="10" rx="2" fill="rgba(45,49,66,0.12)"/>
-          <text x="386" y="216" text-anchor="middle" font-size="6" font-weight="600" font-family="'Geist Mono', ui-monospace, monospace" fill="rgba(45,49,66,0.8)">PUSH</text>
-          <text x="422" y="230" text-anchor="middle" font-size="9" font-weight="600" font-family="'Geist', system-ui, sans-serif" fill="#2d3142">Image builds</text>
-          <text x="422" y="244" text-anchor="middle" font-size="6.5" font-family="'Geist Mono', ui-monospace, monospace" fill="#4f5d75">ui + sso-controller</text>
-          <text x="422" y="256" text-anchor="middle" font-size="6.5" font-family="'Geist Mono', ui-monospace, monospace" fill="#5a6580">buildx + cosign</text>
-        </g>
-
-        <!-- App artifacts · MERGE lane, step 4 -->
-        <g>
-          <rect x="484" y="204" width="100" height="64" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
-          <rect x="488" y="208" width="20" height="10" rx="2" fill="rgba(45,49,66,0.12)"/>
-          <text x="498" y="216" text-anchor="middle" font-size="6" font-weight="600" font-family="'Geist Mono', ui-monospace, monospace" fill="rgba(45,49,66,0.8)">PUSH</text>
-          <text x="534" y="230" text-anchor="middle" font-size="9" font-weight="600" font-family="'Geist', system-ui, sans-serif" fill="#2d3142">App artifacts</text>
-          <text x="534" y="244" text-anchor="middle" font-size="6.5" font-family="'Geist Mono', ui-monospace, monospace" fill="#4f5d75">apps + components</text>
-          <text x="534" y="256" text-anchor="middle" font-size="6.5" font-family="'Geist Mono', ui-monospace, monospace" fill="#5a6580">flux push + cosign</text>
-        </g>
-
-        <!-- Catalog · MERGE lane, step 5 · FOCAL -->
-        <g>
-          <rect x="596" y="204" width="100" height="64" rx="6" fill="rgba(191,69,32,0.08)" stroke="#bf4520" stroke-width="1.2"/>
-          <rect x="600" y="208" width="20" height="10" rx="2" fill="rgba(191,69,32,0.18)"/>
-          <text x="610" y="216" text-anchor="middle" font-size="6" font-weight="600" font-family="'Geist Mono', ui-monospace, monospace" fill="#bf4520">PUSH</text>
-          <text x="646" y="230" text-anchor="middle" font-size="9" font-weight="600" font-family="'Geist', system-ui, sans-serif" fill="#2d3142">Catalog</text>
-          <text x="646" y="244" text-anchor="middle" font-size="6.5" font-family="'Geist Mono', ui-monospace, monospace" fill="#4f5d75">publish-catalog</text>
-          <text x="646" y="256" text-anchor="middle" font-size="6.5" font-family="'Geist Mono', ui-monospace, monospace" fill="#5a6580">workflow_run fan-in</text>
-        </g>
-
-        <!-- Bootstrap · BOOT lane, step 6 -->
-        <g>
-          <rect x="708" y="284" width="100" height="64" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
-          <rect x="712" y="288" width="22" height="10" rx="2" fill="rgba(45,49,66,0.12)"/>
-          <text x="723" y="296" text-anchor="middle" font-size="6" font-weight="600" font-family="'Geist Mono', ui-monospace, monospace" fill="rgba(45,49,66,0.8)">BOOT</text>
-          <text x="758" y="310" text-anchor="middle" font-size="9" font-weight="600" font-family="'Geist', system-ui, sans-serif" fill="#2d3142">Bootstrap</text>
-          <text x="758" y="324" text-anchor="middle" font-size="6.5" font-family="'Geist Mono', ui-monospace, monospace" fill="#4f5d75">publish + auto-cut</text>
-          <text x="758" y="336" text-anchor="middle" font-size="6.5" font-family="'Geist Mono', ui-monospace, monospace" fill="#5a6580">workflow_call chain</text>
-        </g>
-
-        <!-- Renovate · OPS lane, step 1 -->
-        <g>
-          <rect x="148" y="364" width="100" height="64" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
-          <rect x="152" y="368" width="16" height="10" rx="2" fill="rgba(45,49,66,0.12)"/>
-          <text x="160" y="376" text-anchor="middle" font-size="6" font-weight="600" font-family="'Geist Mono', ui-monospace, monospace" fill="rgba(45,49,66,0.8)">OPS</text>
-          <text x="198" y="390" text-anchor="middle" font-size="9" font-weight="600" font-family="'Geist', system-ui, sans-serif" fill="#2d3142">Renovate</text>
-          <text x="198" y="404" text-anchor="middle" font-size="6.5" font-family="'Geist Mono', ui-monospace, monospace" fill="#4f5d75">dependency PRs (PAT)</text>
-          <text x="198" y="416" text-anchor="middle" font-size="6.5" font-family="'Geist Mono', ui-monospace, monospace" fill="#5a6580">cron Mon–Fri</text>
-        </g>
-
-        <!-- GHCR · CLUSTERS lane, step 7 -->
-        <g>
-          <rect x="820" y="444" width="100" height="64" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
-          <rect x="824" y="448" width="20" height="10" rx="2" fill="rgba(45,49,66,0.12)"/>
-          <text x="834" y="456" text-anchor="middle" font-size="6" font-weight="600" font-family="'Geist Mono', ui-monospace, monospace" fill="rgba(45,49,66,0.8)">FLUX</text>
-          <text x="870" y="470" text-anchor="middle" font-size="9" font-weight="600" font-family="'Geist', system-ui, sans-serif" fill="#2d3142">GHCR</text>
-          <text x="870" y="484" text-anchor="middle" font-size="6.5" font-family="'Geist Mono', ui-monospace, monospace" fill="#4f5d75">signed OCI + images</text>
-          <text x="870" y="496" text-anchor="middle" font-size="6.5" font-family="'Geist Mono', ui-monospace, monospace" fill="#5a6580">ghcr.io/librepod</text>
-        </g>
-
-        <!-- Flux clusters · CLUSTERS lane, step 8 -->
-        <g>
-          <rect x="932" y="444" width="100" height="64" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
-          <rect x="936" y="448" width="20" height="10" rx="2" fill="rgba(45,49,66,0.12)"/>
-          <text x="946" y="456" text-anchor="middle" font-size="6" font-weight="600" font-family="'Geist Mono', ui-monospace, monospace" fill="rgba(45,49,66,0.8)">FLUX</text>
-          <text x="982" y="470" text-anchor="middle" font-size="9" font-weight="600" font-family="'Geist', system-ui, sans-serif" fill="#2d3142">Flux clusters</text>
-          <text x="982" y="484" text-anchor="middle" font-size="6.5" font-family="'Geist Mono', ui-monospace, monospace" fill="#4f5d75">librepod · dev · k3d</text>
-          <text x="982" y="496" text-anchor="middle" font-size="6.5" font-family="'Geist Mono', ui-monospace, monospace" fill="#5a6580">verify + reconcile</text>
-        </g>
-
-        <!-- ── legend ──────────────────────────────────────────── -->
-        <g font-family="'Geist Mono', ui-monospace, monospace">
-          <!-- row 1: steps -->
-          <text x="144" y="536" font-size="6" font-weight="500" letter-spacing="0.14em" fill="#4f5d75">STEPS</text>
-          <g font-size="6" fill="#4f5d75">
-            <rect x="206" y="526" width="12" height="12" rx="6" fill="rgba(45,49,66,0.12)"/>
-            <text x="212" y="535" text-anchor="middle" font-size="6" font-weight="600" fill="#2d3142">1</text>
-            <text x="224" y="535">TRIGGER</text>
-
-            <rect x="286" y="526" width="12" height="12" rx="6" fill="rgba(45,49,66,0.12)"/>
-            <text x="292" y="535" text-anchor="middle" font-size="6" font-weight="600" fill="#2d3142">2</text>
-            <text x="304" y="535">VALIDATE</text>
-
-            <rect x="366" y="526" width="12" height="12" rx="6" fill="rgba(45,49,66,0.12)"/>
-            <text x="372" y="535" text-anchor="middle" font-size="6" font-weight="600" fill="#2d3142">3</text>
-            <text x="384" y="535">BUILD</text>
-
-            <rect x="446" y="526" width="12" height="12" rx="6" fill="rgba(45,49,66,0.12)"/>
-            <text x="452" y="535" text-anchor="middle" font-size="6" font-weight="600" fill="#2d3142">4</text>
-            <text x="464" y="535">PUBLISH</text>
-
-            <rect x="526" y="526" width="12" height="12" rx="6" fill="rgba(191,69,32,0.20)"/>
-            <text x="532" y="535" text-anchor="middle" font-size="6" font-weight="600" fill="#bf4520">5</text>
-            <text x="544" y="535">CATALOG</text>
-
-            <rect x="616" y="526" width="12" height="12" rx="6" fill="rgba(45,49,66,0.12)"/>
-            <text x="622" y="535" text-anchor="middle" font-size="6" font-weight="600" fill="#2d3142">6</text>
-            <text x="634" y="535">BOOTSTRAP</text>
-
-            <rect x="716" y="526" width="12" height="12" rx="6" fill="rgba(45,49,66,0.12)"/>
-            <text x="722" y="535" text-anchor="middle" font-size="6" font-weight="600" fill="#2d3142">7</text>
-            <text x="734" y="535">REGISTRY</text>
-
-            <rect x="806" y="526" width="12" height="12" rx="6" fill="rgba(45,49,66,0.12)"/>
-            <text x="812" y="535" text-anchor="middle" font-size="6" font-weight="600" fill="#2d3142">8</text>
-            <text x="824" y="535">RECONCILE</text>
+          <!-- column headers -->
+          <g text-anchor="middle">
+            <text x="100" y="40" font-family="'Geist Mono', ui-monospace, monospace" font-size="8" font-weight="500" letter-spacing="0.14em" fill="#4f5d75">PRODUCT</text>
+            <text x="360" y="40" font-family="'Geist Mono', ui-monospace, monospace" font-size="8" font-weight="500" letter-spacing="0.14em" fill="#4f5d75">EVERY PR · EVERY MERGE</text>
+            <text x="360" y="56" font-family="'Geist Mono', ui-monospace, monospace" font-size="9" fill="#5a6580">mutable dev tags</text>
+            <text x="720" y="40" font-family="'Geist Mono', ui-monospace, monospace" font-size="8" font-weight="500" letter-spacing="0.14em" fill="#4f5d75">MANUAL DISPATCH</text>
+            <text x="720" y="56" font-family="'Geist Mono', ui-monospace, monospace" font-size="9" fill="#5a6580">bump → release PR</text>
+            <text x="1080" y="40" font-family="'Geist Mono', ui-monospace, monospace" font-size="8" font-weight="600" letter-spacing="0.14em" fill="#bf4520">RELEASE PR MERGED</text>
+            <text x="1080" y="56" font-family="'Geist Mono', ui-monospace, monospace" font-size="9" fill="#bf4520">only writer of :X.Y.Z</text>
           </g>
 
-          <!-- row 2: flow styles -->
-          <text x="144" y="560" font-size="6" font-weight="500" letter-spacing="0.14em" fill="#4f5d75">FLOW</text>
-          <g font-size="6" fill="#4f5d75">
-            <line x1="206" y1="556" x2="236" y2="556" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow-sm)"/>
-            <text x="242" y="559">TRIGGER · PR ENTERS LANE</text>
-
-            <line x1="386" y1="556" x2="416" y2="556" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
-            <text x="422" y="559">PUBLISH FLOW</text>
-
-            <line x1="512" y1="556" x2="542" y2="556" stroke="#bf4520" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
-            <text x="548" y="559">CATALOG FAN-IN</text>
+          <!-- lane labels -->
+          <g text-anchor="middle">
+            <g font-family="'Geist Mono', ui-monospace, monospace" font-size="8" font-weight="500" letter-spacing="0.08em" fill="#4f5d75">
+              <text x="100" y="128">MARKETPLACE-UI</text>
+              <text x="100" y="248">CASDOOR-SSO-CONTROLLER</text>
+              <text x="100" y="368">BOOTSTRAP</text>
+            </g>
+            <g font-family="'Geist Mono', ui-monospace, monospace" font-size="9" fill="#5a6580">
+              <text x="100" y="144">image + manifest</text>
+              <text x="100" y="264">image + manifest</text>
+              <text x="100" y="384">clusters/ + infrastructure/</text>
+            </g>
           </g>
-        </g>
-      </svg>
-    </div>
+
+          <!-- ── arrows (before nodes) ───────────────────────────── -->
+          <line x1="840" y1="132" x2="958" y2="132" stroke="#4f5d75" stroke-width="1" marker-end="url(#p-arrow)"/>
+          <line x1="840" y1="252" x2="958" y2="252" stroke="#4f5d75" stroke-width="1" marker-end="url(#p-arrow)"/>
+          <line x1="480" y1="372" x2="958" y2="372" stroke="#4f5d75" stroke-width="1" marker-end="url(#p-arrow)"/>
+
+          <g font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">
+            <rect x="882" y="112" width="36" height="12" rx="2" fill="#f5f5f5"/>
+            <text x="900" y="121" font-size="8" letter-spacing="0.06em" fill="#5a6580">MERGE</text>
+            <rect x="882" y="232" width="36" height="12" rx="2" fill="#f1f1f2"/>
+            <text x="900" y="241" font-size="8" letter-spacing="0.06em" fill="#5a6580">MERGE</text>
+            <rect x="692" y="352" width="56" height="12" rx="2" fill="#f5f5f5"/>
+            <text x="720" y="361" font-size="8" letter-spacing="0.06em" fill="#5a6580">AUTO-CUT</text>
+            <rect x="644" y="382" width="152" height="12" rx="2" fill="#f5f5f5"/>
+            <text x="720" y="391" font-size="9" fill="#5a6580">version from the pin diff</text>
+          </g>
+
+          <!-- ── nodes ───────────────────────────────────────────── -->
+          <g font-family="'Geist Mono', ui-monospace, monospace">
+            <!-- marketplace-ui · dev builds -->
+            <rect x="240" y="92" width="240" height="80" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
+            <rect x="248" y="100" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+            <text x="264" y="109" text-anchor="middle" font-size="7" letter-spacing="0.08em" fill="rgba(45,49,66,0.8)">BUILD</text>
+            <text x="360" y="128" text-anchor="middle" font-family="'Geist', system-ui, sans-serif" font-size="12" font-weight="600" fill="#2d3142">Dev builds</text>
+            <text x="360" y="146" text-anchor="middle" font-size="9" fill="#4f5d75">publish-marketplace-ui</text>
+            <text x="360" y="160" text-anchor="middle" font-size="9" fill="#5a6580">PR :pr-N · master :latest :&lt;sha&gt;</text>
+
+            <!-- marketplace-ui · cut -->
+            <rect x="600" y="92" width="240" height="80" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
+            <rect x="608" y="100" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+            <text x="620" y="109" text-anchor="middle" font-size="7" letter-spacing="0.08em" fill="rgba(45,49,66,0.8)">CUT</text>
+            <text x="720" y="128" text-anchor="middle" font-family="'Geist', system-ui, sans-serif" font-size="12" font-weight="600" fill="#2d3142">Cut release</text>
+            <text x="720" y="146" text-anchor="middle" font-size="9" fill="#4f5d75">release-self-built</text>
+            <text x="720" y="160" text-anchor="middle" font-size="9" fill="#5a6580">patch|minor → release PR</text>
+
+            <!-- marketplace-ui · publish -->
+            <rect x="960" y="92" width="240" height="80" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
+            <rect x="968" y="100" width="44" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+            <text x="990" y="109" text-anchor="middle" font-size="7" letter-spacing="0.08em" fill="rgba(45,49,66,0.8)">RELEASE</text>
+            <text x="1080" y="128" text-anchor="middle" font-family="'Geist', system-ui, sans-serif" font-size="12" font-weight="600" fill="#2d3142">Publish release</text>
+            <text x="1080" y="146" text-anchor="middle" font-size="9" fill="#4f5d75">release-self-built</text>
+            <text x="1080" y="160" text-anchor="middle" font-size="9" fill="#5a6580">:X.Y.Z image + manifest · git tag</text>
+
+            <!-- casdoor-sso-controller · dev builds -->
+            <rect x="240" y="212" width="240" height="80" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
+            <rect x="248" y="220" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+            <text x="264" y="229" text-anchor="middle" font-size="7" letter-spacing="0.08em" fill="rgba(45,49,66,0.8)">BUILD</text>
+            <text x="360" y="248" text-anchor="middle" font-family="'Geist', system-ui, sans-serif" font-size="12" font-weight="600" fill="#2d3142">Dev builds</text>
+            <text x="360" y="266" text-anchor="middle" font-size="9" fill="#4f5d75">publish-casdoor-sso-controller</text>
+            <text x="360" y="280" text-anchor="middle" font-size="9" fill="#5a6580">PR :pr-N · master :latest :&lt;sha&gt;</text>
+
+            <!-- casdoor-sso-controller · cut -->
+            <rect x="600" y="212" width="240" height="80" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
+            <rect x="608" y="220" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+            <text x="620" y="229" text-anchor="middle" font-size="7" letter-spacing="0.08em" fill="rgba(45,49,66,0.8)">CUT</text>
+            <text x="720" y="248" text-anchor="middle" font-family="'Geist', system-ui, sans-serif" font-size="12" font-weight="600" fill="#2d3142">Cut release</text>
+            <text x="720" y="266" text-anchor="middle" font-size="9" fill="#4f5d75">release-self-built</text>
+            <text x="720" y="280" text-anchor="middle" font-size="9" fill="#5a6580">patch|minor → release PR</text>
+
+            <!-- casdoor-sso-controller · publish -->
+            <rect x="960" y="212" width="240" height="80" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
+            <rect x="968" y="220" width="44" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+            <text x="990" y="229" text-anchor="middle" font-size="7" letter-spacing="0.08em" fill="rgba(45,49,66,0.8)">RELEASE</text>
+            <text x="1080" y="248" text-anchor="middle" font-family="'Geist', system-ui, sans-serif" font-size="12" font-weight="600" fill="#2d3142">Publish release</text>
+            <text x="1080" y="266" text-anchor="middle" font-size="9" fill="#4f5d75">release-self-built</text>
+            <text x="1080" y="280" text-anchor="middle" font-size="9" fill="#5a6580">:X.Y.Z image + manifest · git tag</text>
+
+            <!-- bootstrap · dev builds -->
+            <rect x="240" y="332" width="240" height="80" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
+            <rect x="248" y="340" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+            <text x="264" y="349" text-anchor="middle" font-size="7" letter-spacing="0.08em" fill="rgba(45,49,66,0.8)">BUILD</text>
+            <text x="360" y="368" text-anchor="middle" font-family="'Geist', system-ui, sans-serif" font-size="12" font-weight="600" fill="#2d3142">Dev builds</text>
+            <text x="360" y="386" text-anchor="middle" font-size="9" fill="#4f5d75">publish-bootstrap</text>
+            <text x="360" y="400" text-anchor="middle" font-size="9" fill="#5a6580">PR :pr-N · master :latest :0.0.0-&lt;sha&gt;</text>
+
+            <!-- bootstrap · release -->
+            <rect x="960" y="332" width="240" height="80" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
+            <rect x="968" y="340" width="44" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+            <text x="990" y="349" text-anchor="middle" font-size="7" letter-spacing="0.08em" fill="rgba(45,49,66,0.8)">RELEASE</text>
+            <text x="1080" y="368" text-anchor="middle" font-family="'Geist', system-ui, sans-serif" font-size="12" font-weight="600" fill="#2d3142">Publish release</text>
+            <text x="1080" y="386" text-anchor="middle" font-size="9" fill="#4f5d75">release-bootstrap</text>
+            <text x="1080" y="400" text-anchor="middle" font-size="9" fill="#5a6580">:X.Y.Z artifact · git tag</text>
+          </g>
+
+          <!-- ── legend ──────────────────────────────────────────── -->
+          <line x1="40" y1="452" x2="1240" y2="452" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+          <g font-family="'Geist Mono', ui-monospace, monospace" font-size="8" fill="#4f5d75">
+            <text x="40" y="476" font-weight="500" letter-spacing="0.14em">LEGEND</text>
+            <line x1="120" y1="473" x2="150" y2="473" stroke="#4f5d75" stroke-width="1" marker-end="url(#p-arrow)"/>
+            <text x="158" y="476" letter-spacing="0.06em">HAND-OFF</text>
+            <rect x="320" y="467" width="20" height="12" fill="rgba(191,69,32,0.10)"/>
+            <text x="348" y="476" letter-spacing="0.06em">WRITES :X.Y.Z + &lt;PRODUCT&gt;-vX.Y.Z GIT TAG, ONCE</text>
+            <line x1="620" y1="467" x2="620" y2="479" stroke="rgba(45,49,66,0.20)" stroke-width="1" stroke-dasharray="4,3"/>
+            <text x="632" y="476" letter-spacing="0.06em">DEV TAGS (LEFT) NEVER CARRY A VERSION</text>
+          </g>
+        </svg>
+      </div>
+      <p class="note">Same shape for all three products: <code>publish-&lt;product&gt;</code> never writes a version,
+        and a release workflow (<code>release-self-built</code> for the two apps, <code>release-bootstrap</code>)
+        is the only writer of <code>:X.Y.Z</code> and of the
+        <code>&lt;product&gt;-vX.Y.Z</code> git tag, which lands on the master commit once the artifacts are
+        signed. Bootstrap has no release PR because its version lives only in git tags. A release PR also bumps
+        <code>infrastructure/system-apps/&lt;app&gt;.yaml</code>, so its merge fires publish-bootstrap too, and the
+        next bootstrap release carries the new pin.</p>
+    </section>
+
+    <section>
+      <p class="eyebrow">02 · App artifacts</p>
+      <h2>Upstream apps publish on every merge</h2>
+      <div class="diagram-container">
+        <svg viewBox="0 0 1280 332" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="ci-apps-title ci-apps-desc">
+          <title id="ci-apps-title">App artifact pipeline</title>
+          <desc id="ci-apps-desc">Pull requests from people or Renovate pass the PR gates; on merge, publish-apps and publish-components push signed OCI artifacts, publish-catalog re-publishes the catalog after each of them, and Flux clusters verify and reconcile everything from GHCR.</desc>
+          <defs>
+            <marker id="a-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+            <marker id="a-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#bf4520"/></marker>
+          </defs>
+
+          <rect width="100%" height="100%" fill="#f5f5f5"/>
+
+          <!-- stage headers -->
+          <g font-family="'Geist Mono', ui-monospace, monospace" font-size="8" font-weight="500" letter-spacing="0.14em" fill="#4f5d75" text-anchor="middle">
+            <text x="260" y="36">ON PULL REQUEST</text>
+            <text x="888" y="36">ON MERGE TO MASTER</text>
+          </g>
+          <g stroke="rgba(45,49,66,0.20)" stroke-width="1">
+            <line x1="40" y1="48" x2="480" y2="48"/>
+            <line x1="536" y1="48" x2="1240" y2="48"/>
+          </g>
+
+          <!-- ── arrows (before nodes) ───────────────────────────── -->
+          <line x1="240" y1="164" x2="278" y2="164" stroke="#4f5d75" stroke-width="1" marker-end="url(#a-arrow)"/>
+          <path d="M 480,152 H 492 Q 500,152 500,144 V 116 Q 500,108 508,108 H 534" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#a-arrow)"/>
+          <path d="M 480,176 H 504 Q 512,176 512,184 V 212 Q 512,220 520,220 H 534" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#a-arrow)"/>
+          <path d="M 736,108 H 748 Q 756,108 756,116 V 144 Q 756,152 764,152 H 790" fill="none" stroke="#bf4520" stroke-width="1.2" marker-end="url(#a-arrow-accent)"/>
+          <path d="M 736,220 H 760 Q 768,220 768,212 V 184 Q 768,176 776,176 H 790" fill="none" stroke="#bf4520" stroke-width="1.2" marker-end="url(#a-arrow-accent)"/>
+          <line x1="992" y1="164" x2="1038" y2="164" stroke="#4f5d75" stroke-width="1" marker-end="url(#a-arrow)"/>
+
+          <!-- ── nodes ───────────────────────────────────────────── -->
+          <g font-family="'Geist Mono', ui-monospace, monospace">
+            <!-- pull request -->
+            <rect x="40" y="124" width="200" height="80" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
+            <rect x="48" y="132" width="20" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+            <text x="58" y="141" text-anchor="middle" font-size="7" letter-spacing="0.08em" fill="rgba(45,49,66,0.8)">PR</text>
+            <text x="140" y="160" text-anchor="middle" font-family="'Geist', system-ui, sans-serif" font-size="12" font-weight="600" fill="#2d3142">Pull request</text>
+            <text x="140" y="178" text-anchor="middle" font-size="9" fill="#4f5d75">human or Renovate</text>
+            <text x="140" y="192" text-anchor="middle" font-size="9" fill="#5a6580">renovate · cron weekdays</text>
+
+            <!-- PR gates -->
+            <rect x="280" y="124" width="200" height="80" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
+            <rect x="288" y="132" width="36" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+            <text x="306" y="141" text-anchor="middle" font-size="7" letter-spacing="0.08em" fill="rgba(45,49,66,0.8)">CHECK</text>
+            <text x="380" y="160" text-anchor="middle" font-family="'Geist', system-ui, sans-serif" font-size="12" font-weight="600" fill="#2d3142">PR gates</text>
+            <text x="380" y="178" text-anchor="middle" font-size="9" fill="#4f5d75">validate-apps · ui-e2e</text>
+            <text x="380" y="192" text-anchor="middle" font-size="9" fill="#5a6580">kubeconform · Playwright</text>
+
+            <!-- app artifacts -->
+            <rect x="536" y="68" width="200" height="80" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
+            <rect x="544" y="76" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+            <text x="560" y="85" text-anchor="middle" font-size="7" letter-spacing="0.08em" fill="rgba(45,49,66,0.8)">PUSH</text>
+            <text x="636" y="104" text-anchor="middle" font-family="'Geist', system-ui, sans-serif" font-size="12" font-weight="600" fill="#2d3142">App artifacts</text>
+            <text x="636" y="122" text-anchor="middle" font-size="9" fill="#4f5d75">publish-apps</text>
+            <text x="636" y="136" text-anchor="middle" font-size="9" fill="#5a6580">:X.Y.Z + :latest per app</text>
+
+            <!-- components -->
+            <rect x="536" y="180" width="200" height="80" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
+            <rect x="544" y="188" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+            <text x="560" y="197" text-anchor="middle" font-size="7" letter-spacing="0.08em" fill="rgba(45,49,66,0.8)">PUSH</text>
+            <text x="636" y="216" text-anchor="middle" font-family="'Geist', system-ui, sans-serif" font-size="12" font-weight="600" fill="#2d3142">Components</text>
+            <text x="636" y="234" text-anchor="middle" font-size="9" fill="#4f5d75">publish-components</text>
+            <text x="636" y="248" text-anchor="middle" font-size="9" fill="#5a6580">:X.Y.Z + :latest</text>
+
+            <!-- catalog · focal -->
+            <rect x="792" y="124" width="200" height="80" rx="6" fill="#f5f5f5"/>
+            <rect x="792" y="124" width="200" height="80" rx="6" fill="rgba(191,69,32,0.08)" stroke="#bf4520" stroke-width="1.2"/>
+            <rect x="800" y="132" width="32" height="12" rx="2" fill="transparent" stroke="rgba(191,69,32,0.50)" stroke-width="0.8"/>
+            <text x="816" y="141" text-anchor="middle" font-size="7" letter-spacing="0.08em" fill="#bf4520">PUSH</text>
+            <text x="892" y="160" text-anchor="middle" font-family="'Geist', system-ui, sans-serif" font-size="12" font-weight="600" fill="#2d3142">Catalog</text>
+            <text x="892" y="178" text-anchor="middle" font-size="9" fill="#4f5d75">publish-catalog</text>
+            <text x="892" y="192" text-anchor="middle" font-size="9" fill="#5a6580">fan-in · :&lt;date&gt; + :latest</text>
+
+            <!-- GHCR → clusters -->
+            <rect x="1040" y="124" width="200" height="80" rx="6" fill="#ffffff" stroke="rgba(45,49,66,0.25)" stroke-width="1"/>
+            <rect x="1048" y="132" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+            <text x="1064" y="141" text-anchor="middle" font-size="7" letter-spacing="0.08em" fill="rgba(45,49,66,0.8)">FLUX</text>
+            <text x="1140" y="160" text-anchor="middle" font-family="'Geist', system-ui, sans-serif" font-size="12" font-weight="600" fill="#2d3142">GHCR → clusters</text>
+            <text x="1140" y="178" text-anchor="middle" font-size="9" fill="#4f5d75">ghcr.io/librepod</text>
+            <text x="1140" y="192" text-anchor="middle" font-size="9" fill="#5a6580">cosign verify · reconcile</text>
+          </g>
+
+          <!-- ── legend ──────────────────────────────────────────── -->
+          <line x1="40" y1="284" x2="1240" y2="284" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+          <g font-family="'Geist Mono', ui-monospace, monospace" font-size="8" fill="#4f5d75">
+            <text x="40" y="308" font-weight="500" letter-spacing="0.14em">LEGEND</text>
+            <line x1="120" y1="305" x2="150" y2="305" stroke="#4f5d75" stroke-width="1" marker-end="url(#a-arrow)"/>
+            <text x="158" y="308" letter-spacing="0.06em">PUBLISH FLOW</text>
+            <line x1="280" y1="305" x2="310" y2="305" stroke="#bf4520" stroke-width="1.2" marker-end="url(#a-arrow-accent)"/>
+            <text x="318" y="308" letter-spacing="0.06em">CATALOG FAN-IN (WORKFLOW_RUN: EVERY SUCCESSFUL PUBLISH RE-PUBLISHES IT)</text>
+          </g>
+        </svg>
+      </div>
+    </section>
+
+    <section>
+      <p class="eyebrow">03 · Every workflow file</p>
+      <h2>What is in .github/workflows</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Workflow</th><th>Runs on</th><th>Does</th></tr>
+          </thead>
+          <tbody>
+            <tr class="group"><th colspan="3">Our own products · publish = dev tags, release = versions</th></tr>
+            <tr><td>publish-marketplace-ui</td><td>PR, merge (<code>ui/**</code>)</td><td>Image <code>:pr-N</code>; on master <code>:latest</code> + <code>:&lt;sha&gt;</code></td></tr>
+            <tr><td>publish-casdoor-sso-controller</td><td>PR, merge (<code>casdoor-sso-controller/**</code>)</td><td>Go tests, then image <code>:pr-N</code>; on master <code>:latest</code> + <code>:&lt;sha&gt;</code></td></tr>
+            <tr><td>release-self-built</td><td>dispatch (cut) · release PR merge (publish)</td><td>Cut (pick the app): bumps its code version (<code>ui/package.json</code> or the Makefile <code>VERSION</code>) and the three pins in a release PR. Publish: <code>:X.Y.Z</code> image + manifest, git tag <code>&lt;app&gt;-vX.Y.Z</code></td></tr>
+            <tr><td>publish-bootstrap</td><td>PR, merge (<code>clusters/**</code>, <code>infrastructure/**</code>)</td><td>Artifact <code>:pr-N</code>; on master <code>:latest</code> + <code>:0.0.0-&lt;sha&gt;</code>, then calls release-bootstrap</td></tr>
+            <tr><td>release-bootstrap</td><td>called by publish-bootstrap · dispatch</td><td>Version from the pin diff since the last tag; <code>:X.Y.Z</code> artifact, git tag <code>marketplace-bootstrap-vX.Y.Z</code></td></tr>
+            <tr class="group"><th colspan="3">App artifacts</th></tr>
+            <tr><td>publish-apps</td><td>PR, merge (<code>apps/**</code>), dispatch</td><td>Per changed app <code>:pr-N</code>; on master <code>:X.Y.Z</code> + <code>:latest</code> (self-built apps: <code>:latest</code> only)</td></tr>
+            <tr><td>publish-components</td><td>PR, merge (<code>components/**</code>), dispatch</td><td>Per changed component <code>:pr-N</code>; on master <code>:X.Y.Z</code> + <code>:latest</code></td></tr>
+            <tr><td>publish-catalog</td><td>merge (metadata), after each publish-apps / publish-components run</td><td>Catalog <code>:&lt;date&gt;</code> + <code>:latest</code></td></tr>
+            <tr class="group"><th colspan="3">Checks · publish nothing</th></tr>
+            <tr><td>validate-apps</td><td>PR (<code>apps/**</code>, <code>components/**</code>)</td><td>Kustomize build + kubeconform</td></tr>
+            <tr><td>ui-e2e</td><td>PR (<code>ui/**</code>)</td><td>Tier 1 Playwright</td></tr>
+            <tr><td>ui-e2e-cluster</td><td>nightly, merge (UI and k3d cluster paths)</td><td>Tier 2 on a k3d cluster, running this commit's UI image</td></tr>
+            <tr><td>ai-review</td><td><code>@askserge</code> comment</td><td>AI review of the PR</td></tr>
+            <tr class="group"><th colspan="3">Housekeeping</th></tr>
+            <tr><td>renovate</td><td>cron, weekdays</td><td>Dependency bump PRs</td></tr>
+            <tr><td>ghcr-cleanup</td><td>cron, weekly</td><td>Prunes bootstrap <code>:0.0.0-*</code> and <code>:pr-*</code> tags</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </div>
 </body>
 </html>

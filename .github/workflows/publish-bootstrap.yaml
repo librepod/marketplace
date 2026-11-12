@@ -1,4 +1,10 @@
-name: Publish Bootstrap Artifact
+name: Publish Bootstrap
+
+# Dev builds of the bootstrap artifact (clusters/ + infrastructure/): every
+# PR -> :pr-N, every master merge -> :latest + :0.0.0-<sha>. Never a version:
+# the merge then hands off to release-bootstrap, the only writer of :X.Y.Z.
+# Unlike the apps there is no release PR: bootstrap's version lives only in its
+# git tags, derived from the pin diff, so every infra merge is a release.
 
 on:
   workflow_dispatch:
@@ -43,13 +49,7 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "version=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
           else
-            # Use git tag if available, otherwise short SHA
-            TAG=$(git describe --tags --exact-match 2>/dev/null || echo "")
-            if [ -n "$TAG" ]; then
-              echo "version=$TAG" >> "$GITHUB_OUTPUT"
-            else
-              echo "version=0.0.0-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-            fi
+            echo "version=0.0.0-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build bootstrap artifact directory

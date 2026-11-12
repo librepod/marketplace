@@ -1,4 +1,10 @@
-name: Release Bootstrap Artifact
+name: Release Bootstrap
+
+# The only writer of bootstrap's versions: the :X.Y.Z artifact and the
+# marketplace-bootstrap-vX.Y.Z git tag on the commit it was built from. Called
+# by publish-bootstrap after every master merge that touches clusters/ or
+# infrastructure/ (version "auto", from the pin diff); dispatch it by hand to
+# force a version.
 
 # Workflow-level (not job-level) so it also serializes runs of this workflow
 # when it is called from publish-bootstrap.yaml: deriving the next version

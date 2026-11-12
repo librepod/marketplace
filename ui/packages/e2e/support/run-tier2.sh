@@ -91,6 +91,14 @@ trap cleanup EXIT
 # pointed at a temp file, every kubectl/flux call below can ONLY reach the e2e cluster.
 export KUBECONFIG="$KUBECONFIG_FILE"
 
+# Test this checkout's UI, not the last release: the cluster runs the image the
+# overlay pins (IfNotPresent), and only a release writes that tag (issue #361),
+# so build ui/ under it and pre-load it into the cluster below.
+REPO="$(cd "$E2E/../../.." && pwd)"
+UI_IMAGE="ghcr.io/librepod/marketplace-ui:$(sed -n 's/^ *newTag: "\(.*\)"/\1/p' "$REPO/apps/marketplace-ui/overlays/librepod/kustomization.yaml")"
+echo "==> Building $UI_IMAGE from this checkout's ui/"
+docker build -t "$UI_IMAGE" "$REPO/ui"
+
 # Start clean — a leaked cluster from a prior aborted run would make `create` fail.
 k3d cluster delete "$CLUSTER" >/dev/null 2>&1 || true
 
@@ -101,6 +109,9 @@ k3d cluster create --config "$SCRIPT_DIR/k3d-e2e.config.yaml"
 ctx="$(kubectl config current-context)"
 echo "==> kubectl context: $ctx"
 echo "$ctx" | grep -q "$CLUSTER" || { echo "ERROR: context ($ctx) is not the e2e cluster '$CLUSTER' — aborting to protect the current context." >&2; exit 1; }
+
+# Lands long before Flux reaches marketplace-ui (minutes of bootstrap first).
+k3d image import "$UI_IMAGE" -c "$CLUSTER"
 
 echo "==> Waiting for marketplace-ui Deployment (deployed by the Flux system-apps chain)"
 for _ in $(seq 1 180); do # up to ~15 min

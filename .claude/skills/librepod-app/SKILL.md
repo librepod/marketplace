@@ -619,17 +619,22 @@ spec:
 >
 > 1. **Product version** — what the code IS. Authored in the product tree
 >    (`ui/package.json` `"version"`; `casdoor-sso-controller/Makefile` `VERSION`).
->    Drives the Docker **image** build + tag. A bump here is a change under the
->    product's CI trigger path, so the image always gets built.
-> 2. **Marketplace pin** — `apps/<name>/metadata.yaml` `version:`. A deliberately
->    promoted pointer to a *blessed, tested* product version. Drives the OCI
+>    Names the released Docker **image** tag.
+> 2. **Marketplace pin** — `apps/<name>/metadata.yaml` `version:`. Drives the OCI
 >    **manifest** tag, `__VERSION__` substitution, the overlay's
 >    `images[].newTag`, and `infrastructure/system-apps/<name>.yaml` `ref.tag`.
->    Bump it by hand only when promoting a build; it need not be the latest.
 >
-> When releasing one of these apps: bump the **product version** first (builds
-> the image), then bump the **pin** to that version once it's tested. CI guards
-> against pinning an image tag that was never built.
+> **`:<version>` tags are immutable; only a release writes them.** Master merges
+> publish the image as `:latest` + `:<git sha>` and the manifest as `:latest`,
+> so editing `ui/`, `casdoor-sso-controller/` or `apps/<name>/` never changes
+> what a pinned cluster runs. The `release-self-built` workflow is the only
+> writer of their versions. Dispatch it (app, patch|minor) to cut a PR from a
+> `release/<name>-vX.Y.Z` branch that bumps the product version and every pin
+> together; merging that PR builds the `:X.Y.Z` image and manifest from the
+> merge commit and git-tags it `<name>-vX.Y.Z` (refusing mismatched pins or an
+> already-released version). To test before releasing, use the `pr-<N>` or
+> `:<git sha>` image. Renovate does not track them (no `# renovate:` annotation):
+> the release PR moves every pin.
 
 **Key points about `metadata.yaml`:**
 - `templates.source` — the OCIRepository FluxCD creates to pull the app artifact

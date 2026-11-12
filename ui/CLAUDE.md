@@ -136,16 +136,19 @@ npm run test:e2e:ui:cluster -- tests/cluster-level/cluster-smoke.spec.ts   # one
 ```
 
 - Boots a dedicated `librepod-k3d-e2e` cluster (`packages/e2e/support/k3d-e2e.config.yaml`) that
-  syncs `clusters/librepod-k3d` via Flux — the full system-apps chain + the published
-  `marketplace-ui` image. Reached via `kubectl port-forward` (HTTP, no ingress).
+  syncs `clusters/librepod-k3d` via Flux — the full system-apps chain, with `marketplace-ui`
+  running this checkout's `ui/` build. Reached via `kubectl port-forward` (HTTP, no ingress).
 - Asserts the **full GitOps lifecycle** Tier 1 can't: install → Flux reconcile → `running`; the
   Uninstall `AlertDialog`; the "Open {app}" link. These need `running`/`error` status, reachable
   only with a cluster.
-- Tests the **published** image (`:latest`), not a source build — Tier 2 runs on master/nightly
-  (never PRs), so `:latest` IS master's code.
+- Tests **this checkout's `ui/`**, not the last release: `run-tier2.sh` builds it as the overlay's
+  pinned `ghcr.io/librepod/marketplace-ui:<newTag>` and `k3d image import`s it (the Deployment is
+  `IfNotPresent`). The manifests stay the released ones: only a release writes `:<version>`
+  (issue #361), so `apps/marketplace-ui/` changes reach Tier 2 with the next release.
 - Advisory CI: `.github/workflows/ui-e2e-cluster.yaml` (nightly + push to master + dispatch).
   **Never** a required check.
-- Needs `k3d`, `flux`, `kubectl`, `curl` on PATH (`shell.nix` provides them; CI installs them).
+- Needs `k3d`, `flux`, `kubectl`, `curl` on PATH (`shell.nix` provides them; CI installs them), plus
+  a running Docker (k3d needs it anyway).
 - Override the app used for the `running` assertion with `LIBREPOD_E2E_APP=<name>`.
 
 Gotchas / deviations from the original plan:

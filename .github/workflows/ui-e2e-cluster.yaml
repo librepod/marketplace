@@ -5,9 +5,10 @@ on:
     - cron: "37 3 * * *" # nightly ~03:37 UTC (off the hour)
   push:
     branches: [master]
+    # No apps/marketplace-ui/**: Tier 2 runs this commit's ui/ build but the
+    # released manifests, so a manifest change reaches it only with a release.
     paths:
       - "ui/**"
-      - "apps/marketplace-ui/**"
       - "clusters/librepod-k3d/**"
       - ".github/workflows/ui-e2e-cluster.yaml"
   workflow_dispatch:

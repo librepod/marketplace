@@ -10,7 +10,7 @@
   prHourlyLimit: 0,
   prConcurrentLimit: 0,
   kustomize: { managerFilePatterns: ["/apps/.*/overlays/.*/kustomization\\.ya?ml/", "/components/.*/kustomization\\.ya?ml/"] },
-  flux: { managerFilePatterns: ["/apps/.*/base/ocirepository\\.ya?ml/", "/infrastructure/system-apps/marketplace-ui\\.ya?ml/"] },
+  flux: { managerFilePatterns: ["/apps/.*/base/ocirepository\\.ya?ml/"] },
   customManagers: [
     {
       customType: "regex",
@@ -29,10 +29,10 @@
     // Re-enable those areas deliberately later if desired.
     { matchFileNames: ["**/*", "!apps/**", "!components/**"], enabled: false },
 
-    // Bootstrap pin for marketplace-ui: the one infrastructure file Renovate
-    // manages. Scoped by file — the file contains exactly one OCIRepository.
-    // All other system-app pins stay hand-maintained by design.
-    { matchFileNames: ["infrastructure/system-apps/marketplace-ui.yaml"], enabled: true },
+    // --- Self-built apps: their :X.Y.Z exists only once a release PR merges,
+    // and that PR already moved every pin (release-self-built, issue #361), so
+    // there is never a bump to find.
+    { matchPackageNames: ["ghcr.io/librepod/marketplace-ui", "ghcr.io/librepod/casdoor-sso-controller"], enabled: false },
 
     // --- Pin vendored dependency images. A sidecar shipped by the app vendor
     // (e.g. postgres:16) is a compatibility contract, not something to chase —
