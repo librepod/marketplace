@@ -5,7 +5,9 @@
 # the pod; the store container must exit promptly once the bootstrap
 # container dies (bootstrap-exited handshake); and the seal-volume copy must
 # land BEFORE the Secret create so a failed create self-heals on retry
-# instead of bricking the bootstrap (PVC-wipe territory).
+# instead of bricking the bootstrap (PVC-wipe territory); and the init call
+# must carry its own longer BAO_CLIENT_TIMEOUT — a 30s client-side timeout on
+# an init that committed server-side drops the only copy of the credentials.
 #
 # Runs the REAL scripts under docker (alpine + stub bao/kubectl) because they
 # hardcode container paths (/shared, /seal). The budget is shrunk to 3s via
@@ -23,12 +25,23 @@ fail() { echo "FAIL: $1" >&2; exit 1; }
 
 docker image inspect "$IMAGE" >/dev/null 2>&1 || docker pull "$IMAGE" >/dev/null
 
-# Stubs: bao never answers a parseable status (unreachable API); kubectl
-# reports no openbao-credentials Secret and can be made to fail creates via
+# Stubs: bao answers nothing unless BAO_STUB_API=up (then status reports an
+# uninitialized server); `operator init` records the BAO_CLIENT_TIMEOUT the
+# child saw and returns fixed credentials. kubectl reports no
+# openbao-credentials Secret and can be made to fail creates via
 # KUBECTL_CREATE_RC.
 mkdir -p "$FIX/bin"
 cat > "$FIX/bin/bao" <<'EOF'
 #!/bin/sh
+if [ "$1 $2" = "operator init" ]; then
+  echo "init-timeout=$BAO_CLIENT_TIMEOUT" >> /shared/bao-env.log
+  printf '{"root_token":"tok-init","recovery_keys":["k"]}\n'
+  exit 0
+fi
+if [ "${BAO_STUB_API:-}" = "up" ]; then
+  [ "$1" = "status" ] && echo "Initialized    false"
+  exit 0 # any other call (secrets/auth/policy writes) succeeds quietly
+fi
 echo "Error getting status: connection refused" >&2
 exit 2
 EOF
@@ -99,6 +112,19 @@ run "$shared2" store.sh || fail "store.sh did not self-heal from the seal copy"
 [ "$(cat "$shared2/root-token")" = "tok-123" ] || fail "root-token not restored from seal copy"
 grep -q "create secret" "$shared2/kubectl-calls.log" || fail "Secret not recreated on retry"
 echo "    ok: retry restored the Secret from the seal volume"
+
+echo "==> E: init call carries its own 5m client timeout (not the Job-wide 30s cap)"
+shared="$FIX/e"; mkdir -p "$shared"
+touch "$shared/no-secret" # store-credentials already decided: fresh install
+# budget must exceed one 3s poll of the API-wait loop, or the check after
+# the first sleep always fires (0s margin) and the init path never runs
+run "$shared" bootstrap.sh -e BAO_STUB_API=up -e OPENBAO_BOOTSTRAP_BUDGET_SECONDS=30 \
+  || fail "bootstrap.sh failed on the init path"
+[ -f "$shared/done" ] || fail "init path did not touch /shared/done"
+[ -s "$shared/credentials.json" ] || fail "init path did not write /shared/credentials.json"
+grep -q "init-timeout=5m" "$shared/bao-env.log" \
+  || fail "bao operator init did not see BAO_CLIENT_TIMEOUT=5m (per-call override lost)"
+echo "    ok: init ran with the per-call override; script completed"
 
 echo "==> syntax: sh -n on both scripts (busybox, as in production)"
 docker run --rm -v "$PWD/$COMP:/scripts:ro" "$IMAGE" \

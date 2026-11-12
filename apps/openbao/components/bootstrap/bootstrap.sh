@@ -84,8 +84,12 @@ elif [ -f /shared/no-secret ]; then
   fi
   echo "initializing openbao..."
   # A seal is configured, so no secret_shares/threshold (Shamir params) —
-  # init returns recovery keys + root token.
-  INIT_JSON="$(bao operator init -format=json)"
+  # init returns recovery keys + root token. Init overrides the Job-wide
+  # BAO_CLIENT_TIMEOUT per call: a client-side timeout on an init that
+  # committed server-side (slow NFS-backed writes) drops the ONLY copy of
+  # the credentials and lands the retry in the unrecoverable branch at the
+  # top of this file. 5m still dies inside the wall-clock budget's retry.
+  INIT_JSON="$(BAO_CLIENT_TIMEOUT=5m bao operator init -format=json)"
   printf '%s' "$INIT_JSON" > /shared/credentials.json
   touch /shared/done
   BAO_TOKEN="$(printf '%s' "$INIT_JSON" | sed -n 's/.*"root_token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"

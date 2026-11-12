@@ -38,9 +38,10 @@ spec:
               value: http://openbao.openbao.svc.cluster.local:8200
             # Caps any single bao call so a blackholed connection cannot
             # outlive the script's own wall-clock budget (which exists to
-            # beat this Job's terminal activeDeadlineSeconds). 30s: init
-            # writes to NFS-backed pebbledb and may legitimately take
-            # seconds; status polls are sub-second.
+            # beat this Job's terminal activeDeadlineSeconds). 30s suits
+            # status/config polls (sub-second); `bao operator init`
+            # overrides this per call in bootstrap.sh — slow NFS-backed
+            # init writes must not time out client-side.
             - name: BAO_CLIENT_TIMEOUT
               value: 30s
           command: ["/bin/sh", "/bootstrap/bootstrap.sh"]
