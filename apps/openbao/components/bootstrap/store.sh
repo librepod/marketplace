@@ -33,14 +33,30 @@ if [ -s "$SEAL_CREDS" ]; then
 fi
 
 touch /shared/no-secret
-until [ -f /shared/done ]; do
+# Same wall-clock contract as bootstrap.sh (see there): a hung pod must die
+# at its own budget — before the Job's terminal activeDeadlineSeconds — so
+# the backoffLimit retries it. Also breaks out when the bootstrap container
+# has already exited (its EXIT trap drops /shared/bootstrap-exited), so its
+# failures fail the pod immediately instead of outliving this wait.
+# (Env override mirrors bootstrap.sh's — for tests.)
+BUDGET=$(( $(date +%s) + ${OPENBAO_BOOTSTRAP_BUDGET_SECONDS:-780} ))
+until [ -f /shared/done ] || [ -f /shared/bootstrap-exited ]; do
   sleep 2
+  if [ "$(date +%s)" -ge "$BUDGET" ]; then
+    echo "ERROR: store-credentials budget expired; exiting so the Job backoff retries with a fresh deadline." >&2
+    exit 1
+  fi
 done
+[ -f /shared/done ] || exit 1
 if [ -f /shared/credentials.json ]; then
+  # Seal-volume copy FIRST, then the Secret: if kubectl create fails here
+  # (API blip), the retry finds $SEAL_CREDS populated and restores the
+  # Secret from it — the reverse order would leave an initialized server
+  # with no recoverable credentials (wipe-PVC territory).
+  cp /shared/credentials.json "$SEAL_CREDS"
+  chmod 600 "$SEAL_CREDS"
   ROOT_TOKEN=$(root_token /shared/credentials.json)
   kubectl create secret generic openbao-credentials \
     --from-literal=root-token="$ROOT_TOKEN" \
-    --from-file=recovery-keys=/shared/credentials.json
-  cp /shared/credentials.json "$SEAL_CREDS"
-  chmod 600 "$SEAL_CREDS"
+    --from-file=recovery-keys="$SEAL_CREDS"
 fi

@@ -16,20 +16,46 @@ set -e
 
 SA_DIR=/var/run/secrets/kubernetes.io/serviceaccount
 
+# Wall-clock budget for every wait below. The Job's activeDeadlineSeconds
+# (900) is a TERMINAL failure — DeadlineExceeded is never retried by the
+# job controller, and a pod hung in a wait loop burns the whole budget and
+# wedges the bootstrap until someone deletes the Job by hand. Dying at our
+# own earlier deadline instead is an ordinary pod failure: restartPolicy
+# Never + backoffLimit re-run the whole Job, each attempt with a fresh 900s.
+# 780s leaves room for the config calls after the last wait. Sized for a
+# slow-link cold boot (openbao image pull + PVC mount can lag the Job pod
+# by minutes); if even that is not enough, the backoff retries absorb it.
+# (The env override shrinks the budget in tests; the ConfigMap carries
+# substitute: disabled, so ${...:-} is safe from postBuild substitution.)
+BUDGET=$(( $(date +%s) + ${OPENBAO_BOOTSTRAP_BUDGET_SECONDS:-780} ))
+budget_left() { [ "$(date +%s)" -lt "$BUDGET" ]; }
+budget_out() {
+  echo "ERROR: budget expired before the openbao API became usable; exiting so the Job backoff retries with a fresh deadline." >&2
+  exit 1
+}
+
+# restartPolicy Never does NOT kill sibling containers when one exits: with
+# this container dead, store-credentials would wait on /shared/done until
+# its own budget expires. Signal the exit so the store container terminates
+# within its 2s poll and the pod fails (and retries) immediately.
+trap 'touch /shared/bootstrap-exited' EXIT
+
 # Wait until the status API answers, and capture the parsed value (the
 # table prints "Initialized true|false" in every state, sealed included).
 echo "waiting for the openbao API..."
 until [ -n "$INITIALIZED" ]; do
   INITIALIZED="$(bao status 2>&1 | sed -n 's/^Initialized[[:space:]]*//p')"
   sleep 3
+  budget_left || budget_out
 done
 
 # Acquire a root token: reuse the one stored by a previous run if present,
-# otherwise perform the one-time initialization.
-for i in $(seq 1 60); do
-  [ -f /shared/root-token ] && break
-  [ -f /shared/no-secret ] && break
+# otherwise perform the one-time initialization. Unbounded in wall-clock
+# terms only up to the shared budget; covers sidecar image-pull lag on a
+# slow link (store-credentials may start minutes after this container).
+until [ -f /shared/root-token ] || [ -f /shared/no-secret ]; do
   sleep 1
+  budget_left || budget_out
 done
 
 # Cross-check the credentials handshake against actual server state: a
@@ -48,6 +74,7 @@ if [ -f /shared/root-token ]; then
   # re-applying the configuration below.
   until bao status 2>&1 | grep -q "^Sealed[[:space:]]*false"; do
     sleep 3
+    budget_left || budget_out
   done
   BAO_TOKEN="$(cat /shared/root-token)"
 elif [ -f /shared/no-secret ]; then
@@ -57,8 +84,12 @@ elif [ -f /shared/no-secret ]; then
   fi
   echo "initializing openbao..."
   # A seal is configured, so no secret_shares/threshold (Shamir params) —
-  # init returns recovery keys + root token.
-  INIT_JSON="$(bao operator init -format=json)"
+  # init returns recovery keys + root token. Init overrides the Job-wide
+  # BAO_CLIENT_TIMEOUT per call: a client-side timeout on an init that
+  # committed server-side (slow NFS-backed writes) drops the ONLY copy of
+  # the credentials and lands the retry in the unrecoverable branch at the
+  # top of this file. 5m still dies inside the wall-clock budget's retry.
+  INIT_JSON="$(BAO_CLIENT_TIMEOUT=5m bao operator init -format=json)"
   printf '%s' "$INIT_JSON" > /shared/credentials.json
   touch /shared/done
   BAO_TOKEN="$(printf '%s' "$INIT_JSON" | sed -n 's/.*"root_token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
