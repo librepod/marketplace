@@ -9,8 +9,8 @@
 # `git diff`, then `git checkout -- .` to discard. With --pr, commits
 # "release(marketplace-ui): vX.Y.Z" on a release/marketplace-ui-vX.Y.Z
 # branch, pushes branch + tag to origin, and opens a PR against master
-# (master is protected; the merge IS the release — it fires the publish
-# workflows through their on:push path triggers).
+# (master is protected; the merge IS the release — it fires publish-release,
+# the sole writer of the :X.Y.Z image + manifest, and publish-bootstrap).
 #
 # Refuses to release if the target tag already exists, if a pin file missed
 # the bump, or if anything beyond the five pin files changed. A new cut
@@ -96,4 +96,4 @@ git tag -a "marketplace-ui-v$NEXT" -m "marketplace-ui v$NEXT"
 git push origin "marketplace-ui-v$NEXT"
 gh pr create --base master --head "$BRANCH" \
   --title "release(marketplace-ui): v$NEXT" \
-  --body "Merging bumps all five version pins to $NEXT; the merge push fires publish-marketplace-ui, publish-apps and publish-bootstrap via their \`on: push\` path triggers."
+  --body "Merging bumps all five version pins to $NEXT; the merge fires publish-release (the \`:$NEXT\` image + manifest, the only writer of that tag) and publish-bootstrap."

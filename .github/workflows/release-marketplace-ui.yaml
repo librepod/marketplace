@@ -5,9 +5,8 @@ name: Release Marketplace UI
 # apps/marketplace-ui/metadata.yaml, infrastructure system-apps ref.tag,
 # overlay newTag), commits on a release/marketplace-ui-vX.Y.Z branch, tags,
 # and opens a PR — master is protected, so the merge IS the release: it fires
-# the image (publish-marketplace-ui), app artifact (publish-apps), and
-# bootstrap artifact (publish-bootstrap — carries the infra ref.tag)
-# workflows through their on:push path triggers. publish-catalog follows on
+# publish-release (the :X.Y.Z image + app artifact, the only writer of those
+# tags) and publish-bootstrap (carries the infra ref.tag). publish-catalog follows on
 # its own via workflow_run. Major releases stay manual (local checkout +
 # edit), as with release-bootstrap.
 on:

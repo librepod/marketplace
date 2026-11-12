@@ -4,6 +4,10 @@ name: Publish Marketplace UI
 # artifact (source: apps/marketplace-ui/) is published by the generic
 # publish-apps.yaml workflow — keeping the image and manifest on independent
 # cadences and avoiding a duplicate OCI push + cosign/Rekor 409.
+#
+# Master builds push :latest and :<sha> only, never :<version>: the released
+# :<version> image is written once, by publish-release.yaml when the release
+# PR merges, so a pinned cluster never gets unreleased code (issue #361).
 on:
   push:
     branches: [master]
@@ -32,17 +36,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get product version
-        id: version
-        run: |
-          # Product version = what the code in ui/ IS. This drives the image
-          # tag and lives in the product tree (not the marketplace pin in
-          # apps/marketplace-ui/metadata.yaml). A bump here is a ui/** change,
-          # so this workflow's ui/** trigger always fires and the image is built.
-          VERSION=$(node -p "require('./ui/package.json').version")
-          test -n "$VERSION" && [ "$VERSION" != "undefined" ]
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
       - name: Build and push Docker image
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -53,7 +46,6 @@ jobs:
           else
             docker buildx build --push \
               -t ghcr.io/librepod/marketplace-ui:latest \
-              -t ghcr.io/librepod/marketplace-ui:${{ steps.version.outputs.version }} \
               -t ghcr.io/librepod/marketplace-ui:${{ github.sha }} \
               ./ui
           fi

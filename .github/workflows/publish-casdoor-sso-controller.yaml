@@ -39,23 +39,15 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: sigstore/cosign-installer@v4.1.1
         with: { cosign-release: 'v3.0.6' }
-      - name: Get product version
-        id: version
-        run: |
-          # Product version = what this controller's code IS. Authored in the
-          # product tree (casdoor-sso-controller/Makefile), not the marketplace
-          # pin (apps/casdoor-sso-controller/metadata.yaml). A bump here is a
-          # casdoor-sso-controller/** change, so this workflow always fires.
-          VERSION=$(make -s -C casdoor-sso-controller print-version)
-          test -n "$VERSION"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Build & push
         id: img
         run: |
-          TAG="${{ steps.version.outputs.version }}"
+          # :latest and :<sha> only. The released :<version> (Makefile VERSION)
+          # is written once, by publish-release.yaml when a
+          # release/casdoor-sso-controller-vX.Y.Z PR merges (issue #361).
           docker buildx build --push \
             --metadata-file metadata.json \
-            -t ghcr.io/librepod/casdoor-sso-controller:${TAG} \
+            -t ghcr.io/librepod/casdoor-sso-controller:${{ github.sha }} \
             -t ghcr.io/librepod/casdoor-sso-controller:latest \
             casdoor-sso-controller
           # Read the pushed manifest digest from buildx's metadata file. This is
@@ -76,8 +68,8 @@ jobs:
 
   # Publish a PR-tagged image for branch/PR testing. Unsigned by design: the dev
   # cluster runs no image-signature admission controller, so signing is unenforced
-  # here and would only slow the PR run. Released tags (the metadata.yaml
-  # version + latest) are still produced + key-signed by build-and-sign on master.
+  # here and would only slow the PR run. Master tags (:latest, :<sha>) are
+  # key-signed by build-and-sign; the released :<version> by publish-release.yaml.
   build-pr:
     needs: test
     if: github.event_name == 'pull_request'
