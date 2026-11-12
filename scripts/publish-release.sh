@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # Publish a self-built app's release: the :<version> image and the matching
-# :<version> manifest artifact, both key-signed. This is the ONLY writer of
-# those version tags; master merges publish :latest / :<sha> only, so a
-# released version never changes under a pinned cluster (issue #361). Called
-# by .github/workflows/publish-release.yaml when a release PR merges.
+# :<version> manifest artifact, both key-signed, then the <app>-v<version> git
+# tag on the release commit. This is the ONLY writer of those version tags;
+# master merges publish :latest / :<sha> only, so a released version never
+# changes under a pinned cluster (issue #361). Called by the publish job of
+# .github/workflows/release-<app>.yaml when a release PR merges.
 #
 #   bash scripts/publish-release.sh release/<app>-v<X.Y.Z> [--push]
 #
 # Without --push it validates and names what it would publish (dry run).
 # Refuses unless <app> is self-built, the code and every pin carry the branch's
-# version, and that version's manifest is not published yet.
+# version, and that version is not released yet.
 set -euo pipefail
 
 BRANCH=${1:?usage: bash scripts/publish-release.sh release/<app>-v<X.Y.Z> [--push]}
@@ -38,10 +39,18 @@ done
 
 IMAGE=ghcr.io/librepod/$APP
 ARTIFACT=ghcr.io/librepod/marketplace/apps/$APP
-# The manifest is pushed last, so its tag marks a finished release. An image
-# tag alone is a run that died midway; re-running rebuilds the same commit.
-if docker manifest inspect "$ARTIFACT:$VERSION" >/dev/null 2>&1; then
-  echo "::error::$ARTIFACT:$VERSION is already published and version tags are immutable; cut a new version" >&2; exit 1
+TAG=$APP-v$VERSION
+REV=$(git rev-parse HEAD)
+# The git tag goes on last, so it marks a finished release.
+if git ls-remote --tags origin "refs/tags/$TAG" | grep -q .; then
+  echo "::error::$TAG is already released and version tags are immutable; cut a new version" >&2; exit 1
+fi
+# A manifest without its git tag is a run that died midway: only a re-run from
+# the same commit may finish it, which rebuilds the same code.
+if MANIFEST=$(docker manifest inspect "$ARTIFACT:$VERSION" 2>/dev/null); then
+  [ "$(jq -r '.annotations."org.opencontainers.image.revision" // empty' <<<"$MANIFEST")" = "$REV" ] \
+    || { echo "::error::$ARTIFACT:$VERSION was published from another commit; cut a new version" >&2; exit 1; }
+  echo "::notice::Resuming the interrupted release of $TAG"
 fi
 
 [ "$PUSH" = "--push" ] || { echo "Dry run: would publish $IMAGE:$VERSION and $ARTIFACT:$VERSION"; exit 0; }
@@ -65,8 +74,12 @@ retry cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$IMAGE@$(jq -er '."conta
 DIGEST=$(flux push artifact "oci://$ARTIFACT:$VERSION" \
   --path="./apps/$APP" \
   --source="$(git config --get remote.origin.url)" \
-  --revision="$(git rev-parse HEAD)" \
+  --revision="$REV" \
   --ignore-paths='.git/,.gitignore,.gitmodules,.gitattributes,*.jpg,*.jpeg,*.gif,*.png,*.wmv,*.flv,*.tar.gz' \
   --output json | jq -er '.repository + "@" + .digest')
 retry cosign sign --key env://COSIGN_PRIVATE_KEY --yes "$DIGEST"
-echo "Published $IMAGE:$VERSION and $ARTIFACT:$VERSION"
+
+git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+  tag -a "$TAG" -m "$APP v$VERSION" "$REV"
+git push origin "$TAG"
+echo "Published $IMAGE:$VERSION and $ARTIFACT:$VERSION, tagged $TAG"

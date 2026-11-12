@@ -1,9 +1,9 @@
 # Product version — what THIS controller's code is. Names the released image
-# tag, which .github/workflows/publish-release.yaml writes once, when a
-# release/casdoor-sso-controller-vX.Y.Z PR merges; that PR bumps this, the
-# marketplace pin in apps/casdoor-sso-controller/metadata.yaml, the overlay
-# newTag and the system-apps ref.tag together (publish-release refuses a
-# mismatch). Travels with this dir if it moves to its own repo.
+# tag. Don't bump it by hand: dispatch .github/workflows/
+# release-casdoor-sso-controller.yaml, which bumps this, the marketplace pin in
+# apps/casdoor-sso-controller/metadata.yaml, the overlay newTag and the
+# system-apps ref.tag together in a release PR, and publishes the image once
+# that PR merges. Travels with this dir if it moves to its own repo.
 VERSION := 0.2.6
 
 .PHONY: print-version

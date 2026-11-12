@@ -23,7 +23,7 @@ PINS_DIR="infrastructure/system-apps"
 fail() { echo "::error::$1" >&2; exit 1; }
 
 VERSION="$(git tag -l "${TAG_PREFIX}*" | sed "s/^${TAG_PREFIX}//" | sort -V | tail -n1)"
-[ -n "$VERSION" ] || fail "no ${TAG_PREFIX}* tags found; seed the tag line with one manual Release Bootstrap Artifact dispatch"
+[ -n "$VERSION" ] || fail "no ${TAG_PREFIX}* tags found; seed the tag line with one manual Release Bootstrap dispatch"
 BASE="${TAG_PREFIX}${VERSION}"
 
 semver_or_empty() {  # strip quotes + leading v; echo X.Y.Z or "" if not semver

@@ -1,13 +1,10 @@
 name: Publish Marketplace UI
 
-# Owns the marketplace-ui Docker IMAGE only (source: ui/). The OCI manifest
-# artifact (source: apps/marketplace-ui/) is published by the generic
-# publish-apps.yaml workflow — keeping the image and manifest on independent
-# cadences and avoiding a duplicate OCI push + cosign/Rekor 409.
-#
-# Master builds push :latest and :<sha> only, never :<version>: the released
-# :<version> image is written once, by publish-release.yaml when the release
-# PR merges, so a pinned cluster never gets unreleased code (issue #361).
+# Dev builds of the marketplace-ui IMAGE (source: ui/): every PR -> :pr-N,
+# every master merge -> :latest + :<sha>. Never a version: release-marketplace-ui
+# is the only writer of :X.Y.Z, so a pinned cluster never gets unreleased code
+# (issue #361). The manifest artifact's :latest (source: apps/marketplace-ui/)
+# comes from publish-apps.yaml, which avoids a duplicate push + cosign 409.
 on:
   push:
     branches: [master]

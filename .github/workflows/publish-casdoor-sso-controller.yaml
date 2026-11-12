@@ -1,4 +1,9 @@
-name: Publish casdoor-sso-controller image
+name: Publish Casdoor SSO Controller
+
+# Dev builds of the casdoor-sso-controller IMAGE: tests on every PR and merge,
+# then every PR -> :pr-N, every master merge -> :latest + :<sha>. Never a
+# version: release-casdoor-sso-controller is the only writer of :X.Y.Z (issue
+# #361). The manifest artifact's :latest comes from publish-apps.yaml.
 
 on:
   push:
@@ -42,9 +47,6 @@ jobs:
       - name: Build & push
         id: img
         run: |
-          # :latest and :<sha> only. The released :<version> (Makefile VERSION)
-          # is written once, by publish-release.yaml when a
-          # release/casdoor-sso-controller-vX.Y.Z PR merges (issue #361).
           docker buildx build --push \
             --metadata-file metadata.json \
             -t ghcr.io/librepod/casdoor-sso-controller:${{ github.sha }} \
@@ -69,7 +71,7 @@ jobs:
   # Publish a PR-tagged image for branch/PR testing. Unsigned by design: the dev
   # cluster runs no image-signature admission controller, so signing is unenforced
   # here and would only slow the PR run. Master tags (:latest, :<sha>) are
-  # key-signed by build-and-sign; the released :<version> by publish-release.yaml.
+  # key-signed by build-and-sign; the released :<version> by release-casdoor-sso-controller.
   build-pr:
     needs: test
     if: github.event_name == 'pull_request'
