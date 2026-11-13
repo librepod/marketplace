@@ -6,7 +6,7 @@ spec:
   displayName: "Tailscale"
   description: "Joins the app to your tailnet with a tailscale sidecar. Cluster names resolve through MagicDNS only when your tailnet routes cluster.local to CoreDNS (split DNS), as the bundled headscale does."
   # renovate: datasource=docker depName=tailscale/tailscale
-  version: "v1.104.2"
+  version: "v1.104.7"
   group: network
   kind: patch
   settings:
