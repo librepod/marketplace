@@ -1,0 +1,17 @@
+# The Temporal Web UI. No oauth2-proxy middlewares: the UI does native OIDC
+# against Casdoor (see ssoclient.yaml + patch-helmrelease.yaml).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: temporal-web
+  namespace: factory8
+spec:
+  entryPoints:
+    - web
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`temporal.${BASE_DOMAIN:=libre.pod}`)
+      services:
+        - name: temporal-web
+          port: 8080

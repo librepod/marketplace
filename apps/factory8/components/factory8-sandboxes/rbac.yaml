@@ -1,0 +1,28 @@
+# The worker's only powers, scoped to this namespace: create/watch/delete the
+# step pods and create their PVCs. Nothing cluster-wide.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: factory8-worker
+  namespace: factory8-sandboxes
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [create, get, delete]
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [create, get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: factory8-worker
+  namespace: factory8-sandboxes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: factory8-worker
+subjects:
+  - kind: ServiceAccount
+    name: factory8-worker
+    namespace: factory8

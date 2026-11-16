@@ -1,0 +1,52 @@
+# Temporal, the durable-execution backbone. Structural values live here
+# (Postgres persistence, namespace creation); the overlay patch pins the chart
+# version and adds the SSO/CA wiring (domain-dependent).
+#
+# createDatabase/manageSchema default to true in this chart generation: the
+# pre-install hook creates the temporal + temporal_visibility databases and
+# loads the schema, so the plain Postgres below needs no manual bootstrap.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: temporal
+  namespace: factory8
+spec:
+  interval: 12h
+  install:
+    strategy:
+      name: RetryOnFailure      # absorbs the first-install race against Postgres
+      retryInterval: 2m         # (the schema hook may start before Postgres accepts connections)
+  upgrade:
+    strategy:
+      name: RetryOnFailure
+      retryInterval: 3m
+  chart:
+    spec:
+      chart: temporal
+      sourceRef:
+        kind: HelmRepository
+        name: temporal-helm-charts
+      interval: 12h
+  values:
+    server:
+      config:
+        persistence:
+          # Immutable after the first install.
+          numHistoryShards: 4
+          datastores:
+            default:
+              sql: &sql
+                pluginName: postgres12
+                driverName: postgres12
+                databaseName: temporal
+                connectAddr: postgres:5432
+                connectProtocol: tcp
+                user: postgres
+                existingSecret: factory8-settings
+                secretKey: DB_PASSWORD
+            visibility:
+              sql:
+                <<: *sql
+                databaseName: temporal_visibility
+        namespaces:
+          create: true   # the worker's namespace, `default`

@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# No root namespace here either (two-namespace app — see base/kustomization.yaml);
+# the resources added below carry `namespace: factory8` explicitly.
+
+resources:
+- ../../base
+- ingressroute.yaml
+- ssoclient.yaml
+- externalsecret-ca.yaml
+
+images:
+# TODO(registry): placeholder until Factory8's CI publishes the Nix-built images
+# (issue #349 gap 1). When the upstream repo starts pushing, keep this tag equal
+# to spec.version in metadata.yaml in the same commit.
+- name: ghcr.io/factory8/worker
+  newTag: "0.1.0"
+- name: postgres
+  newTag: "17-alpine"
+
+patches:
+- path: ./patch-helmrelease.yaml
+  target:
+    kind: HelmRelease
+    name: temporal
+- path: ./patch-storage-class.yaml
+  target:
+    kind: PersistentVolumeClaim
+    name: postgres
