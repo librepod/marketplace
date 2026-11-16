@@ -11,6 +11,9 @@ spec:
 
   # renovate: datasource=docker depName=ghcr.io/wg-easy/wg-easy
   # serge: notesRepo=wg-easy/wg-easy
+  # ⚠ On bump ≥ 15.6.0: remove the iptables-backend command override in
+  # base/deployment.yaml — upstream PR #2834 ships the same fallback in the
+  # image, and the override would shadow the image CMD.
   version: "15.5.0"
 
   source:

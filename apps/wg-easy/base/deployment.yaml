@@ -48,6 +48,37 @@ spec:
       - name: wg-easy
         image: ghcr.io/wg-easy/wg-easy
         imagePullPolicy: IfNotPresent
+        # wg-easy ≤15.5.0 points `iptables` at iptables-legacy, and its
+        # PostUp/PostDown hooks (seeded into its DB, no env override in v15)
+        # call it bare — `iptables -t nat … MASQUERADE`. Kernels without the
+        # legacy xtables ABI (no ip_tables module at all: NixOS 26.05 /
+        # kernel 6.18.x) fail every such call with "Table does not exist",
+        # wg-quick up aborts, and the pod crash-loops. Upstream fixed this
+        # with an iptables-backend wrapper (wg-easy PR #2834, merged
+        # 2026-10-26, two days AFTER v15.5.0 was cut — unreleased). This
+        # command mirrors that wrapper: keep legacy where it works, else
+        # register + select the nft flavor the image already ships, so the
+        # DB-seeded hook commands run unchanged through iptables-nft.
+        # REMOVE this override (restore the image CMD) when the pinned
+        # version includes PR #2834 (≥ v15.6.0) — see also the note at
+        # spec.version in metadata.yaml. If neither backend answers the
+        # kernel, the pod fails exactly as it would without this wrapper.
+        command:
+        - /bin/sh
+        - -c
+        - |
+          if iptables-legacy -w -L -n >/dev/null 2>&1; then
+            backend=legacy
+          elif iptables-nft -L -n >/dev/null 2>&1; then
+            backend=nft
+          fi
+          if [ "$backend" = nft ] && [ "$(readlink /etc/alternatives/iptables)" != /usr/sbin/iptables-nft ]; then
+            update-alternatives --install /usr/sbin/iptables iptables /usr/sbin/iptables-nft 5 --slave /usr/sbin/iptables-restore iptables-restore /usr/sbin/iptables-nft-restore --slave /usr/sbin/iptables-save iptables-save /usr/sbin/iptables-nft-save
+            update-alternatives --install /usr/sbin/ip6tables ip6tables /usr/sbin/ip6tables-nft 5 --slave /usr/sbin/ip6tables-restore ip6tables-restore /usr/sbin/ip6tables-nft-restore --slave /usr/sbin/ip6tables-save ip6tables-save /usr/sbin/ip6tables-nft-save
+            update-alternatives --set iptables /usr/sbin/iptables-nft
+            update-alternatives --set ip6tables /usr/sbin/ip6tables-nft
+          fi
+          exec /usr/bin/dumb-init node server/index.mjs
         securityContext:
           capabilities:
             add:
