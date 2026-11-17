@@ -57,8 +57,7 @@ spec:
   # postRenderers block when the pinned chart ships it natively.
   # /api/health is anonymous-200 on casdoor 3.106.0 (verified on a live
   # deployment). NB: the container is chart-hardcoded "casdoor-helm-charts";
-  # a postRender patch that stops matching is silently ignored, so re-check
-  # this on every chart bump.
+  # patch mismatches are silent — CI guards them (test-casdoor-probe-patch.sh).
   postRenderers:
     - kustomize:
         patches:

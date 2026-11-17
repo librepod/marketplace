@@ -15,7 +15,7 @@
 # the fix natively (casdoor/casdoor@6121c737), the chart render itself must
 # satisfy the same invariant — so the guard stays valid in both states.
 #
-# Run: bash scripts/test-casdoor-probe-patch.sh   (needs network: helm pull)
+# Run: bash scripts/test-casdoor-probe-patch.sh   (needs network: OCI chart pull)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -34,23 +34,17 @@ CHART_URL=$(yq -r '.spec.url' "$APP_DIR/base/ocirepository.yaml")
 CHART_VER=$(yq -r '.spec.ref.tag' "$APP_DIR/base/ocirepository.yaml")
 [ "$CHART_URL" != "null" ] && [ "$CHART_VER" != "null" ] || fail "cannot read chart pin from $APP_DIR/base/ocirepository.yaml"
 
-echo "== pulling chart $CHART_URL:$CHART_VER =="
-helm pull "$CHART_URL" --version "$CHART_VER" -d "$TMP" >/dev/null
-tar -xzf "$TMP"/*.tgz -C "$TMP"
-CHART_DIR=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -1)
-
 echo "== rendering overlay =="
 kustomize build "$OVERLAY" > "$TMP/overlay.yaml"
 yq 'select(.kind=="HelmRelease") | .spec.values' "$TMP/overlay.yaml" > "$TMP/values.yaml"
 
 echo "== helm template with overlay values =="
-helm template casdoor "$CHART_DIR" -f "$TMP/values.yaml" \
+helm template casdoor "$CHART_URL" --version "$CHART_VER" -f "$TMP/values.yaml" \
   --show-only templates/deployment.yaml > "$TMP/rendered.yaml"
 [ -s "$TMP/rendered.yaml" ] || fail "chart did not render templates/deployment.yaml"
 
 # Apply the postRender patch if the overlay still carries one.
-if yq -e 'select(.kind=="HelmRelease") | .spec.postRenderers' "$TMP/overlay.yaml" >/dev/null 2>&1 \
-   && [ "$(yq 'select(.kind=="HelmRelease") | .spec.postRenderers | length' "$TMP/overlay.yaml")" != "0" ]; then
+if [ "$(yq 'select(.kind=="HelmRelease") | .spec.postRenderers // [] | length' "$TMP/overlay.yaml")" != "0" ]; then
   echo "== applying postRender patch (strategic merge, as helm-controller does) =="
   yq -r 'select(.kind=="HelmRelease") | .spec.postRenderers[0].kustomize.patches[0].patch' \
     "$TMP/overlay.yaml" > "$TMP/smp.yaml"
