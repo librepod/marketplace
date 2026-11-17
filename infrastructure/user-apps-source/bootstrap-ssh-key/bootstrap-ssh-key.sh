@@ -158,16 +158,12 @@ for i in $(seq 1 60); do
   sleep 5
 done
 if [ "$READY" != "1" ]; then
-  # Diagnose instead of a bare "never accepted" (issue #367). Live-verified on
-  # the pinned 0.14.3 build: every unauthenticated or badly authenticated
-  # request answers 403 — missing user, wrong password, even /api/v1 itself —
-  # so those two failure modes are NOT distinguishable from here (a 404 needs
-  # valid admin creds, which is what we're trying to prove). The split that
-  # DOES exist: 000 = web server not answering (still starting or down), any
-  # status = gogs up and flux credentials rejected. No -f on this curl: we
-  # want the raw status code, including error ones.
+  # Diagnose instead of a bare "never accepted" (issue #367). Gogs 0.14.3
+  # answers 403 to every unauthenticated/bad-auth request, so missing user vs
+  # wrong password is indistinguishable from here. The real split: 000 = web
+  # server not answering; any status = up but credentials rejected.
   CODE="$(curl -s -o /dev/null -w '%{http_code}' "${GOGS_API}/api/v1/users/${FLUX_USER}" 2>/dev/null)" || CODE=000
-  if [ "${CODE:-000}" = "000" ]; then
+  if [ "$CODE" = "000" ]; then
     echo "ERROR: gogs web server not answering at ${GOGS_API} after 300s (still starting or down)." >&2
   else
     echo "ERROR: gogs is up (HTTP ${CODE}) but rejected the flux credentials — either the gogs bootstrap-admin postStart hook has not created the flux user yet (check the gogs pod events: FailedPostStartHook means its wait timed out; the container restart re-runs it), or the password differs from apps/gogs/components/bootstrap-admin/secret.env." >&2
