@@ -140,7 +140,7 @@ export function AccountStep({ baseDomain, previousAccount, onDone, onSessionLost
     e.preventDefault()
     setBusy(true); setError(null)
     try {
-      const res = await postJson("/api/bootstrap/account", needsPassword ? { username: name, password } : { username: name })
+      const res = await postJson("/api/bootstrap/account", { username: name, ...(needsPassword ? { password } : {}), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone })
       if (res.ok) {
         onDone()
         return

@@ -3,7 +3,8 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MyAppsPage } from './MyAppsPage'
-import type { CatalogApp } from '@librepod/shared'
+import type { CatalogApp, DeviceInfo } from '@librepod/shared'
+import { deviceView } from './device/fixtures'
 
 const mockInstalledApps: CatalogApp[] = [
   {
@@ -22,7 +23,7 @@ const mockInstalledApps: CatalogApp[] = [
 // MyAppsPage fetches BOTH /api/installed (the grid) and /api/config (the base
 // domain used to build launch URLs). Route the mock by URL so order doesn't
 // matter and config always resolves.
-function mockFetch(installed: CatalogApp[] | { ok: false; status: number }) {
+function mockFetch(installed: CatalogApp[] | { ok: false; status: number }, device?: DeviceInfo) {
   return vi.spyOn(global, 'fetch').mockImplementation((input) => {
     const url = String(input)
     if (url.includes('/api/config')) {
@@ -32,6 +33,11 @@ function mockFetch(installed: CatalogApp[] | { ok: false; status: number }) {
     // it renders just its summary and doesn't error or add unexpected rows.
     if (url.includes('/api/system-apps')) {
       return Promise.resolve({ ok: true, json: async () => [] } as Response)
+    }
+    if (url.includes('/api/device')) {
+      return device
+        ? Promise.resolve({ ok: true, json: async () => device } as Response)
+        : Promise.resolve({ ok: false, status: 503 } as Response)
     }
     if (url.includes('/api/installed')) {
       if (Array.isArray(installed)) {
@@ -132,5 +138,55 @@ describe('MyAppsPage (INST-03)', () => {
     // The device summary region labels the running count.
     const summary = screen.getByRole('region', { name: /device status/i })
     expect(summary).toHaveTextContent(/Running/)
+  })
+})
+
+describe('MyAppsPage — the device line', () => {
+  const present = (over = {}): DeviceInfo => ({
+    os: 'present',
+    device: deviceView({ metrics: { cpuPercent: 12.4, memoryUsedBytes: 5.12e9, memoryTotalBytes: 16e9 }, ...over }),
+  })
+
+  it('shows OS version, Update ready and CPU/memory when the OS is present, and links to /device', async () => {
+    mockFetch(mockInstalledApps, present({ update: { state: 'ready', available: '0.5.1' } }))
+    render(<MyAppsPage />, { wrapper: createWrapper() })
+    expect(await screen.findByText(/OS 0\.5\.0/)).toBeVisible()
+    expect(screen.getByText(/Update ready/)).toBeVisible()
+    expect(screen.getByText(/CPU 12%/)).toBeVisible()
+    expect(screen.getByText(/Memory 32%/)).toBeVisible()
+    expect(screen.getByRole('link', { name: /Your LibrePod/ })).toHaveAttribute('href', '/device')
+  })
+
+  it.each([
+    ['absent', { os: 'absent' } as DeviceInfo],
+    ['failing', undefined],
+  ])('no OS line and no link when /api/device is %s', async (_n, device) => {
+    mockFetch(mockInstalledApps, device)
+    render(<MyAppsPage />, { wrapper: createWrapper() })
+    await screen.findByText('Your LibrePod')
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/device', expect.anything()))
+    expect(screen.queryByText(/OS 0\.5\.0/)).toBeNull()
+    expect(screen.queryByRole('link', { name: /Your LibrePod/ })).toBeNull()
+  })
+
+  it.each([
+    [{ state: 'ready', available: '0.5.1' }, true],
+    [{ state: 'scheduled', available: '0.5.1' }, true],
+    [{ state: 'ready' }, false],
+    [{ state: 'up-to-date', available: '0.5.1' }, false],
+    [null, false],
+  ])('"Update ready" for %j → %s', async (update, shown) => {
+    mockFetch(mockInstalledApps, present({ update }))
+    render(<MyAppsPage />, { wrapper: createWrapper() })
+    await screen.findByText(/OS 0\.5\.0/)
+    expect(!!screen.queryByText(/Update ready/)).toBe(shown)
+  })
+
+  it('the Restart placeholder is gone; Backups and Users remain', async () => {
+    mockFetch(mockInstalledApps)
+    render(<MyAppsPage />, { wrapper: createWrapper() })
+    await screen.findByText('Backups')
+    expect(screen.getByText('Users')).toBeVisible()
+    expect(screen.queryByText('Restart')).toBeNull()
   })
 })

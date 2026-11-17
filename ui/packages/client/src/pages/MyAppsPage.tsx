@@ -1,7 +1,7 @@
 import React from "react"
 import { Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { Server, Archive, RefreshCw, Users, ArrowRight } from "lucide-react"
+import { Server, Archive, Users, ArrowRight } from "lucide-react"
 import { apiFetch } from "@/lib/api"
 import type { CatalogApp } from "@librepod/shared"
 import { LaunchTile } from "@/components/LaunchTile"
@@ -11,6 +11,7 @@ import { PlatformPanel } from "@/components/PlatformPanel"
 import { SoonTag } from "@/components/SoonTag"
 import { STATUS_DOT } from "@/components/StatusBadge"
 import { useConfig } from "@/hooks/useConfig"
+import { useDevice } from "@/hooks/useDevice"
 import { cn } from "@/lib/utils"
 
 const GRID_STYLE: React.CSSProperties = {
@@ -95,6 +96,35 @@ function DeviceSummary({ apps, baseDomain }: { apps: CatalogApp[]; baseDomain?: 
   const running = apps.filter((a) => a.installedStatus === "running").length
   const installing = apps.filter((a) => a.installedStatus === "installing").length
   const errored = apps.filter((a) => a.installedStatus === "error").length
+  const { data: info } = useDevice()
+  const device = info?.os === "present" ? info.device : null
+  const linked = info?.os === "present" || info?.os === "starting"
+  const u = device?.update
+  const updateReady = !!u?.available && (u.state === "ready" || u.state === "scheduled")
+  const m = device?.metrics
+  const osLine = device && [
+    `OS ${device.version ?? "—"}`,
+    updateReady && "Update ready",
+    m && `CPU ${Math.round(m.cpuPercent)}%`,
+    m && `Memory ${Math.round((m.memoryUsedBytes / m.memoryTotalBytes) * 100)}%`,
+  ].filter(Boolean).join(" · ")
+
+  const identity = (
+    <>
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-foreground/8 text-foreground">
+        <Server className="size-[18px]" aria-hidden />
+      </span>
+      <div className="min-w-0">
+        <p className="text-sm font-medium leading-tight">Your LibrePod</p>
+        <p className="truncate text-xs text-muted-foreground">
+          {baseDomain ?? (
+            <span className="inline-block h-3 w-24 animate-pulse rounded-sm bg-muted-foreground/20" />
+          )}
+        </p>
+        {osLine && <p className="truncate text-xs text-muted-foreground">{osLine}</p>}
+      </div>
+    </>
+  )
 
   return (
     <section
@@ -102,19 +132,13 @@ function DeviceSummary({ apps, baseDomain }: { apps: CatalogApp[]; baseDomain?: 
       className="rounded-xl bg-card p-5 ring-1 ring-foreground/10"
     >
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-foreground/8 text-foreground">
-            <Server className="size-[18px]" aria-hidden />
-          </span>
-          <div className="min-w-0">
-            <p className="text-sm font-medium leading-tight">Your LibrePod</p>
-            <p className="truncate text-xs text-muted-foreground">
-              {baseDomain ?? (
-                <span className="inline-block h-3 w-24 animate-pulse rounded-sm bg-muted-foreground/20" />
-              )}
-            </p>
-          </div>
-        </div>
+        {linked ? (
+          <Link to="/device" className="flex min-w-0 items-center gap-3 rounded-md hover:opacity-80">
+            {identity}
+          </Link>
+        ) : (
+          <div className="flex min-w-0 items-center gap-3">{identity}</div>
+        )}
 
         <div className="flex items-center gap-5 sm:gap-6">
           <Stat dot="running" active={running > 0} value={running} label="Running" />
@@ -170,7 +194,6 @@ function DeviceSummarySkeleton() {
 // tag, so the roadmap is visible but nothing here misleads.
 const CONTROLS = [
   { icon: Archive, label: "Backups", desc: "Restore points for your apps" },
-  { icon: RefreshCw, label: "Restart", desc: "Safely reboot your device" },
   { icon: Users, label: "Users", desc: "Invite people to your LibrePod" },
 ] as const
 
