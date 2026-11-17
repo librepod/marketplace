@@ -104,6 +104,12 @@ jobs:
               --local-sources GitRepository/flux-system/librepod-apps=./ \
               --dry-run || true
           '
+      # The casdoor probe postRender patch (issue #366) is silently ignored if a
+      # chart bump stops it matching the rendered Deployment — only fresh
+      # installs regress, with no other failing signal. Guard the invariant.
+      - name: Casdoor probe patch guard
+        if: matrix.app == 'casdoor'
+        run: nix-shell shell.nix --run 'bash scripts/test-casdoor-probe-patch.sh'
 
   app-components:
     runs-on: ubuntu-latest
