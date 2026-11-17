@@ -217,6 +217,15 @@ Degradation is layered, and the distinction matters:
   "First-run onboarding" below. `POST /api/bootstrap/install` is a second, session-less entry into
   `InstalledService.install()`: `OnboardingGuard`-gated, allowlist `['wg-easy']`, settings
   only (no custom variables); wg-easy's `INIT_PASSWORD` is a generated setting, so the wizard never sends it.
+- `GET /api/device` (`src/device/`) → `DeviceInfo` for LibrePod OS's `Device` (`os.librepod.org`, one
+  per node): `absent` (no such API group — k3d, library devices), `starting`, or `present` with a
+  `status`-only view (never `spec`). The API version comes from discovery (`v1beta1` preferred, `v1alpha1`
+  accepted). Kubernetes errors → 503. RBAC: `get/list/watch/patch devices` + `get metrics.k8s.io nodes`,
+  never `devices/status`; `patch devices` is root-equivalent on the node (`spec.sshKeys`).
+- `PUT /api/device/update-settings` `{channel,auto,timezone}`, `POST /api/device/install` `{when}`,
+  `POST /api/device/power` `{action}`, `PUT /api/device/ssh-keys` `{keys}` → validated, then one whole
+  `spec` section merge-patched with `max(spec, status.handled)+1` and the `resourceVersion` (one retry on
+  409); answer is the fresh `DeviceInfo`. install/power are refused (409) while the device isn't reporting.
 - `GET /api/health` → Terminus liveness (empty checks array).
 
 ### Install flow (`InstalledService.install`, behind an `async-mutex`)
@@ -293,13 +302,16 @@ account password is the only human credential.
   slow OpenBao blocks the sign-in.
 - `reset-onboarding` (`/usr/local/bin` in the image) runs `dist/onboarding/reset-onboarding.cli.js`:
   new code, `open`, generation + 1, account kept.
-- **Device code (LibrePod OS sticker):** the OS publishes Secret `librepod-setup-code` (key `code`),
-  mounted optional at `SETUP_CODE_FILE`. A new record and every reset take it instead of a random
-  code; an `open` record adopts it whenever it arrives (the pod may start first); `claimed`/`finished`
-  are never changed and never read the file. A file that is not a setup code throws where a code is
-  chosen (an open device reads `waiting`, `reset-onboarding` fails) — never a random code that stops
-  matching the sticker. The sticker's code is printed, so it never changes: it is never logged (the
-  log line points at the sticker). Absent file = any other cluster, behaviour as before.
+- **Device code (LibrePod OS sticker):** the OS publishes a bcrypt hash of the sticker code in
+  `Device.status.setupCodeHash`; the raw code is never stored or logged. A new record and every reset
+  take the hash instead of a random code; an `open` record holding a *minted* code adopts the hash
+  whenever it appears (the pod may start first); a record already holding a hash keeps it (a re-salted
+  hash of the same code is not a change); `claimed`/`finished` are never changed and never read the
+  Device. A value that is not a bcrypt hash throws where a code is chosen (an open device reads
+  `waiting`, `reset-onboarding` fails) — never a random code that stops matching the sticker. The
+  log line points at the sticker. `setupCodeMatches` is async: bcrypt compares for a hash, run one at
+  a time behind a Mutex (`/claim` is public); sha256 for a minted code. No Device = any other cluster,
+  behaviour as before.
 - **LAN arrival:** any single-label `<name>.local` (the OS's avahi name is the device name) counts as
   `arrival: 'ip'`, and `ingressroute-ip.yaml` routes it — except where that name is `BASE_DOMAIN` (k3d).
 - `BOOTSTRAP_MODE_OVERRIDE` forces the state (Tier 1: `finished`) and skips record creation.
@@ -424,7 +436,6 @@ Restart / Users) marked with `SoonTag`. All status dots read from the single
 | `WGEASY_BASE_URL` | (empty) | in-cluster wg-easy for the wizard's peer endpoints |
 | `ROOT_CA_PATH` | (empty) | the mounted root CA served by `GET /api/bootstrap/ca` |
 | `OPENBAO_SYSTEM_MOUNT` | `system` | KV v2 mount holding the onboarding record and `admin` |
-| `SETUP_CODE_FILE` | (empty) | the device's setup code from LibrePod OS (the sticker), the optional Secret `librepod-setup-code` mount. Unset or no file ⇒ a random code |
 | `BOOTSTRAP_MODE_OVERRIDE` | (empty) | **test seam only** (Tier 1): forces the onboarding state and skips record creation |
 | `OPENBAO_ADDR` | (empty) | settings store for install questions. Unset ⇒ installing an app that has `settings` returns 503; other apps are unaffected |
 | `OPENBAO_AUTH_MOUNT` | `kubernetes` | OpenBao Kubernetes auth mount |

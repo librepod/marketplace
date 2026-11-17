@@ -8,6 +8,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import bcrypt from 'bcryptjs';
 import { OnboardingService } from './onboarding.service';
 import { OnboardingStore } from './onboarding-store';
 import { formatSetupCode } from './setup-code';
@@ -53,6 +54,63 @@ describe('OnboardingService', () => {
     vi.restoreAllMocks();
     vi.useRealTimers();
     delete process.env.BOOTSTRAP_MODE_OVERRIDE;
+  });
+
+  describe('time zone seeding', () => {
+    it('account() seeds the time zone after recording the account', async () => {
+      const { kv, store, casdoor } = make();
+      const seedTimezone = vi.fn().mockResolvedValue(undefined);
+      const service = new OnboardingService(
+        store,
+        casdoor as unknown as CasdoorAdminService,
+        { seedTimezone } as never,
+      );
+      await kv.writeEntry('system', 'admin', { password: ADMIN });
+      await service.casdoorAdmin();
+      await service.claim({ code: (await store.record()).code }, '10.0.0.9');
+      await service.account({
+        username: 'alex',
+        password: 'personal-pass-12',
+        timezone: 'Europe/Minsk',
+      });
+      expect(seedTimezone).toHaveBeenCalledWith('Europe/Minsk');
+    });
+    it('account() still succeeds when seeding rejects', async () => {
+      const { kv, store, casdoor } = make();
+      const seedTimezone = vi.fn().mockRejectedValue(new Error('boom'));
+      const service = new OnboardingService(
+        store,
+        casdoor as unknown as CasdoorAdminService,
+        { seedTimezone } as never,
+      );
+      await kv.writeEntry('system', 'admin', { password: ADMIN });
+      await service.casdoorAdmin();
+      await service.claim({ code: (await store.record()).code }, '10.0.0.9');
+      await expect(
+        service.account({ username: 'alex', password: 'personal-pass-12' }),
+      ).resolves.toBeDefined();
+    });
+  });
+
+  describe('claim against a stored hash', () => {
+    it("works with the sticker's code; a wrong code is Forbidden", async () => {
+      const { kv, store, casdoor } = make();
+      const service = new OnboardingService(
+        store,
+        casdoor as unknown as CasdoorAdminService,
+      );
+      await store.record();
+      const rec = await store.record();
+      await store.save({ ...rec, code: bcrypt.hashSync('7KQMX3RT9VHC', 4) });
+      await kv.writeEntry('system', 'admin', { password: ADMIN });
+      await service.casdoorAdmin();
+      await expect(
+        service.claim({ code: '7KQMX3RT9VHD' }, '10.0.0.9'),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.claim({ code: '7kqm-x3rt-9vhc' }, '10.0.0.9'),
+      ).resolves.toBeDefined();
+    });
   });
 
   describe('claim', () => {

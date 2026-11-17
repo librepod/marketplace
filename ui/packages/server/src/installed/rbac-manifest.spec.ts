@@ -111,4 +111,35 @@ describe('marketplace-ui ClusterRole RBAC', () => {
       ),
     ).toBe(true);
   });
+
+  it('grants devices get/list/watch/patch in os.librepod.org', () => {
+    const verbs = rules
+      .filter(
+        (r) =>
+          (r.apiGroups ?? []).includes('os.librepod.org') &&
+          (r.resources ?? []).includes('devices'),
+      )
+      .flatMap((r) => r.verbs ?? [])
+      .sort();
+    expect(verbs).toEqual(['get', 'list', 'patch', 'watch']);
+  });
+
+  it('never grants devices/status', () => {
+    expect(
+      rules.some((r) =>
+        (r.resources ?? []).some((x) => x === 'devices/status' || x === '*'),
+      ),
+    ).toBe(false);
+  });
+
+  it('grants metrics.k8s.io nodes get', () => {
+    expect(
+      rules.some(
+        (r) =>
+          (r.apiGroups ?? []).includes('metrics.k8s.io') &&
+          (r.resources ?? []).includes('nodes') &&
+          (r.verbs ?? []).includes('get'),
+      ),
+    ).toBe(true);
+  });
 });

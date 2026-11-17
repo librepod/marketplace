@@ -176,8 +176,8 @@ export class BootstrapController {
   @Post('account')
   @HttpCode(200)
   @UseGuards(OnboardingGuard)
-  async account(@Body() body: { username?: unknown; password?: unknown } | undefined): Promise<{ ok: true }> {
-    await this.onboarding.account({ username: body?.username, password: body?.password });
+  async account(@Body() body: { username?: unknown; password?: unknown; timezone?: unknown } | undefined): Promise<{ ok: true }> {
+    await this.onboarding.account({ username: body?.username, password: body?.password, timezone: body?.timezone });
     return { ok: true };
   }
 

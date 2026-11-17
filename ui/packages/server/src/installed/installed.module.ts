@@ -19,7 +19,7 @@ import { NodeAddressService } from './node-address.service';
 // and NodeAddressService be unit-tested without spying on a private method. Note
 // these run eagerly at module init, so Tier 1's closed-port KUBECONFIG fixture is
 // still what keeps `loadFromDefault()` from throwing where no kubeconfig exists.
-function loadKubeConfig(): KubeConfig {
+export function loadKubeConfig(): KubeConfig {
   const kc = new KubeConfig();
   if (process.env.KUBERNETES_SERVICE_HOST) kc.loadFromCluster();
   else kc.loadFromDefault();
@@ -55,6 +55,12 @@ const coreV1ApiProvider = {
   ],
   // OpenBaoClient and NodeAddressService also serve first-run onboarding
   // (src/onboarding): one OpenBao login, one node lookup.
-  exports: [InstalledService, OpenBaoClient, NodeAddressService],
+  exports: [
+    InstalledService,
+    OpenBaoClient,
+    NodeAddressService,
+    CustomObjectsApi,
+    CoreV1Api,
+  ],
 })
 export class InstalledModule {}

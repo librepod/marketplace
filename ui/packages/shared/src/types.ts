@@ -227,3 +227,17 @@ export interface BootstrapInstallRequest {
   app: string;
   settings?: Record<string, string>;
 }
+
+// --- LibrePod OS Device (os.librepod.org) -----------------------------------
+export type DeviceSection = 'updates' | 'install' | 'power' | 'sshKeys'
+export interface DeviceUpdateSettings { channel?: 'stable' | 'beta'; auto?: boolean; timezone?: string }
+export interface DeviceUpdateStatus { current?: string; available?: string | null; downloaded?: boolean; state?: string; installAt?: string | null; settings?: DeviceUpdateSettings; failedVersions?: string[]; lastCheck?: string | null; updated?: string; detail?: string }
+export interface DeviceDisk { sizeBytes: number; usedBytes: number }
+export interface DeviceDataDisk { present: boolean; sizeBytes?: number; usedBytes?: number }
+export interface DeviceMetrics { cpuPercent: number; memoryUsedBytes: number; memoryTotalBytes: number }
+export interface DeviceView { name: string; reportedAt: string | null; reporting: boolean; version: string | null; rootDisk: DeviceDisk | null; dataDisk: DeviceDataDisk | null; update: DeviceUpdateStatus | null; sshKeys: string[]; rejected: Partial<Record<DeviceSection, string>>; pending: Record<DeviceSection, boolean>; metrics: DeviceMetrics | null }
+export type DeviceInfo = { os: 'absent' } | { os: 'starting' } | { os: 'present'; device: DeviceView }
+export interface DeviceUpdateSettingsRequest { channel: 'stable' | 'beta'; auto: boolean; timezone: string }
+export interface DeviceInstallRequest { when: 'now' | 'tonight' }
+export interface DevicePowerRequest { action: 'reboot' | 'poweroff' }
+export interface DeviceSshKeysRequest { keys: string[] }
