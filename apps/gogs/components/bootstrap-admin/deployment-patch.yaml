@@ -43,11 +43,9 @@ spec:
                   - /bin/sh
                   - -c
                   - |
-                    # A postStart hook that exits non-zero KILLS the container
-                    # (crashloop), so this script must never hard-fail gogs. It
-                    # is best-effort: if it can't create the admin, gogs still
-                    # runs and the bootstrap Job's readiness-wait surfaces the
-                    # missing user. Hence no `set -e` and every path exits 0.
+                    # Best-effort on every path (no `set -e`): a postStart hook
+                    # that exits non-zero kills the container, so never hard-fail
+                    # a serving gogs. Sole exception: the wait-timeout below.
                     MARKER_FILE="/data/.bootstrap-admin-complete"
 
                     # Idempotency: once bootstrapped (or an existing install was
@@ -62,13 +60,26 @@ spec:
                     # (INSTALL_LOCK=true skips the install wizard.) create-user in
                     # an initContainer (before this server starts) fails on a
                     # fresh DB and leaves NO user — that is why this runs here.
+                    #
+                    # Budget is 900s (450 × 2s): a fresh install runs SQLite
+                    # migrations over the NFS PVC before the web server listens,
+                    # observed >2 min on a slow volume (issue #367).
                     echo "Waiting for gogs web server to initialize the DB..."
                     i=0
                     until wget -qO- http://localhost:3000/ >/dev/null 2>&1; do
                       i=$((i + 1))
-                      if [ "$i" -ge 60 ]; then
-                        echo "WARN: gogs web not reachable after 120s; skipping admin bootstrap (Job will surface it)." >&2
-                        exit 0
+                      if [ "$i" -ge 450 ]; then
+                        # Deliberately exit non-zero. A postStart failure makes
+                        # the kubelet kill and restart the container, which is
+                        # the ONLY retry trigger for this hook (a plain give-up
+                        # is permanent — issue #367). Safe here because a
+                        # timeout means the web server never answered, so gogs
+                        # is serving no one; completed DB migrations resume via
+                        # the xorm version table, so every restart makes forward
+                        # progress. The restart backoff paces the retries and
+                        # FailedPostStartHook events make the state visible.
+                        echo "ERROR: gogs web not reachable after 900s; exiting 1 so the container restart re-runs the admin bootstrap." >&2
+                        exit 1
                       fi
                       sleep 2
                     done
