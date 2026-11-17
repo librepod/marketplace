@@ -15,22 +15,24 @@ function headline(device: DeviceView): Headline {
   if (state === "ready" && available && u.failedVersions?.includes(available)) {
     return { text: `${available} failed last time — try again`, actions: ["now", "tonight"] }
   }
+  // Every status field is optional (older LibrePod OS), so never print "undefined".
+  const next = available ?? "an update"
+  const Next = available ?? "An update"
+  const fallback = { text: state ? `Update status: ${state}` : "Update status unknown", actions: [] }
   switch (state) {
     case "up-to-date": return { text: "Up to date", actions: [] }
-    case "downloading": return { text: `Downloading ${available}`, actions: [] }
-    case "ready": return { text: `${available} is ready to install`, actions: ["now", "tonight"] }
-    case "scheduled": return { text: `${available} installs tonight at ${u.installAt?.slice(11, 16) ?? "—"}`, actions: ["now-instead"] }
-    case "installing": return { text: `Installing ${available}`, actions: [] }
-    case "done": return { text: `Updated to ${current}`, actions: [] }
+    case "downloading": return { text: `Downloading ${next}`, actions: [] }
+    case "ready": return { text: `${Next} is ready to install`, actions: ["now", "tonight"] }
+    case "scheduled": return { text: `${Next} installs tonight at ${u.installAt?.slice(11, 16) ?? "—"}`, actions: ["now-instead"] }
+    case "installing": return { text: `Installing ${next}`, actions: [] }
+    case "done": return { text: current ? `Updated to ${current}` : "Updated", actions: [] }
     case "rolled-back":
       return available
-        ? { text: `${available} didn't start, so ${current} is back`, actions: retry }
-        : { text: `Update status: ${state}`, actions: [] }
+        ? { text: `${available} didn't start, so ${current ?? "the previous version"} is back`, actions: retry }
+        : fallback
     case "failed":
-      return available
-        ? { text: `${available} didn't install`, actions: ["try-again"] }
-        : { text: `Update status: ${state}`, actions: [] }
-    default: return { text: `Update status: ${state}`, actions: [] }
+      return available ? { text: `${available} didn't install`, actions: ["try-again"] } : fallback
+    default: return fallback
   }
 }
 

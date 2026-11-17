@@ -90,6 +90,21 @@ describe('OnboardingService', () => {
         service.account({ username: 'alex', password: 'personal-pass-12' }),
       ).resolves.toBeDefined();
     });
+    it("account() doesn't wait for seeding", async () => {
+      const { kv, store, casdoor } = make();
+      const seedTimezone = vi.fn(() => new Promise<void>(() => {}));
+      const service = new OnboardingService(
+        store,
+        casdoor as unknown as CasdoorAdminService,
+        { seedTimezone } as never,
+      );
+      await kv.writeEntry('system', 'admin', { password: ADMIN });
+      await service.casdoorAdmin();
+      await service.claim({ code: (await store.record()).code }, '10.0.0.9');
+      await expect(
+        service.account({ username: 'alex', password: 'personal-pass-12' }),
+      ).resolves.toBeDefined();
+    });
   });
 
   describe('claim against a stored hash', () => {

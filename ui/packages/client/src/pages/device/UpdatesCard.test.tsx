@@ -21,6 +21,13 @@ const ROWS: Array<[string, object | null, string, string[]]> = [
   ["rolled-back, nothing to retry", { state: "rolled-back", current: "0.5.0" }, "Update status: rolled-back", []],
   ["failed", { state: "failed", available: "0.5.1" }, "0.5.1 didn't install", ["Try again"]],
   ["unknown state", { state: "weird" }, "Update status: weird", []],
+  // Older LibrePod OS may omit any status field: never "undefined" on screen.
+  ["no state", { current: "0.5.0" }, "Update status unknown", []],
+  ["downloading, no version", { state: "downloading" }, "Downloading an update", []],
+  ["ready, no version", { state: "ready", settings }, "An update is ready to install", ["Install now", "Install tonight"]],
+  ["installing, no version", { state: "installing" }, "Installing an update", []],
+  ["done, no version", { state: "done" }, "Updated", []],
+  ["rolled-back, no current", { state: "rolled-back", available: "0.5.1" }, "0.5.1 didn't start, so the previous version is back", ["Try 0.5.1 again"]],
 ]
 const ALL_BUTTONS = ["Install now", "Install tonight", "Install now instead", "Try 0.5.1 again", "Try again"]
 

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -31,6 +32,16 @@ const DEVICE_GROUP = 'os.librepod.org';
 // Versions this UI can read, newest first; the served one is picked by discovery.
 const DEVICE_VERSIONS = ['v1beta1', 'v1alpha1'];
 
+/** client-node hands an error body over as the raw text of a Kubernetes Status. */
+function statusMessage(body: unknown): string | undefined {
+  try {
+    const m = (JSON.parse(String(body)) as { message?: unknown }).message;
+    return typeof m === 'string' && m ? m : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 type Fetched =
   | { os: 'absent' }
   | { os: 'starting' }
@@ -47,8 +58,8 @@ export class DeviceService {
     private readonly config: ConfigService,
   ) {}
 
-  private unavailable(err: unknown): never {
-    this.logger.warn(`Device read failed: ${(err as Error).message}`);
+  private unavailable(err: unknown, action = 'read'): never {
+    this.logger.warn(`Device ${action} failed: ${(err as Error).message}`);
     throw new ServiceUnavailableException(
       "Couldn't reach your LibrePod's system service. Try again in a minute.",
     );
@@ -159,7 +170,13 @@ export class DeviceService {
           if (attempt === 0) continue;
           throw new ConflictException('Changed elsewhere, try again');
         }
-        return this.unavailable(err);
+        // The CRD's schema refused the value: retrying can't help, so say why.
+        if (err instanceof ApiException && err.code === 422) {
+          throw new BadRequestException(
+            `Your LibrePod refused this: ${statusMessage(err.body) ?? 'invalid value'}`,
+          );
+        }
+        return this.unavailable(err, 'write');
       }
     }
   }

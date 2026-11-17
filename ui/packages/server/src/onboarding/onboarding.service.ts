@@ -206,8 +206,8 @@ export class OnboardingService implements OnModuleInit, OnModuleDestroy {
 
     const next: OnboardingRecord = { ...record, account: username, accountGeneration: record.generation };
     await this.stored(this.store.save(next));
-    // Best effort: a Device that can't take the zone must never fail account setup.
-    await Promise.resolve(this.device?.seedTimezone(input.timezone)).catch(() => undefined);
+    // Best effort, not awaited: a slow or failing Device must never delay or fail account setup.
+    void this.device?.seedTimezone(input.timezone).catch(() => undefined);
     return next;
   }
 

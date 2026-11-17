@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { ConflictException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   ApiException,
@@ -225,6 +229,20 @@ describe('DeviceService.write', () => {
     await expect(svc.write('power', { action: 'reboot' })).rejects.toThrow(
       'Changed elsewhere, try again',
     );
+  });
+
+  it("a 422 schema refusal → 400 with the API server's reason, not a retryable 503", async () => {
+    const { svc, objects } = make({ items: [powerDev()] });
+    const status = { kind: 'Status', reason: 'Invalid', message: 'spec.sshKeys.keys[0]: Invalid value' };
+    objects.patchClusterCustomObject.mockRejectedValue(
+      new ApiException(422, 'Unknown API Status Code!', JSON.stringify(status), {}),
+    );
+    const err = await svc.write('sshKeys', { keys: ['x'] }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as Error).message).toBe(
+      'Your LibrePod refused this: spec.sshKeys.keys[0]: Invalid value',
+    );
+    expect(objects.patchClusterCustomObject).toHaveBeenCalledTimes(1);
   });
 
   it('refuses install and power while not reporting; allows updates and sshKeys', async () => {

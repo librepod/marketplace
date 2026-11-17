@@ -31,6 +31,10 @@ export function useDeviceWrite() {
       if (!res.ok) throw new Error(json?.message ?? "Something went wrong")
       return json as DeviceInfo
     },
-    onSuccess: (info) => client.setQueryData(["device"], info),
+    onSuccess: async (info) => {
+      // A poll still in flight may have read the Device before this write; drop it.
+      await client.cancelQueries({ queryKey: ["device"] })
+      client.setQueryData(["device"], info)
+    },
   })
 }
