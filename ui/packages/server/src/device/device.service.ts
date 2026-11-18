@@ -145,8 +145,9 @@ export class DeviceService {
       if (f.os !== 'present')
         throw new ConflictException("LibrePod OS isn't reporting yet");
       this.assertWritable(f.raw, section);
+      let patched: RawDevice;
       try {
-        await this.objects.patchClusterCustomObject(
+        patched = (await this.objects.patchClusterCustomObject(
           {
             group: DEVICE_GROUP,
             version: f.version,
@@ -163,8 +164,7 @@ export class DeviceService {
             },
           },
           setHeaderOptions('Content-Type', PatchStrategy.MergePatch),
-        );
-        return this.read();
+        )) as RawDevice;
       } catch (err) {
         if (err instanceof ApiException && err.code === 409) {
           if (attempt === 0) continue;
@@ -178,6 +178,12 @@ export class DeviceService {
         }
         return this.unavailable(err, 'write');
       }
+      // The patch answers with the whole updated Device: a second read could fail after the write landed.
+      const metrics = await this.metrics(patched.metadata.name);
+      return {
+        os: 'present',
+        device: toDeviceView(patched, metrics, Date.now()),
+      };
     }
   }
 

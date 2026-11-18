@@ -50,7 +50,8 @@ function make(
     getClusterCustomObject: vi
       .fn()
       .mockResolvedValue({ usage: { cpu: '500m', memory: '4Gi' } }),
-    patchClusterCustomObject: vi.fn(),
+    // The API server answers a patch with the whole updated object.
+    patchClusterCustomObject: vi.fn().mockResolvedValue(dev('node-a')),
   };
   const core = {
     readNode: vi.fn().mockResolvedValue({
@@ -190,7 +191,6 @@ describe('DeviceService.write', () => {
         { ...powerDev(), metadata: { name: 'node-a', resourceVersion: '41' } },
       ],
     });
-    objects.patchClusterCustomObject.mockResolvedValue({});
     await svc.write('power', { action: 'reboot' });
     const [arg, opt] = objects.patchClusterCustomObject.mock.calls[0];
     expect(arg).toMatchObject({
@@ -211,9 +211,9 @@ describe('DeviceService.write', () => {
 
   it('retries once on a 409 Conflict, re-reading first', async () => {
     const { svc, objects } = make({ items: [powerDev()] });
-    objects.patchClusterCustomObject
-      .mockRejectedValueOnce(new ApiException(409, 'conflict', {}, {}))
-      .mockResolvedValue({});
+    objects.patchClusterCustomObject.mockRejectedValueOnce(
+      new ApiException(409, 'conflict', {}, {}),
+    );
     await svc.write('power', { action: 'reboot' });
     expect(objects.patchClusterCustomObject).toHaveBeenCalledTimes(2);
     expect(
@@ -248,7 +248,6 @@ describe('DeviceService.write', () => {
   it('refuses install and power while not reporting; allows updates and sshKeys', async () => {
     const old = dev('node-a', { status: { updated: '2020-01-01T00:00:00Z' } });
     const { svc, objects } = make({ items: [old] });
-    objects.patchClusterCustomObject.mockResolvedValue({});
     await expect(svc.write('install', { when: 'now' })).rejects.toThrow(
       "hasn't reported since",
     );
@@ -281,16 +280,18 @@ describe('DeviceService.write', () => {
     }
   });
 
-  it('answers with the fresh DeviceInfo', async () => {
-    const { svc, objects } = make({ items: [powerDev()] });
-    objects.patchClusterCustomObject.mockResolvedValue({});
-    objects.listClusterCustomObject
-      .mockResolvedValueOnce({ items: [powerDev()] })
-      .mockResolvedValueOnce({ items: [powerDev({}, { power: { id: 6 } })] });
+  it('answers from the patched Device: a read failing after the write landed is no 503', async () => {
+    const { svc, objects, apis } = make({ items: [powerDev()] });
+    objects.patchClusterCustomObject.mockResolvedValue(
+      powerDev({}, { power: { id: 6 } }),
+    );
+    apis.getAPIVersions
+      .mockResolvedValueOnce(groups('v1alpha1'))
+      .mockRejectedValue(new Error('connection reset'));
     const info = await svc.write('power', { action: 'reboot' });
     expect(info).toMatchObject({
       os: 'present',
-      device: { pending: { power: true } },
+      device: { pending: { power: true }, metrics: { cpuPercent: 12.5 } },
     });
   });
 });
@@ -310,7 +311,6 @@ describe('DeviceService.seedTimezone', () => {
     });
   const run = async (item: unknown, tz: unknown = 'Europe/Minsk') => {
     const m = make(item ? { items: [item] } : { items: [] });
-    m.objects.patchClusterCustomObject.mockResolvedValue({});
     await m.svc.seedTimezone(tz);
     return m.objects.patchClusterCustomObject;
   };
