@@ -30,6 +30,11 @@ const used = (d: { sizeBytes?: number; usedBytes?: number }) =>
   d.sizeBytes ? `${formatBytes(d.usedBytes ?? 0)} of ${formatBytes(d.sizeBytes)}` : undefined
 const share = (d: { sizeBytes?: number; usedBytes?: number }) =>
   d.sizeBytes ? (d.usedBytes ?? 0) / d.sizeBytes : null
+// No size reported (older LibrePod OS) reads "—", never a misleading "0%".
+const percent = (d: { sizeBytes?: number; usedBytes?: number } | null) => {
+  const s = d ? share(d) : null
+  return s === null ? "—" : `${Math.round(s * 100)}%`
+}
 
 export function HealthTiles({ device }: { device: DeviceView }) {
   const { metrics, rootDisk, dataDisk } = device
@@ -43,7 +48,7 @@ export function HealthTiles({ device }: { device: DeviceView }) {
       />
       <Tile
         label="System disk"
-        value={rootDisk ? `${Math.round(share(rootDisk)! * 100)}%` : "—"}
+        value={percent(rootDisk)}
         detail={rootDisk ? used(rootDisk) : undefined}
         ratio={rootDisk ? share(rootDisk) : null}
       />
@@ -52,7 +57,7 @@ export function HealthTiles({ device }: { device: DeviceView }) {
       ) : (
         <Tile
           label="Data disk"
-          value={dataDisk ? `${Math.round((share(dataDisk) ?? 0) * 100)}%` : "—"}
+          value={percent(dataDisk)}
           detail={dataDisk ? used(dataDisk) : undefined}
           ratio={dataDisk ? share(dataDisk) : null}
         />

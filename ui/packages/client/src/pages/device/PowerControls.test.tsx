@@ -16,7 +16,7 @@ function setup(device: DeviceView) {
     </QueryClientProvider>
   )
   const view = render(ui(device))
-  return { fetchMock, rerender: (d: DeviceView) => view.rerender(ui(d)) }
+  return { fetchMock, client, rerender: (d: DeviceView) => view.rerender(ui(d)) }
 }
 const bodyOf = (m: ReturnType<typeof vi.spyOn>) => JSON.parse((m.mock.calls[0][1] as RequestInit).body as string)
 
@@ -72,10 +72,40 @@ describe("PowerControls", () => {
     expect(screen.getByRole("button", { name: "Restart" })).toBeEnabled()
   })
 
-  it("a refused restart shows the device's reason, and no 'Restarting…'", () => {
+  it("a refusal this tab didn't send (a reload, another tab) shows the reason without guessing the action", () => {
     setup(deviceView({ rejected: { power: "an update is installing" } }))
-    expect(screen.getByText("The device refused your restart: an update is installing.")).toBeVisible()
+    expect(screen.getByText("The device refused your power request: an update is installing.")).toBeVisible()
     expect(screen.queryByText(/Restarting…/)).toBeNull()
+  })
+
+  it("this tab's refused power off is named as one", async () => {
+    const { fetchMock } = setup(deviceView({ rejected: { power: "an update is installing" } }))
+    fireEvent.click(screen.getByRole("button", { name: "Power off" }))
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Power off" }))
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    expect(await screen.findByText("The device refused your power off: an update is installing.")).toBeVisible()
+  })
+
+  it.each([
+    ["polls kept answering: it is going down", false, true],
+    ["polls failed since sending: it already restarted", true, false],
+  ])("the device takes the restart after the write answered — %s", async (_n, pollsFailed, restarting) => {
+    const t0 = "2026-11-16T12:00:00Z"
+    const pending = { updates: false, install: false, power: true, sshKeys: false }
+    const { fetchMock, client, rerender } = setup(deviceView({ reportedAt: t0 }))
+    fetchMock.mockResolvedValue({
+      ok: true, status: 200, json: async () => ({ os: "present", device: deviceView({ reportedAt: t0, pending }) }),
+    } as Response)
+    fireEvent.click(screen.getByRole("button", { name: "Restart" }))
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Restart" }))
+    await vi.waitFor(() => expect(client.getQueryData(["device"])).toBeDefined())
+    await act(async () => rerender(deviceView({ reportedAt: t0, pending })))
+    if (pollsFailed) {
+      const q = client.getQueryCache().find({ queryKey: ["device"] })!
+      q.setState({ ...q.state, errorUpdatedAt: Date.now() + 1 })
+    }
+    await act(async () => rerender(deviceView({ reportedAt: "2026-11-16T12:03:00Z" })))
+    expect(screen.queryByText(/Restarting…/) !== null).toBe(restarting)
   })
 
   it("goes into 'Restarting…' straight from an accepted write, even if the agent handled it before the response", async () => {

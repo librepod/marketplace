@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { Power, RotateCcw } from "lucide-react"
 import type { DeviceView } from "@librepod/shared"
 import {
@@ -30,15 +31,19 @@ export function PowerControls({ device }: { device: DeviceView }) {
   const [asking, setAsking] = useState<Action | null>(null) // AlertDialogAction doesn't close by itself
   const [down, setDown] = useState<{ action: Action; reportedAt: string | null } | null>(null)
   const prevPending = useRef(device.pending.power)
+  const sentAt = useRef(0)
+  const client = useQueryClient()
 
-  // This tab's answer was taken by the device without a refusal: it is going down.
+  // This tab's answer was taken by the device without a refusal: it is going down —
+  // unless polls failed since sending, i.e. it already went down and is back.
   useEffect(() => {
     if (sent && prevPending.current && !device.pending.power && !device.rejected.power) {
-      setDown({ action: sent, reportedAt: device.reportedAt })
+      const missed = (client.getQueryState(["device"])?.errorUpdatedAt ?? 0) > sentAt.current
+      if (!missed) setDown({ action: sent, reportedAt: device.reportedAt })
       setSent(null)
     }
     prevPending.current = device.pending.power
-  }, [device.pending.power, device.rejected.power, device.reportedAt, sent])
+  }, [client, device.pending.power, device.rejected.power, device.reportedAt, sent])
 
   // Back once it reports again (a newer reportedAt), or after a cap.
   useEffect(() => {
@@ -52,6 +57,7 @@ export function PowerControls({ device }: { device: DeviceView }) {
     !device.reporting || device.update?.state === "installing" || device.pending.power || down !== null || write.isPending
   const refused = !device.pending.power && device.rejected.power
   const send = (action: Action) => {
+    sentAt.current = Date.now()
     setSent(action)
     write.mutate(
       { path: "power", method: "POST", body: { action } },
@@ -98,7 +104,7 @@ export function PowerControls({ device }: { device: DeviceView }) {
       {write.isError && <p className="text-sm text-destructive">{write.error.message}</p>}
       {refused && !down && (
         <p className="text-sm text-destructive">
-          The device refused your {COPY[sent ?? "reboot"].noun}: {refused}.
+          The device refused your {sent ? COPY[sent].noun : "power request"}: {refused}.
         </p>
       )}
     </div>

@@ -27,5 +27,7 @@ describe("useDeviceWrite", () => {
     await act(async () => answerPoll(reply({ os: "present", device: { name: "stale" } })))
 
     expect(result.current.q.data).toEqual({ os: "present", device: { name: "fresh" } })
+    // PowerControls reads errorUpdatedAt as "polls failed": a cancelled poll must not set it
+    expect(client.getQueryState(["device"])?.errorUpdatedAt).toBe(0)
   })
 })

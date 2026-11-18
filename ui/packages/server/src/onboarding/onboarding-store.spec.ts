@@ -300,6 +300,25 @@ describe('OnboardingStore', () => {
       expect(log).toHaveBeenCalledWith(expect.stringMatching(/now the one printed on this device's sticker/));
     });
 
+    it('adopting it loses a race with another write → answers with what is stored, no retry loop', async () => {
+      vi.useFakeTimers({ now: new Date('2026-11-10T10:00:00Z') });
+      const kv = new FakeKv();
+      const device = stub(null);
+      const { store } = withHash(kv, device);
+      await store.record();
+      device.setupCodeHash.mockResolvedValue(HASH);
+      // a reset by the CLI lands between our read and our adopting write
+      const read = kv.readEntry.bind(kv);
+      vi.spyOn(kv, 'readEntry').mockImplementationOnce(async (mount, path) => {
+        const before = await read(mount, path);
+        await kv.writeEntry(mount, path, { ...before!.data, code: 'RESETCODE234', generation: 2 });
+        return before;
+      });
+      vi.advanceTimersByTime(5_001);
+      expect(await store.record()).toMatchObject({ code: 'RESETCODE234', generation: 2 });
+      expect(device.setupCodeHash).toHaveBeenCalledTimes(2);
+    });
+
     it('a stored hash is never replaced by another hash of the same code', async () => {
       vi.useFakeTimers({ now: new Date('2026-11-10T10:00:00Z') });
       const kv = new FakeKv();
