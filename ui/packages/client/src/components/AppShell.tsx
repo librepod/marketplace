@@ -8,6 +8,7 @@ import { Toaster } from "@/components/ui/sonner"
 import { UserMenu } from "@/components/UserMenu"
 import { SoonTag } from "@/components/SoonTag"
 import { TrustBanner } from "@/components/TrustBanner"
+import { useDevice } from "@/hooks/useDevice"
 import { cn } from "@/lib/utils"
 
 // Top-nav link styling. The active item carries a foreground underline so the
@@ -23,6 +24,8 @@ function navLinkClassName({ isActive }: { isActive: boolean }) {
 }
 
 export function AppShell() {
+  const { data: device } = useDevice()
+  const hasOs = device?.os === "present" || device?.os === "starting"
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Above the header: a distrust condition concerns the whole device, not one page. */}
@@ -41,6 +44,11 @@ export function AppShell() {
               <NavLink to="/catalog" className={navLinkClassName}>
                 Catalog
               </NavLink>
+              {hasOs && (
+                <NavLink to="/device" className={navLinkClassName}>
+                  Device
+                </NavLink>
+              )}
               {/* Users management is on the roadmap — shown as a disabled,
                   non-navigable item so the control-plane shape is legible
                   without offering a dead link. */}

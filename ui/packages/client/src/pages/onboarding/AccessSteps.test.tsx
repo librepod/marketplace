@@ -119,7 +119,7 @@ describe("AccountStep", () => {
     type("Confirm password", "personal-pass-12")
     fireEvent.click(screen.getByRole("button", { name: /create account/i }))
     await vi.waitFor(() => expect(onDone).toHaveBeenCalled())
-    expect(bodyOf(fetchMock, "/api/bootstrap/account")).toEqual({ username: "alex", password: "personal-pass-12" })
+    expect(bodyOf(fetchMock, "/api/bootstrap/account")).toEqual({ username: "alex", password: "personal-pass-12", timezone: expect.any(String) })
   })
 
   it('"admin" and invalid characters are refused before posting', () => {
@@ -140,7 +140,7 @@ describe("AccountStep", () => {
     expect(screen.getByLabelText(/keep alex/i)).toBeChecked()
     fireEvent.click(screen.getByRole("button", { name: /^continue$/i }))
     await vi.waitFor(() => expect(onDone).toHaveBeenCalled())
-    expect(bodyOf(fetchMock, "/api/bootstrap/account")).toEqual({ username: "alex" })
+    expect(bodyOf(fetchMock, "/api/bootstrap/account")).toEqual({ username: "alex", timezone: expect.any(String) })
   })
 
   it("after a reset: keep the account with a new password (the forgotten-password recovery)", async () => {
@@ -153,7 +153,7 @@ describe("AccountStep", () => {
     type("Confirm password", "brand-new-pass-12")
     fireEvent.click(go)
     await vi.waitFor(() =>
-      expect(bodyOf(fetchMock, "/api/bootstrap/account")).toEqual({ username: "alex", password: "brand-new-pass-12" }),
+      expect(bodyOf(fetchMock, "/api/bootstrap/account")).toEqual({ username: "alex", password: "brand-new-pass-12", timezone: expect.any(String) }),
     )
   })
 

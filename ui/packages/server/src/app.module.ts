@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { InstalledModule } from './installed/installed.module';
+import { DeviceModule } from './device/device.module';
 import { HealthModule } from './health/health.module';
 import { ConfigModule } from './config/config.module';
 
@@ -20,6 +21,7 @@ import { ConfigModule } from './config/config.module';
     OnboardingModule,
     CatalogModule,
     InstalledModule,
+    DeviceModule,
     HealthModule,
     ConfigModule,
   ],

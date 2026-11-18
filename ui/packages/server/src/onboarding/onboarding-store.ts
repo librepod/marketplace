@@ -1,8 +1,8 @@
-import { readFileSync } from 'node:fs';
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OpenBaoCasMismatchError, OpenBaoClient } from '../installed/openbao.client';
-import { formatSetupCode, generateSetupCode, isSetupCode, normalizeSetupCode } from './setup-code';
+import { DeviceService } from '../device/device.service';
+import { formatSetupCode, generateSetupCode, isBcryptHash } from './setup-code';
 
 export type StoredState = 'open' | 'claimed' | 'finished';
 
@@ -76,6 +76,7 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly bao: OpenBaoClient,
     private readonly config: ConfigService,
+    @Optional() private readonly device?: DeviceService,
   ) {}
 
   private get mount(): string {
@@ -157,7 +158,7 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
    * repairs a missing or malformed record. The operator's command wins whatever the
    * record holds: no check-and-set. */
   async reset(): Promise<string> {
-    const device = this.deviceCode();
+    const device = await this.deviceCodeHash();
     const old = (await this.bao.readEntry(this.mount, RECORD_PATH))?.data ?? {};
     const record: StoredRecord = {
       state: 'open',
@@ -185,16 +186,19 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
 
   /** Reads the record, creating it when missing: open, the device code or a fresh one,
    * generation 1. Check-and-set (cas 0), so two pods starting together cannot both
-   * create a code. An open record takes the device code whenever it arrives — the pod
-   * may start before LibrePod OS published it — so an open device always answers to
-   * its sticker; a claimed or finished one is never changed, and never reads the file:
-   * a broken one must not lock out a device past the code step. */
+   * create a code. An open record holding a minted code takes the device's hash whenever
+   * it arrives — the pod may start before LibrePod OS published it — so an open device
+   * always answers to its sticker. A record that already holds a hash keeps it (a
+   * re-salted hash of the same code is not a change); a claimed or finished one is never
+   * changed, and never reads the Device: a broken one must not lock out a device past
+   * the code step. */
   private async ensure(): Promise<OnboardingRecord> {
     const existing = await this.read();
     if (existing && existing.state !== 'open') return existing;
-    const device = this.deviceCode();
+    if (existing && isBcryptHash(existing.code)) return existing;
+    const device = await this.deviceCodeHash();
     if (existing) {
-      if (!device || existing.code === device) return existing;
+      if (!device) return existing;
       try {
         await this.save({ ...existing, code: device });
       } catch (err) {
@@ -223,25 +227,16 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
     return { ...fresh, version: 1 };
   }
 
-  /** The code LibrePod OS provisioned for this device (printed on its sticker), from the
-   * optional Secret mount; null on any other cluster or before the Secret exists. A file
-   * that is not a setup code throws: a random code would silently stop matching the sticker.
-   * Sync: a few bytes of a Secret mount, read only while a code is being chosen or logged. */
-  private deviceCode(): string | null {
-    const file = this.config.get<string>('SETUP_CODE_FILE');
-    if (!file) return null;
-    let raw: string;
-    try {
-      raw = readFileSync(file, 'utf8');
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
-      throw err;
+  /** The bcrypt hash of the sticker code LibrePod OS published in the Device's status;
+   * null on any other cluster or before the Device reports one. A value that is not a
+   * hash throws: a random code would silently stop matching the sticker. */
+  private async deviceCodeHash(): Promise<string | null> {
+    const hash = await this.device?.setupCodeHash();
+    if (!hash) return null;
+    if (!isBcryptHash(hash)) {
+      throw new Error('Device status.setupCodeHash is not a bcrypt hash — check the LibrePod OS agent');
     }
-    const code = normalizeSetupCode(raw);
-    if (!isSetupCode(code)) {
-      throw new Error(`${file} is not a setup code — check Secret marketplace-ui/librepod-setup-code`);
-    }
-    return code;
+    return hash;
   }
 
   private async read(): Promise<OnboardingRecord | null> {
@@ -265,16 +260,10 @@ export class OnboardingStore implements OnModuleInit, OnModuleDestroy {
   }
 
   private logCode(code: string): void {
-    let sticker: boolean;
-    try {
-      sticker = code === this.deviceCode();
-    } catch {
-      sticker = true; // a broken file still means a LibrePod OS device: don't risk logging its code
-    }
-    if (sticker) {
+    if (isBcryptHash(code)) {
       // The sticker's code never changes, so a log line holding it would outlive every reset.
       this.logger.log(
-        "LibrePod setup code: the one printed on this device's sticker (also in Secret marketplace-ui/librepod-setup-code) — open http://<this device's IP> to set up",
+        "LibrePod setup code: the one printed on this device's sticker — open http://<this device's IP> to set up",
       );
       return;
     }

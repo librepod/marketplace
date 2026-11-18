@@ -8,6 +8,7 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -20,6 +21,7 @@ import {
   STORE_UNAVAILABLE,
   type OnboardingRecord,
 } from './onboarding-store';
+import { DeviceService } from '../device/device.service';
 import { setupCodeMatches } from './setup-code';
 
 /** The account password's floor; Casdoor's set-password rejects whitespace. */
@@ -48,6 +50,7 @@ export class OnboardingService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly store: OnboardingStore,
     private readonly casdoor: CasdoorAdminService,
+    @Optional() private readonly device?: DeviceService,
   ) {}
 
   onModuleInit(): void {
@@ -125,7 +128,7 @@ export class OnboardingService implements OnModuleInit, OnModuleDestroy {
   async claim(input: { code: unknown }, source: string): Promise<OnboardingRecord> {
     const record = await this.stored(this.store.record());
     if (record.state === 'finished') throw new ConflictException('This device is already set up');
-    this.checkCode(input.code, record, source);
+    await this.checkCode(input.code, record, source);
     if (record.state === 'claimed') {
       this.logger.log(`setup resumed from ${source}`);
       return record;
@@ -140,7 +143,7 @@ export class OnboardingService implements OnModuleInit, OnModuleDestroy {
    * (after a reset), or an account proven by its password — the owner's own from
    * before the record existed, or any existing one while the machine credential
    * is unusable. Someone else's user is never adopted on a username alone. */
-  async account(input: { username: unknown; password?: unknown }): Promise<OnboardingRecord> {
+  async account(input: { username: unknown; password?: unknown; timezone?: unknown }): Promise<OnboardingRecord> {
     const username = typeof input.username === 'string' ? input.username : '';
     if (!USERNAME.test(username) || username === 'admin') {
       throw new BadRequestException('Use 1–39 lowercase letters and digits, joined by single dots or dashes — "admin" is taken');
@@ -203,11 +206,13 @@ export class OnboardingService implements OnModuleInit, OnModuleDestroy {
 
     const next: OnboardingRecord = { ...record, account: username, accountGeneration: record.generation };
     await this.stored(this.store.save(next));
+    // Best effort, not awaited: a slow or failing Device must never delay or fail account setup.
+    void this.device?.seedTimezone(input.timezone).catch(() => undefined);
     return next;
   }
 
-  private checkCode(code: unknown, record: OnboardingRecord, source: string): void {
-    if (setupCodeMatches(code, record.code)) return;
+  private async checkCode(code: unknown, record: OnboardingRecord, source: string): Promise<void> {
+    if (await setupCodeMatches(code, record.code)) return;
     // The source address, never the attempted value.
     this.logger.warn(`wrong setup code from ${source}`);
     throw new ForbiddenException("That setup code isn't right");
