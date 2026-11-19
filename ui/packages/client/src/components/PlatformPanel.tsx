@@ -18,7 +18,7 @@ export function PlatformPanel() {
 
   return (
     <section aria-labelledby="platform-heading" className="mt-12">
-      <details open>
+      <details>
         <summary
           id="platform-heading"
           className="mb-4 cursor-pointer text-sm font-medium text-muted-foreground"
