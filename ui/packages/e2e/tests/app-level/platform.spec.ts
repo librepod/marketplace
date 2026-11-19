@@ -25,8 +25,10 @@ test.describe("Platform / system apps", () => {
 
   test("Platform panel lists the managed app read-only on the home page", async ({ page }) => {
     await page.goto("/");
-    // The Platform panel heading
-    await expect(page.getByText(/Platform/)).toBeVisible();
+    const panel = page.getByRole("region", { name: /Platform/ });
+    // The panel is a <details> collapsed by default — expand it before
+    // asserting on content, which has no layout (never "visible") while closed.
+    await panel.locator("summary").click();
     // The managed app row, with its System tag
     await expect(page.getByText("FRP Operator")).toBeVisible();
     await expect(page.getByText("System")).toBeVisible();
@@ -34,7 +36,6 @@ test.describe("Platform / system apps", () => {
     // the page-level TrustBanner (#288) renders "Install the root certificate"
     // once its async trust check resolves, which matches a page-wide /install/i
     // locator — a race the assertion sometimes loses.
-    const panel = page.getByRole("region", { name: /Platform/ });
     await expect(panel.getByRole("button", { name: /install/i })).toHaveCount(0);
   });
 });
