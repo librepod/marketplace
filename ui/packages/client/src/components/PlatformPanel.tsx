@@ -18,7 +18,10 @@ export function PlatformPanel() {
 
   return (
     <section aria-labelledby="platform-heading" className="mt-12">
-      <details>
+      {/* Collapsed by default; forced open on error so the retry affordance
+          below is never hidden behind a healthy-looking summary. React only
+          touches `open` when isError flips, not on user toggles. */}
+      <details open={isError}>
         <summary
           id="platform-heading"
           className="mb-4 cursor-pointer text-sm font-medium text-muted-foreground"
@@ -38,7 +41,9 @@ export function PlatformPanel() {
                 >
                   <AppIcon src={app.icon} name={app.displayName} size={48} />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium leading-tight">{app.displayName}</p>
+                    <p className="truncate text-sm font-medium leading-tight" title={app.displayName}>
+                      {app.displayName}
+                    </p>
                     <p className="truncate text-xs text-muted-foreground">{app.version}</p>
                   </div>
                   <span className="inline-flex items-center gap-1 rounded-full bg-foreground/5 px-2 py-0.5 text-xs text-muted-foreground">

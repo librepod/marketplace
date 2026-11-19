@@ -52,11 +52,18 @@ describe('PlatformPanel', () => {
       json: async () => [systemApp],
     } as Response)
 
-    render(withProviders(<PlatformPanel />))
+    const { container } = render(withProviders(<PlatformPanel />))
+
+    // Collapsed by default: content is in the DOM but the panel starts closed
+    // (attribute check only — jsdom does no layout).
+    expect(container.querySelector('details')).not.toHaveAttribute('open')
 
     await waitFor(() => {
       expect(screen.getByText('FRP Operator')).toBeInTheDocument()
     })
+    // Truncated rows distinguish themselves on hover, e.g. the two
+    // "External Secrets …" platform components.
+    expect(screen.getByTitle('FRP Operator')).toBeInTheDocument()
     expect(screen.getByText('System')).toBeInTheDocument()
     expect(screen.getByText('Running')).toBeInTheDocument()
     // No install affordance on a platform component
@@ -76,5 +83,16 @@ describe('PlatformPanel', () => {
       expect(screen.getByText(/Platform/)).toBeInTheDocument()
     })
     expect(container.querySelector('ul')).toBeNull()
+  })
+
+  it('auto-opens the panel when the fetch fails so the retry stays reachable', async () => {
+    vi.spyOn(global, 'fetch').mockRejectedValueOnce(new TypeError('network down'))
+
+    const { container } = render(withProviders(<PlatformPanel />))
+
+    await waitFor(() => {
+      expect(container.querySelector('details')).toHaveAttribute('open')
+    })
+    expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
   })
 })
