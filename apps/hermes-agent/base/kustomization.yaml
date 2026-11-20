@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: hermes-agent
+
+labels:
+- includeSelectors: true
+  includeTemplates: true
+  pairs:
+    app.kubernetes.io/name: hermes-agent
+
+configMapGenerator:
+- name: hermes-agent
+  envs:
+  - hermes-agent.env
+- name: hermes-agent-launcher
+  files:
+  - entrypoint.sh
+
+resources:
+- namespace.yaml
+- serviceaccount.yaml
+- pvc.yaml
+- service.yaml
+- deployment.yaml
+- externalsecret.yaml

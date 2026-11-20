@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: hermes-agent
+
+resources:
+- ../../base
+- ingressroute.yaml
+- ssoclient.yaml
+
+# Image = vetted dependency toolkit only; which hermes runs is decided by the
+# PVC checkout, never the image (see metadata.yaml version note) — so bumping
+# this tag is always safe.
+images:
+- name: nousresearch/hermes-agent
+  # renovate: datasource=docker depName=nousresearch/hermes-agent
+  newTag: "v0.23.3"
+
+patches:
+- path: ./patch-storage-class.yaml
+  target:
+    kind: PersistentVolumeClaim

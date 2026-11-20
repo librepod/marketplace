@@ -1,0 +1,10 @@
+# nfs-client: the PVC's contents must survive uninstall/reinstall — the
+# keeper's memories, skills and sessions ARE the product (an nfs-client folder
+# persists after PVC delete; local-path would not). SQLite-on-NFS risk is
+# bounded by the single-writer Recreate strategy.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hermes-agent-data
+spec:
+  storageClassName: nfs-client
