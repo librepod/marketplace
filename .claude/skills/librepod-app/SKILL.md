@@ -120,6 +120,10 @@ apps/<app-name>/
 │   ├── pvc.yaml                           # If persistent storage needed
 │   ├── externalsecret.yaml                # Both types — pulls install settings from OpenBao (see [Settings](#settings-install-questions--generated-secrets))
 │   └── <app-name>.env                     # Environment variables
+├── components/
+│   └── <name>/                            # Bundled third-party service units — see "Base vs bundled components"
+│       ├── kustomization.yaml             # kind: Component, no transformers
+│       └── <name>.yaml                    # Deployment + Service, labels hardcoded
 └── overlays/
     └── librepod/
         ├── kustomization.yaml
@@ -1003,9 +1007,31 @@ For Helm-based apps, check the chart's values for `initContainers` or `extraInit
 
 ---
 
+## Base vs bundled components (`components/<name>/`)
+
+When an app needs more than one workload, each workload gets an `app.kubernetes.io/component: <name>` label on its Deployment selector, pod template, and Service selector — the base-level common label transformer gives everything `app.kubernetes.io/name: <app>`, and without a distinguishing key every Service in the namespace would select every pod (see "Multiple workloads and selector uniqueness" below). Where each extra workload *lives* follows one criterion — **image ownership**, not persistence:
+
+- **`base/` = the vendor application's own fabric.** Workloads running the vendor's own images (the API server, the vendor's proprietary engine services). A vendor-image workload that needs its own component label (a separate engine service) still stays in base — it *is* the product.
+- **`components/<name>/` = third-party service units the vendor merely bundles.** Generic infrastructure images (postgres, valkey, rabbitmq, redis-compatible caches, brokers) — things that are not this app and would read the same in any other app's bundle.
+
+**The authoring-time signal:** you are about to add an `app.kubernetes.io/component` label directly to a Deployment/Service whose image comes from a third party → that workload is a separable unit; put it in `components/<name>/` now, not in base. Persistence is explicitly NOT the criterion — an ephemeral valkey is just as much a component as a PVC-backed postgres.
+
+Each bundled component is a Kustomize *Component* (`apiVersion: kustomize.config.k8s.io/v1alpha1, kind: Component`) holding its workloads, composed from `base/kustomization.yaml` via `components:` (mandatory inclusion; overlay-level components are for optional features). **No `labels:`/`namespace:` transformers inside the component** — a transformer declared in a component hoists to the composing overlay's root and would apply to unrelated resources. Instead:
+
+- hardcode **both** label pairs (`app.kubernetes.io/name: <app>` and `app.kubernetes.io/component: <name>`) in the component's Deployment selector, pod template, and Service selector — idempotent with base's transformer, which also applies;
+- the component's resources inherit the namespace from base's `namespace:` field.
+
+Do not confuse these app-level components with the repo-level shared components in `components/` at the repository root (optional networking pieces offered through `spec.components` — see [Shared components](#shared-components)).
+
+Worked example — `apps/firecrawl/`: `base/` holds the API harness and `playwright-service` (both `ghcr.io/firecrawl/*` vendor images); `components/postgres/`, `components/valkey/`, `components/rabbitmq/` hold the bundled third-party units.
+
+### Multiple workloads and selector uniqueness
+
+The base label transformer (`includeSelectors: true`) injects `app.kubernetes.io/name: <app>` into every Service selector and every Deployment's `matchLabels`. In a single-workload app that alone is a correct selector. In a multi-workload app it degenerates every selector to the same key set — every Service would route to every pod (`redis://valkey:6379` landing on a random pod, the ingress backend load-balancing across postgres). The moment a second workload appears, selector uniqueness becomes a correctness requirement: each workload's selector and pod template MUST carry a distinguishing `app.kubernetes.io/component` label alongside the common name.
+
 ## Bundled PostgreSQL
 
-When an app bundles its own database as a sibling Deployment (conventionally `components/postgres/` with its own `deployment.yaml`, `service.yaml`, `pvc.yaml`), three rules apply. Include the component from `base/kustomization.yaml` via `components:` — a component declared in base is mandatory and inherits base's labels/namespace transformers; overlay-level components (headscale's pattern) are for optional features.
+A bundled database is the canonical bundled component (see [Base vs bundled components](#base-vs-bundled-components-componentsname)): `components/postgres/` with its own `deployment.yaml`, `service.yaml`, `pvc.yaml`, included from `base/kustomization.yaml` via `components:` (mandatory). Three rules apply to any such Deployment.
 
 ### Rule 1 — `converge-db-password` container is REQUIRED when the password comes from settings
 

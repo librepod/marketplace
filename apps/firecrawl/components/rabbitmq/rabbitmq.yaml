@@ -1,12 +1,13 @@
-# AMQP transport for the NuQ queue. Queue state lives in Postgres (nuq-postgres),
-# so this stays ephemeral, matching the upstream compose baseline (no volume).
-# Connection is upstream's credential-less amqp://rabbitmq:5672 (guest user) —
-# trusted-network posture.
+# AMQP transport for the NuQ queue (third-party bundled unit). Queue state
+# lives in Postgres (nuq-postgres), so this stays ephemeral, matching the
+# upstream compose baseline (no volume). Connection is upstream's
+# credential-less amqp://rabbitmq:5672 (guest user) — trusted-network posture.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: rabbitmq
   labels:
+    app.kubernetes.io/name: firecrawl
     app.kubernetes.io/component: rabbitmq
 spec:
   replicas: 1
@@ -14,10 +15,12 @@ spec:
     type: Recreate
   selector:
     matchLabels:
+      app.kubernetes.io/name: firecrawl
       app.kubernetes.io/component: rabbitmq
   template:
     metadata:
       labels:
+        app.kubernetes.io/name: firecrawl
         app.kubernetes.io/component: rabbitmq
     spec:
       containers:
@@ -42,6 +45,7 @@ kind: Service
 metadata:
   name: rabbitmq
   labels:
+    app.kubernetes.io/name: firecrawl
     app.kubernetes.io/component: rabbitmq
 spec:
   type: ClusterIP
@@ -51,4 +55,5 @@ spec:
       protocol: TCP
       name: amqp
   selector:
+    app.kubernetes.io/name: firecrawl
     app.kubernetes.io/component: rabbitmq

@@ -1,12 +1,14 @@
-# Cache/rate-limit store. Upstream's compose ships a commented-out valkey line
-# as the open-source alternative to redis; LibrePod standardizes on valkey.
-# --bind 0.0.0.0 is load-bearing (loopback-only default otherwise), same as the
-# upstream redis command. No persistence flags: rate-limit state is disposable.
+# Cache/rate-limit store (third-party bundled unit). Upstream's compose ships a
+# commented-out valkey line as the open-source alternative to redis; LibrePod
+# standardizes on valkey. --bind 0.0.0.0 is load-bearing (loopback-only default
+# otherwise), same as the upstream redis command. No persistence flags:
+# rate-limit state is disposable.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: valkey
   labels:
+    app.kubernetes.io/name: firecrawl
     app.kubernetes.io/component: valkey
 spec:
   replicas: 1
@@ -14,10 +16,12 @@ spec:
     type: Recreate
   selector:
     matchLabels:
+      app.kubernetes.io/name: firecrawl
       app.kubernetes.io/component: valkey
   template:
     metadata:
       labels:
+        app.kubernetes.io/name: firecrawl
         app.kubernetes.io/component: valkey
     spec:
       containers:
@@ -42,6 +46,7 @@ kind: Service
 metadata:
   name: valkey
   labels:
+    app.kubernetes.io/name: firecrawl
     app.kubernetes.io/component: valkey
 spec:
   type: ClusterIP
@@ -51,4 +56,5 @@ spec:
       protocol: TCP
       name: valkey
   selector:
+    app.kubernetes.io/name: firecrawl
     app.kubernetes.io/component: valkey

@@ -22,12 +22,14 @@ resources:
 - service.yaml
 - deployment.yaml
 - playwright.yaml
-- valkey.yaml
-- rabbitmq.yaml
 - externalsecret.yaml
 
-# Bundled queue PostgreSQL (NuQ) — mandatory, inherits this kustomization's
-# namespace and label transformers. Labels/selectors are hardcoded inside the
-# component (a labels transformer there would hoist to the overlay root).
+# Bundled third-party service units (postgres/valkey/rabbitmq) — mandatory,
+# included per the image-ownership criterion in the librepod-app skill
+# (vendor fabric stays in base/; generic infra images go to components/).
+# They inherit this kustomization's namespace; labels/selectors are hardcoded
+# inside each component (a transformer there would hoist to the overlay root).
 components:
 - ../components/postgres
+- ../components/valkey
+- ../components/rabbitmq
