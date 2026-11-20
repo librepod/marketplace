@@ -23,7 +23,7 @@ patches:
 # Image tag transformers
 images:
 - name: seafileltd/seafile-mc
-  newTag: "13.0-latest"
+  newTag: "14.0-latest"
 - name: mariadb
   newTag: "10.11"
 - name: redis
