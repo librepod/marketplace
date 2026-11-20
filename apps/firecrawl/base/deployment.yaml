@@ -62,6 +62,6 @@ spec:
           resources:
             requests:
               cpu: 500m
-              # Measured 2.8Gi steady-state on dev: the harness runs
-              # NUM_WORKERS_PER_QUEUE=8 resident worker processes.
-              memory: 3Gi
+              # Harness supervisor + resident queue workers; measured on
+              # librepod-dev (8 workers/queue ran 2.8Gi, 4 runs under this).
+              memory: 2Gi
