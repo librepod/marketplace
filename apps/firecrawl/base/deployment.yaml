@@ -62,4 +62,6 @@ spec:
           resources:
             requests:
               cpu: 500m
-              memory: 1Gi
+              # Measured 2.8Gi steady-state on dev: the harness runs
+              # NUM_WORKERS_PER_QUEUE=8 resident worker processes.
+              memory: 3Gi
