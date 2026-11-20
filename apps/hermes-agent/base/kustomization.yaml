@@ -16,6 +16,14 @@ configMapGenerator:
 - name: hermes-agent-launcher
   files:
   - entrypoint.sh
+  # Shell script: Flux postBuild.substitute (strict envsubst) would hard-fail
+  # on any literal ${VAR} in it — including in comments explaining this very
+  # rule. The script is deliberately braceless; substitution has nothing to do
+  # here. (Verified on dev: without this, the marketplace install dies at
+  # post-build with 'variable not set (strict mode)'.)
+  options:
+    annotations:
+      kustomize.toolkit.fluxcd.io/substitute: disabled
 
 resources:
 - namespace.yaml
