@@ -1,0 +1,64 @@
+# Sentinel harness. The marketplace/Flux owns ONLY what is in this file set;
+# the hermes-agent code itself lives on the data PVC and updates out-of-band
+# via `hermes update` (cron check + /update in chat) — never via image bumps.
+#
+# - runtimeClassName kata: hardware-isolated micro-VM (RuntimeClass "kata" is
+#   created by the kata-containers app). Root inside the VM is not host root.
+# - runAsUser 0: the installer and `hermes update` manage distro packages
+#   (libatomic etc.) as root; all writes that matter go to /opt/data anyway.
+# - Recreate: single writer on the SQLite stores under /opt/data (NFS-backed
+#   PVC has no attach semantics to serialize a RollingUpdate surge pod).
+# - The nousresearch/hermes-agent image is used ONLY as a vetted dependency
+#   toolkit (patched SQLite 3.53.4 — Debian 13's 3.46.1 has the WAL-reset
+#   corruption bug — plus chromium/ffmpeg libs). The image's own copy at
+#   /opt/hermes is never executed; the launcher runs /opt/data/.local/bin/hermes.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-agent
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    spec:
+      runtimeClassName: kata
+      # Make the pause container PID 1 of the pod sandbox: it reaps orphaned
+      # children (MCP stdio subprocesses, git, ...) the gateway spawns. The
+      # image's own tini is a shim into its s6 tree — unusable for this
+      # root-owned PVC-checkout layout — so pod-level sharing does the job.
+      shareProcessNamespace: true
+      serviceAccountName: hermes-agent
+      securityContext:
+        runAsNonRoot: false
+        runAsUser: 0
+      containers:
+        - name: hermes-agent
+          image: nousresearch/hermes-agent
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/launcher/entrypoint.sh"]
+          envFrom:
+            - configMapRef:
+                name: hermes-agent
+            - secretRef:
+                name: hermes-agent-settings   # LAST: settings override .env defaults
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1Gi
+            limits:
+              memory: 3Gi
+          volumeMounts:
+            - name: data
+              mountPath: /opt/data
+            - name: launcher
+              mountPath: /launcher
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: hermes-agent-data
+        - name: launcher
+          configMap:
+            name: hermes-agent-launcher
+            defaultMode: 0755

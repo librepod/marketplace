@@ -1,0 +1,14 @@
+# Holds the ENTIRE persistent environment: the hermes managed source checkout
+# (code + git history), PM tool store (Python/Node generations), sessions,
+# self-created skills, memory, and config.yaml. ~4 GiB after first install;
+# 10 Gi leaves room for the agent to grow tools and skills for years.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hermes-agent-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi

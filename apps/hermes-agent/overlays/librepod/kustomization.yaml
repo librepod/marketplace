@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: hermes-agent
+
+resources:
+- ../../base
+
+# Base image = vetted dependency toolkit only (patched SQLite, chromium/ffmpeg
+# libs). Bumping it NEVER changes which hermes runs — the agent's code lives
+# on the PVC and updates itself via `hermes update`. Lossless by construction.
+images:
+- name: nousresearch/hermes-agent
+  # renovate: datasource=docker depName=nousresearch/hermes-agent
+  newTag: "v0.23.0"
+
+patches:
+- path: ./patch-storage-class.yaml
+  target:
+    kind: PersistentVolumeClaim
