@@ -37,6 +37,21 @@ spec:
           image: nousresearch/hermes-agent
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "/launcher/entrypoint.sh"]
+          ports:
+            - name: http
+              containerPort: 9119   # hermes dashboard (web management UI)
+          env:
+            # OIDC client_id provisioned by casdoor-sso-controller from the
+            # SSOClient CR (see overlays/librepod/ssoclient.yaml). hermes is a
+            # PUBLIC PKCE client — Casdoor v3.106+ accepts the token exchange
+            # without a client secret when a code_challenge was used, so no
+            # secret is consumed. Non-optional on purpose: the pod waits until
+            # the controller has provisioned the Casdoor application.
+            - name: HERMES_DASHBOARD_OIDC_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: hermes-agent-sso
+                  key: HERMES_DASHBOARD_OIDC_CLIENT_ID
           envFrom:
             - configMapRef:
                 name: hermes-agent

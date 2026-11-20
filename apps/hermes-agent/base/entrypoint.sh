@@ -60,6 +60,26 @@ EOF
 fi
 
 cd "$WORKSPACE"
+
+# Web dashboard (management UI: config, keys, sessions, cron, /update),
+# env-toggled via DASHBOARD_ENABLED (default on; set "false" for a chat-only
+# sentinel). Binding 0.0.0.0 engages hermes's fail-closed auth gate; the
+# self-hosted OIDC provider activates from env (HERMES_DASHBOARD_OIDC_ISSUER
+# from the app .env, HERMES_DASHBOARD_OIDC_CLIENT_ID from the SSOClient
+# secret) — logins go straight to the cluster's Casdoor. Restart-looped
+# here: if the dashboard process dies it comes back without touching the
+# gateway; if the gateway (exec'd below) dies, the container exits and k8s
+# restarts both.
+if [ "$DASHBOARD_ENABLED" != "false" ]; then
+  (
+    while true; do
+      "$HERMES_BIN" dashboard --host 0.0.0.0 --port 9119 --no-open
+      echo "[sentinel] dashboard exited; restarting in 5s" >&2
+      sleep 5
+    done
+  ) &
+fi
+
 echo "[sentinel] starting gateway"
 # Zombie reaping is handled pod-side (shareProcessNamespace: true makes the
 # pause container PID 1), so a plain exec is safe here. Do NOT exec

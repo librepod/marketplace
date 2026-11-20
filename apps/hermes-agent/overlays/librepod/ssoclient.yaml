@@ -1,0 +1,36 @@
+# Declares the hermes dashboard OIDC client. The casdoor-sso-controller
+# reconciles this into a Casdoor Application (owner/name = admin/hermes-agent)
+# and writes clientId into Secret/hermes-agent-sso in THIS namespace; the
+# Deployment reads it via secretKeyRef.
+#
+# hermes authenticates the dashboard as a PUBLIC PKCE client (no client
+# secret) and verifies the ID token itself:
+#   - tokenFormat JWT-Standard: Casdoor doubles its access-token JWT as the
+#     id_token; JWT-Standard makes that JWT carry the iss/aud/sub claims
+#     hermes pins (default-format Casdoor tokens do not).
+#   - PKCE without secret: Casdoor v3.106+ tolerates an empty client_secret
+#     at token exchange exactly when a code_challenge was used.
+#
+# ${BASE_DOMAIN} is expanded by Flux postBuild.substitute at deploy time.
+apiVersion: marketplace.librepod.org/v1alpha1
+kind: SSOClient
+metadata:
+  name: hermes-agent-sso          # default output Secret name
+  namespace: hermes-agent
+spec:
+  clientId: hermes-agent          # Casdoor app name (id=admin/hermes-agent) AND OIDC client_id
+  organization: librepod          # platform org (created at bootstrap); login users must live here
+  redirectUris:
+    - "https://hermes-agent.${BASE_DOMAIN}/auth/callback"
+  # scopes intentionally omitted: spec.scopes is a no-op on the Casdoor
+  # Application (hermes requests openid profile email itself).
+  grantTypes: [authorization_code, refresh_token]
+  tokenFormat: JWT-Standard
+  casdoorPolicy: retain           # keep the Casdoor app if this CR is deleted
+  output:
+    secretName: hermes-agent-sso
+    keys:
+      clientId: HERMES_DASHBOARD_OIDC_CLIENT_ID   # env var hermes reads
+      # clientSecret deliberately unmapped (public PKCE client); issuer
+      # unmapped — the controller writes the discovery URL, but hermes wants
+      # the bare issuer, which comes from the app's .env instead.

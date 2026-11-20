@@ -1,0 +1,19 @@
+# No oauth2-proxy middlewares: the dashboard speaks OIDC natively against
+# Casdoor (self-hosted provider — see SSOClient + HERMES_DASHBOARD_OIDC_* env).
+# Binding 0.0.0.0 engages hermes's fail-closed auth gate, so unauthenticated
+# traffic bounces to /login → Casdoor.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: hermes-agent
+spec:
+  entryPoints:
+  - web
+  - websecure
+  routes:
+  - kind: Rule
+    match: Host(`hermes-agent.${BASE_DOMAIN:=libre.pod}`)
+    priority: 1
+    services:
+    - name: hermes-agent
+      port: 80

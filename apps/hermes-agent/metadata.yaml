@@ -4,7 +4,7 @@ metadata:
   name: hermes-agent
 spec:
   displayName: "Hermes Cluster Sentinel"
-  description: "Self-improving AI keeper for your cluster (hermes-agent): runs in a Kata-isolated VM, observes the cluster read-only, and talks to you on Telegram. Updates itself with `hermes update`; its memories, skills and sessions live on persistent storage and survive restarts and reinstalls."
+  description: "Self-improving AI keeper for your cluster (hermes-agent): runs in a Kata-isolated VM, observes the cluster read-only, and talks to you on Telegram or via its web dashboard. Updates itself with `hermes update`; its memories, skills and sessions live on persistent storage and survive restarts and reinstalls."
   icon: "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/assets/banner.png"
   category: "AI"
   website: "https://github.com/NousResearch/hermes-agent"
@@ -12,10 +12,11 @@ spec:
   # HARNESS version — deliberately decoupled from hermes-agent releases.
   # The marketplace artifact ships only the launcher/PVC/RBAC; the agent's
   # code lives on the data PVC and updates itself out-of-band (`hermes
-  # update`, driven from chat). Bumping this version re-applies the harness,
-  # which is lossless. No renovate annotation here on purpose: the overlay's
-  # base-image pin is the only upstream-tracking anchor.
-  version: "1.0.0"
+  # update`, driven from chat or the dashboard's System page). Bumping this
+  # version re-applies the harness, which is lossless. No renovate annotation
+  # here on purpose: the overlay's base-image pin is the only
+  # upstream-tracking anchor.
+  version: "1.1.0"
 
   source:
     type: oci-kustomize
@@ -23,9 +24,12 @@ spec:
     path: ./overlays/librepod
 
   settings:
-    # Open env passthrough: any hermes environment variable can be added here
-    # (e.g. GLM_API_KEY for z.ai, OPENAI_API_KEY + OPENAI_BASE_URL to point
-    # at a litellm instance) and overrides the launcher defaults.
+    # Open env passthrough — this is the primary behavior-tuning surface: any
+    # environment variable from hermes's reference
+    # (https://hermes-agent.nousresearch.com/docs/reference/environment-variables)
+    # can be set here (e.g. GLM_API_KEY for z.ai, OPENAI_API_KEY +
+    # OPENAI_BASE_URL to point at a litellm instance, HERMES_YOLO_MODE) and
+    # takes effect on the next pod restart — no code reading required.
     allowCustom: true
     items:
       - name: TELEGRAM_BOT_TOKEN
@@ -42,9 +46,19 @@ spec:
         description: "Default LLM provider key (openrouter.ai/keys) — one key, 300+ models; the provider is auto-detected from it. Or skip this and pass another provider's key as a custom variable (e.g. GLM_API_KEY)."
         sensitive: true
         required: false
+      - name: DASHBOARD_ENABLED
+        label: "Enable web dashboard"
+        description: "Serve the hermes web management UI (config, sessions, cron, self-update) at hermes-agent.<your-domain>, secured by cluster SSO (Casdoor). Set false for a chat-only sentinel."
+        type: boolean
+        default: "true"
+        required: false
 
   dependencies:
     required:
+      - kind: IngressController
+        description: "Traefik (provided by traefik app)"
+      - kind: SSOProvider
+        description: "Casdoor + casdoor-sso-controller (provisions the dashboard OIDC client into Secret/hermes-agent-sso)"
       - kind: StorageClass
         description: "nfs-client (provided by nfs-provisioner app)"
       - kind: RuntimeClass
@@ -80,6 +94,11 @@ spec:
           marketplace.io/app: "hermes-agent"
       spec:
         dependsOn:
+          - name: traefik
+          # The controller (not casdoor itself) provisions the OIDC client —
+          # depending on the controller guarantees the SSOClient CRD exists
+          # when this Kustomization applies.
+          - name: casdoor-sso-controller
           - name: storage
           # NOTE: kata-containers is intentionally NOT a dependsOn entry. It is
           # a catalog app, not a system app, so its Flux Kustomization name is

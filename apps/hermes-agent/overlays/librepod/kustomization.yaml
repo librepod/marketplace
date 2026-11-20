@@ -5,6 +5,8 @@ namespace: hermes-agent
 
 resources:
 - ../../base
+- ingressroute.yaml
+- ssoclient.yaml
 
 # Base image = vetted dependency toolkit only (patched SQLite, chromium/ffmpeg
 # libs). Bumping it NEVER changes which hermes runs — the agent's code lives
@@ -12,7 +14,7 @@ resources:
 images:
 - name: nousresearch/hermes-agent
   # renovate: datasource=docker depName=nousresearch/hermes-agent
-  newTag: "v0.23.0"
+  newTag: "v0.23.3"
 
 patches:
 - path: ./patch-storage-class.yaml

@@ -21,5 +21,6 @@ resources:
 - namespace.yaml
 - serviceaccount.yaml
 - pvc.yaml
+- service.yaml
 - deployment.yaml
 - externalsecret.yaml
