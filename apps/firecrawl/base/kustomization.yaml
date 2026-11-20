@@ -24,11 +24,7 @@ resources:
 - playwright.yaml
 - externalsecret.yaml
 
-# Bundled third-party service units (postgres/valkey/rabbitmq) — mandatory,
-# included per the image-ownership criterion in the librepod-app skill
-# (vendor fabric stays in base/; generic infra images go to components/).
-# They inherit this kustomization's namespace; labels/selectors are hardcoded
-# inside each component (a transformer there would hoist to the overlay root).
+# Bundled third-party service units (placement rule: librepod-app skill).
 components:
 - ../components/postgres
 - ../components/valkey

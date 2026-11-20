@@ -1,5 +1,7 @@
 # API + workers in one container: the harness supervisor boots the HTTP API and
 # all queue workers (upstream `node dist/src/harness.js --start-docker`).
+# Backing services may lag on first boot — the harness exits and restart
+# backoff converges it; no wait-for init container on purpose.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,21 +20,6 @@ spec:
       labels:
         app.kubernetes.io/component: api
     spec:
-      initContainers:
-        # Compose `depends_on`: wait for every backing service before the
-        # harness boots (it has a 60s startup budget and does not retry fast).
-        - name: wait-for-dependencies
-          image: busybox:1.36
-          imagePullPolicy: IfNotPresent
-          command: ["sh", "-c"]
-          args:
-            - |
-              until nc -z valkey 6379 \
-                 && nc -z rabbitmq 5672 \
-                 && nc -z nuq-postgres 5432 \
-                 && nc -z playwright-service 3000; do
-                echo "waiting for backing services"; sleep 2
-              done
       containers:
         - name: firecrawl
           image: ghcr.io/firecrawl/firecrawl

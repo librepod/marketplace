@@ -14,17 +14,15 @@ images:
 # (rebuilt on every upstream push to main) — digest-pinned for
 # reproducibility; renovate refreshes the digests.
 - name: ghcr.io/firecrawl/playwright-service
-  newTag: latest # renovate: datasource=docker depName=ghcr.io/firecrawl/playwright-service
+  # renovate: datasource=docker depName=ghcr.io/firecrawl/playwright-service
   digest: sha256:227ce3d8059173925a5a0697c63a1e947662cca934a609151651f578774edd5d
 - name: ghcr.io/firecrawl/nuq-postgres
-  newTag: latest # renovate: datasource=docker depName=ghcr.io/firecrawl/nuq-postgres
+  # renovate: datasource=docker depName=ghcr.io/firecrawl/nuq-postgres
   digest: sha256:d719b36160eac2fcbe16dc7e7360ddb9c82c40ea5da183d07bf4a755c6a0b2ae
 - name: valkey/valkey
   newTag: 8.1-alpine # renovate: datasource=docker depName=valkey/valkey
 - name: rabbitmq
   newTag: 3.13-management # renovate: datasource=docker depName=rabbitmq
-- name: busybox
-  newTag: "1.36" # renovate: datasource=docker depName=busybox
 
 patches:
 - path: ./patch-storage-class.yaml
