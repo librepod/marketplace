@@ -62,6 +62,7 @@ spec:
           resources:
             requests:
               cpu: 500m
-              # Harness supervisor + resident queue workers; measured on
-              # librepod-dev (8 workers/queue ran 2.8Gi, 4 runs under this).
-              memory: 2Gi
+              # Harness supervisor + queue workers; measured 2.8Gi steady-state
+              # on librepod-dev (independent of NUM_WORKERS_PER_QUEUE) — a
+              # smaller request over-commits the node and invites OOM kills.
+              memory: 3Gi
