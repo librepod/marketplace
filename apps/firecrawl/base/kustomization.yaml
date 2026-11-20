@@ -1,0 +1,33 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: firecrawl
+
+labels:
+- includeSelectors: true
+  includeTemplates: true
+  pairs:
+    app.kubernetes.io/name: firecrawl
+
+configMapGenerator:
+- name: firecrawl
+  envs:
+  - firecrawl.env
+- name: playwright-service
+  envs:
+  - playwright.env
+
+resources:
+- namespace.yaml
+- service.yaml
+- deployment.yaml
+- playwright.yaml
+- valkey.yaml
+- rabbitmq.yaml
+- externalsecret.yaml
+
+# Bundled queue PostgreSQL (NuQ) — mandatory, inherits this kustomization's
+# namespace and label transformers. Labels/selectors are hardcoded inside the
+# component (a labels transformer there would hoist to the overlay root).
+components:
+- ../components/postgres

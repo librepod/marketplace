@@ -1,0 +1,22 @@
+# API-only endpoint: no browser UI exists (USE_DB_AUTHENTICATION=false is
+# upstream's self-host model — a trusted-network, unauthenticated API), so the
+# route deliberately carries no oauth2 middlewares (forward-auth would break
+# the CLI/MCP/SDK clients that are this app's entire audience) and is marked
+# non-launchable: the marketplace tile opens Manage, not a dead page.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: firecrawl
+  annotations:
+    librepod.org/launch: "false"
+spec:
+  entryPoints:
+  - web
+  - websecure
+  routes:
+  - kind: Rule
+    match: Host(`firecrawl.${BASE_DOMAIN:=libre.pod}`)
+    priority: 1
+    services:
+    - name: firecrawl
+      port: 80

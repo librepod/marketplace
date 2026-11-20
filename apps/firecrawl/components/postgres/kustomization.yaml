@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Bundled queue PostgreSQL (NuQ): postgres:17 + pg_cron, upstream image
+# ghcr.io/firecrawl/nuq-postgres. No labels transformer here — a transformer
+# inside a component hoists to the composing overlay root and would label
+# unrelated resources; labels are hardcoded below.
+configMapGenerator:
+- name: nuq-postgres
+  envs:
+  - nuq-postgres.env
+
+resources:
+- service.yaml
+- pvc.yaml
+- deployment.yaml
