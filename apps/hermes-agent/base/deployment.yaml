@@ -8,10 +8,8 @@
 #   (libatomic etc.) as root; all writes that matter go to /opt/data anyway.
 # - Recreate: single writer on the SQLite stores under /opt/data (NFS-backed
 #   PVC has no attach semantics to serialize a RollingUpdate surge pod).
-# - The nousresearch/hermes-agent image is used ONLY as a vetted dependency
-#   toolkit (patched SQLite 3.53.4 — Debian 13's 3.46.1 has the WAL-reset
-#   corruption bug — plus chromium/ffmpeg libs). The image's own copy at
-#   /opt/hermes is never executed; the launcher runs /opt/data/.local/bin/hermes.
+# - Image = vetted dependency toolkit only (see the overlay pin); the executed
+#   code is always the PVC checkout, never the image's /opt/hermes copy.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -30,7 +28,6 @@ spec:
       shareProcessNamespace: true
       serviceAccountName: hermes-agent
       securityContext:
-        runAsNonRoot: false
         runAsUser: 0
       containers:
         - name: hermes-agent
@@ -41,12 +38,9 @@ spec:
             - name: http
               containerPort: 9119   # hermes dashboard (web management UI)
           env:
-            # OIDC client_id provisioned by casdoor-sso-controller from the
-            # SSOClient CR (see overlays/librepod/ssoclient.yaml). hermes is a
-            # PUBLIC PKCE client — Casdoor v3.106+ accepts the token exchange
-            # without a client secret when a code_challenge was used, so no
-            # secret is consumed. Non-optional on purpose: the pod waits until
-            # the controller has provisioned the Casdoor application.
+            # client_id provisioned by casdoor-sso-controller (public PKCE
+            # client, no secret — see overlays/librepod/ssoclient.yaml).
+            # Non-optional on purpose: the pod waits for the Casdoor app.
             - name: HERMES_DASHBOARD_OIDC_CLIENT_ID
               valueFrom:
                 secretKeyRef:

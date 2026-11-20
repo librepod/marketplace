@@ -13,8 +13,7 @@
 # from envFrom at runtime.
 set -eu
 
-export HOME=/opt/data
-export HERMES_HOME=/opt/data
+# HOME/HERMES_HOME arrive via envFrom (configmap hermes-agent).
 HERMES_BIN=/opt/data/.local/bin/hermes
 export PATH="/opt/data/.local/bin:$PATH"
 WORKSPACE=/opt/data/workspace
