@@ -1023,6 +1023,8 @@ Each bundled component is a Kustomize *Component* (`apiVersion: kustomize.config
 
 Do not confuse these app-level components with the repo-level shared components in `components/` at the repository root (optional networking pieces offered through `spec.components` — see [Shared components](#shared-components)).
 
+**Placement is decided by this section alone.** Per-technology sections ([Bundled PostgreSQL](#bundled-postgresql), Bundled Redis-compatible cache) add behavior rules for their image — they are not placement rules, and the existence or absence of such a section never decides where a workload lives. A bundled kafka/redis/mysql lands in `components/<name>/` by the image-ownership criterion even though no section is written about it.
+
 Worked example — `apps/firecrawl/`: `base/` holds the API harness and `playwright-service` (both `ghcr.io/firecrawl/*` vendor images); `components/postgres/`, `components/valkey/`, `components/rabbitmq/` hold the bundled third-party units.
 
 ### Multiple workloads and selector uniqueness
