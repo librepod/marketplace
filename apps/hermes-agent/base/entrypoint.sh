@@ -1,15 +1,9 @@
 #!/bin/sh
-# Hermes sentinel launcher.
-#
-# Runs as root inside the Kata VM. First boot installs hermes-agent INTO the
-# PVC (managed source checkout — the install mode whose updater, `hermes
-# update`, moves the checkout in place with snapshots and auto-rollback).
-# Every later boot is a fast path: the checkout, tools, sessions and memory
-# are already on /opt/data, so pod recreation is lossless.
-#
-# Shell variables are deliberately braceless ($VAR, never ${VAR}): Flux
-# postBuild.substitute rewrites ${VAR} patterns in all manifest content
-# including ConfigMap data; braceless forms are invisible to it and resolve
+# Hermes sentinel launcher. First boot installs hermes-agent INTO the PVC
+# (the install mode `hermes update` can move in place); every later boot is
+# a fast path — checkout, tools, sessions and memory are already on /opt/data.
+# Braceless $VAR on purpose: Flux substitution rewrites ${VAR} patterns in
+# manifest content (rule in the librepod-app skill); braceless forms resolve
 # from envFrom at runtime.
 set -eu
 
@@ -20,17 +14,14 @@ WORKSPACE=/opt/data/workspace
 
 if [ ! -x "$HERMES_BIN" ]; then
   echo "[sentinel] first boot: installing hermes-agent into the PVC (takes several minutes)"
-  if ! command -v git >/dev/null 2>&1; then
-    apt-get update
-    apt-get install -y --no-install-recommends git ca-certificates
-  fi
-  # Upstream's installer, fetched from the repo mirror. The website
-  # (hermes-agent.nousresearch.com) answers 403 to some egress networks, and
-  # scripts/install.sh in the repo is the same file the site serves. @main
-  # installs the latest STABLE release (the channel `hermes update` then
-  # tracks); the overlay's image tag pins only the dependency toolkit and
-  # moves independently of the checkout. NOTE: this is a bash script — never
-  # run it with sh.
+  # git/ca-certificates/curl ship in the pinned toolkit image (its Dockerfile
+  # bakes them so the runtime never needs apt-get). Upstream's installer,
+  # fetched from the repo mirror: the website (hermes-agent.nousresearch.com)
+  # answers 403 to some egress networks, and scripts/install.sh in the repo is
+  # the same file the site serves. @main installs the latest STABLE release
+  # (the channel `hermes update` then tracks); the overlay's image tag pins
+  # only the dependency toolkit and moves independently of the checkout.
+  # NOTE: this is a bash script — never run it with sh.
   curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh -o /tmp/hermes-install.sh
   bash /tmp/hermes-install.sh --non-interactive --dir /opt/data/hermes-agent
   echo "[sentinel] install complete"
@@ -65,18 +56,12 @@ cd "$WORKSPACE"
 # sentinel). Binding 0.0.0.0 engages hermes's fail-closed auth gate; the
 # self-hosted OIDC provider activates from env (HERMES_DASHBOARD_OIDC_ISSUER
 # from the app .env, HERMES_DASHBOARD_OIDC_CLIENT_ID from the SSOClient
-# secret) — logins go straight to the cluster's Casdoor. Restart-looped
-# here: if the dashboard process dies it comes back without touching the
-# gateway; if the gateway (exec'd below) dies, the container exits and k8s
-# restarts both.
+# secret) — logins go straight to the cluster's Casdoor. Backgrounded here:
+# a dead dashboard stays down until the next pod recreation (the gateway is
+# unaffected); if the gateway (exec'd below) dies, the container exits and
+# k8s restarts both.
 if [ "$DASHBOARD_ENABLED" != "false" ]; then
-  (
-    while true; do
-      "$HERMES_BIN" dashboard --host 0.0.0.0 --port 9119 --no-open
-      echo "[sentinel] dashboard exited; restarting in 5s" >&2
-      sleep 5
-    done
-  ) &
+  "$HERMES_BIN" dashboard --host 0.0.0.0 --port 9119 --no-open &
 fi
 
 echo "[sentinel] starting gateway"

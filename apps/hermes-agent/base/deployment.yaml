@@ -22,9 +22,8 @@ spec:
     spec:
       runtimeClassName: kata
       # Make the pause container PID 1 of the pod sandbox: it reaps orphaned
-      # children (MCP stdio subprocesses, git, ...) the gateway spawns. The
-      # image's own tini is a shim into its s6 tree — unusable for this
-      # root-owned PVC-checkout layout — so pod-level sharing does the job.
+      # children (MCP stdio subprocesses, git, ...) the gateway spawns
+      # (the image's own tini is unusable here — see entrypoint.sh).
       shareProcessNamespace: true
       serviceAccountName: hermes-agent
       securityContext:

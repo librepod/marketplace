@@ -8,9 +8,9 @@ resources:
 - ingressroute.yaml
 - ssoclient.yaml
 
-# Base image = vetted dependency toolkit only (patched SQLite, chromium/ffmpeg
-# libs). Bumping it NEVER changes which hermes runs — the agent's code lives
-# on the PVC and updates itself via `hermes update`. Lossless by construction.
+# Image = vetted dependency toolkit only; which hermes runs is decided by the
+# PVC checkout, never the image (see metadata.yaml version note) — so bumping
+# this tag is always safe.
 images:
 - name: nousresearch/hermes-agent
   # renovate: datasource=docker depName=nousresearch/hermes-agent
