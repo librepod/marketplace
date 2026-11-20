@@ -57,3 +57,6 @@ librepod-dev.config
 .beads-credential-key
 .beads/proxieddb/
 *.gate.lock*
+
+# Nix build outputs (nix build .#worker-image -o result-worker)
+result*
