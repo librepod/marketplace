@@ -1,0 +1,68 @@
+# API + workers in one container: the harness supervisor boots the HTTP API and
+# all queue workers (upstream `node dist/src/harness.js --start-docker`).
+# Backing services may lag on first boot — the harness exits and restart
+# backoff converges it; no wait-for init container on purpose.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: firecrawl
+  labels:
+    app.kubernetes.io/component: api
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: api
+    spec:
+      containers:
+        - name: firecrawl
+          image: ghcr.io/firecrawl/firecrawl
+          imagePullPolicy: IfNotPresent
+          args: ["node", "dist/src/harness.js", "--start-docker"]
+          ports:
+            - name: http
+              containerPort: 3002
+          env:
+            # Stored as DB_PASSWORD in OpenBao; the env name differs, so it
+            # rides an explicit secretKeyRef (explicit env wins over envFrom).
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: firecrawl-settings
+                  key: DB_PASSWORD
+          envFrom:
+            - configMapRef:
+                name: firecrawl
+            - secretRef:
+                name: firecrawl-settings
+          readinessProbe:
+            httpGet:
+              path: /v0/health/readiness
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          startupProbe:
+            httpGet:
+              path: /v0/health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /v0/health/readiness
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 500m
+              # Harness supervisor + queue workers; measured 2.8Gi steady-state
+              # on librepod-dev (independent of NUM_WORKERS_PER_QUEUE) — a
+              # smaller request over-commits the node and invites OOM kills.
+              memory: 3Gi

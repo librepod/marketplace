@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nuq-postgres
+  labels:
+    app.kubernetes.io/name: firecrawl
+    app.kubernetes.io/component: nuq-postgres
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: postgres
+      protocol: TCP
+      name: postgres
+  selector:
+    app.kubernetes.io/name: firecrawl
+    app.kubernetes.io/component: nuq-postgres

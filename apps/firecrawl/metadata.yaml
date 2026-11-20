@@ -1,0 +1,88 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: firecrawl
+spec:
+  displayName: "Firecrawl"
+  description: "API-first web scraper: crawl, scrape, and map websites into LLM-ready markdown"
+  icon: "https://github.com/firecrawl.png"
+  category: "Development"
+  website: "https://firecrawl.dev"
+
+  version: "2.11.162" # upstream app release; the API image tag pins the same version
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/firecrawl"
+    path: ./overlays/librepod
+
+  settings:
+    allowCustom: true
+    items:
+      - name: DB_PASSWORD
+        label: "Database password"
+        description: "Password for the bundled queue PostgreSQL. Generated at install; any later change is applied automatically on next start."
+        sensitive: true
+        generate:
+          length: 64
+      - name: OPENAI_API_KEY
+        label: "OpenAI API key (optional)"
+        description: "Enables LLM-backed features such as /extract. Leave empty to skip; point an OpenAI-compatible endpoint at it via a custom OPENAI_BASE_URL variable."
+        type: string
+        required: false
+        sensitive: false
+
+  dependencies:
+    required:
+      - kind: IngressController
+        description: "Traefik (provided by traefik app)"
+      - kind: StorageClass
+        description: "nfs-client (provided by nfs-provisioner app)"
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-firecrawl
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "firecrawl"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/firecrawl
+        ref:
+          tag: "__VERSION__"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-firecrawl
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "firecrawl"
+      spec:
+        dependsOn:
+          - name: traefik
+          - name: storage
+        force: true
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-firecrawl
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+        postBuild:
+          substitute:
+            BASE_DOMAIN: "${BASE_DOMAIN}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml

@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Bundled queue PostgreSQL (NuQ): postgres:17 + pg_cron, upstream image
+# ghcr.io/firecrawl/nuq-postgres.
+configMapGenerator:
+- name: nuq-postgres
+  envs:
+  - nuq-postgres.env
+
+resources:
+- service.yaml
+- pvc.yaml
+- deployment.yaml
