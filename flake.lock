@@ -1,0 +1,50 @@
+{
+  "nodes": {
+    "factory8": {
+      "inputs": {
+        "nixpkgs": "nixpkgs"
+      },
+      "locked": {
+        "lastModified": 1795176367,
+        "narHash": "sha256-BJcxoYz4DjNefPIA/Z2XYMPs0YbVEmlco0XCslQeG8E=",
+        "ref": "master",
+        "rev": "c0af3a51db6804821540593f175a63277006b252",
+        "revCount": 40,
+        "type": "git",
+        "url": "https://github.com/factory8/factory8"
+      },
+      "original": {
+        "ref": "master",
+        "type": "git",
+        "url": "https://github.com/factory8/factory8"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1792502884,
+        "narHash": "sha256-IoNisKcGbUjdd45qCqywGMCYmZ5EnkxezvLII0FWwNA=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "02c087f3fe673c9e317f206a627cb6b910336dbe",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "factory8": "factory8",
+        "nixpkgs": [
+          "factory8",
+          "nixpkgs"
+        ]
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

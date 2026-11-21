@@ -1,0 +1,39 @@
+name: Publish factory8 sandbox image
+
+# The image factory8 runs this repo's agent steps in (flake.nix .#sandbox-image, built from shell.nix), pushed to
+# GHCR tagged with its Nix hash. The tag is content-addressed, so a PR's push never moves what master published.
+on:
+  push:
+    branches: [master]
+    paths:
+      - flake.nix
+      - flake.lock
+      - shell.nix
+      - scripts/publish-sandbox-image.sh
+      - .github/workflows/publish-sandbox-image.yaml
+  pull_request:
+    branches: [master]
+    paths:
+      - flake.nix
+      - flake.lock
+      - shell.nix
+      - scripts/publish-sandbox-image.sh
+      - .github/workflows/publish-sandbox-image.yaml
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push the sandbox image
+        run: bash scripts/publish-sandbox-image.sh --push

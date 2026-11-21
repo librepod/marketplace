@@ -1,0 +1,39 @@
+# This repo's factory8 project worker (factory8 M7): it serves the task queue factory8/librepod/marketplace with
+# factory8's built-in flows and the flows in .factory8/workflows/. Both images come from flake.nix, tagged with their
+# Nix hash: after `nix build .#worker-image` or `.#sandbox-image`, import the image onto the node, update its tag here,
+# then `kubectl apply -f .factory8/worker.yaml`. It uses the ServiceAccount and Role of factory8's own deploy/worker.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: factory8-worker-librepod-marketplace
+  namespace: factory8
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: factory8-worker-librepod-marketplace } }
+  template:
+    metadata: { labels: { app: factory8-worker-librepod-marketplace } }
+    spec:
+      serviceAccountName: factory8-worker
+      containers:
+        - name: worker
+          image: marketplace-worker:jnq44qy1r1549x3rwdy8srs90y4v66xi
+          imagePullPolicy: Never
+          env:
+            - name: TEMPORAL_ADDRESS
+              value: temporal-frontend:7233
+            - name: FACTORY8_MODEL
+              value: glm-5.3
+            - name: FACTORY8_REVIEW_MODEL
+              value: glm-5.3
+            - name: FACTORY8_IMAGES
+              value: '{"https://github.com/librepod/marketplace": "marketplace-sandbox:zbgnzpna9wmnjy4c79w4blvnzw3gwdii"}'
+            - name: FACTORY8_PLUGIN
+              value: https://github.com/factory8/factory8
+            - name: FACTORY8_BANDS
+              value: >-
+                {"design": {"model": "glm-5.3", "effort": "high"},
+                "acceptance": {"model": "glm-5.3", "effort": "high"},
+                "implement": [{"model": "glm-5.3", "effort": "medium"}, {"model": "glm-5.3", "effort": "high"}],
+                "review": {"model": "glm-5.3", "effort": "high"},
+                "diagnose": {"model": "glm-5.3", "effort": "high"},
+                "finish": {"model": "glm-5.3-flash"}}
