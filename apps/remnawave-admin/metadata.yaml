@@ -69,6 +69,9 @@ spec:
         generate:
           length: 64
 
+  components:
+    - name: tailscale
+
   dependencies:
     required:
       - kind: IngressController
