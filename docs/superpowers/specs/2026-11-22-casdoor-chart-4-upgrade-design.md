@@ -1,9 +1,9 @@
 # Casdoor chart 3.106.0 → 4.29.0, drop the postRender probe patch — Design
 
-**Status:** design written and builder-checked (unattended session — decisions made from issue #375 and the repo, marked as calls in §10); awaiting review
+**Status:** design written and builder-checked (unattended session — decisions made from issue #375 and the repo, marked as calls in §10); awaiting review. **Post-review (rounds 1–2):** amended per PR #389 review — the fresh-install admin-credential seeding of §5.7, the lockstep guard and workflow-trigger notes in §5.6, and the §10 rows marked *(post-review)*. The original design text is preserved; amendments are inline and attributed.
 **Date:** 2026-11-22
 **Issue:** #375 (fixes #366's and #273's workaround, not the bugs themselves)
-**Scope:** `apps/casdoor`, `scripts/test-casdoor-probe-patch.sh`, `.github/workflows/validate-apps.yaml`, `infrastructure/system-apps/casdoor.yaml`
+**Scope:** `apps/casdoor`, `scripts/test-casdoor-probe-patch.sh`, `.github/workflows/validate-apps.yaml`, `infrastructure/system-apps/casdoor.yaml` *(post-review: + `apps/casdoor-sso-controller` and `apps/marketplace-ui` comment blocks, `scripts/check-version-lockstep.sh`)*
 
 ## 1. Intent
 
@@ -39,7 +39,11 @@ class.
   `envFrom` (casdoor-env ConfigMap), `service.port: 80`, the `/data` + `/tmp`
   session-persistence mounts, Deployment/PVC/IngressRoute names.
 - casdoor-sso-controller keeps working against casdoor 4.x without code
-  changes.
+  changes. *(Post-review amendment, rounds 1–2 Critical 1: falsified for
+  fresh installs as written — 4.x seeds no admin password, so the
+  controller's first-boot key mint and marketplace-ui's wizard both fail on
+  a fresh DB while casdoor itself runs healthy. §5.7 restores the goal; no
+  Go/TS code change turned out to be needed, manifest wiring sufficed.)*
 
 ## Non-goals
 
@@ -205,16 +209,49 @@ risk class this issue exists to retire.
    script pattern; nothing else references it).
 6. `.github/workflows/validate-apps.yaml` — delete the "Casdoor probe patch
    guard" step (the `if: matrix.app == 'casdoor'` run block and its
-   comment). Nothing else in the workflow changes.
+   comment). Nothing else in the workflow changes. *(Post-review note: no
+   longer true as of 9f8a570 and later — the workflow gained the
+   `version-lockstep` job + `infrastructure/system-apps/**` trigger (round 1,
+   Important 2), then a master `push` trigger, `scripts/**` paths, and an
+   event gate on `detect-changes` (round 2, Minors 4–5). Recorded in §10.)*
 
 No values changes. No controller or UI code changes (§3 verified the
 contracts; re-verification after deploy is observational, §7).
+*(Post-review amendment: two values keys and one Secret were added — §5.7 —
+and the controller/UI changes stayed comment-only.)*
 
 **Deliberately kept as-is:** the `dataSourceName` env override
 (`file:/data/casdoor.db?cache=shared`) does **not** adopt the chart's new
 `busy_timeout`/WAL pragmas — WAL relies on shared-memory mmap and is unsafe
 on NFS, and `/data` is the nfs-client PVC. The DELETE rollback journal it
 keeps is the NFS-safe choice.
+
+**5.7 (post-review, rounds 1–2 Critical 1). Seed the factory admin password
+on 4.x.** Casdoor 4.x no longer hardcodes `Password: "123"` for
+`built-in/admin` at first init (`object/init.go` v3.106.0:170 vs v4.29.0:185
++ `getInitAdminPassword`); without wiring, a fresh install boots with no
+usable admin credential and both in-repo consumers fail silently —
+exactly the #366 failure class. The fix, landed in 8fbe476:
+
+- `apps/casdoor/overlays/librepod/init-admin.env` → secretGenerator →
+  Secret `casdoor-init-admin`, consumed by chart values
+  `initAdminPassword.existingSecret` (+ `existingSecretKey`). The env var
+  wins over app.conf (`GetConfigString` checks `os.LookupEnv` first), the
+  mechanism upstream's own values.yaml documents and reserves the inline
+  `value` for local tests.
+- Verified create-only at source: `initBuiltInUser` returns early once
+  `built-in/admin` exists, so the wiring is a no-op on every initialized
+  cluster and never clobbers the onboarding-set password (openbao
+  `system/admin`).
+- The value stays the documented factory constant `123` — the same
+  committed-machine-credential class as apps/gogs (DECISIONS_LOG row 7),
+  already carried by both consumers' env files. The welcome-page
+  (`/init-admin`) alternative was considered and deferred: better posture,
+  but it breaks the headless device-claim wizard and needs the
+  human-chosen password injected into both consumers. Per-cluster
+  secret-backed promotion: #392.
+- Consumer comment blocks (controller env, marketplace-ui ConfigMap) now
+  cite the seed source; renders byte-identical.
 
 ## 6. Rollout and rollback
 
@@ -297,7 +334,12 @@ part ends at merge plus this list:
   in §3; this is the belt to its braces.
 - First fresh install after this change (new cluster / marketplace canary):
   casdoor first-start init completes with the native probes only — the exact
-  #366 scenario.
+  #366 scenario. *(Post-review amendment, Critical 1: the probe check alone
+  gives false confidence — casdoor itself comes up healthy while the
+  platform is broken. Also verify the controller mints its access key (no
+  `casdoor login` errors in the bootstrap init container's log) and the UI
+  wizard completes the Account step; §5.7's seeding is what makes both
+  work.)*
 
 **Completion criterion for #375:** the three pins bumped in one commit,
 patch and guard deleted, the static render verification in the PR, and the
@@ -312,12 +354,19 @@ thumbs-up on the rollout.
 | An admin-API contract changed in 4.x beyond what §3 could verify statically | low (routes, auth transport, and the two version-sensitive semantics all checked at source) | §7 post-deploy controller checks; revert + backup if broken |
 | Future Renovate chart bump weakens probe defaults silently | low | Accepted (Approach D rejected); restore via `probe:` values if ever observed |
 | Upstream stops mirroring to docker-hub | low (stated as maintained) | Approach B becomes the fix; it is a render no-op today |
+| *(found in review r1–r2)* 4.x seeds no admin password → fresh installs silently broken (controller mint, UI wizard) | was certain without wiring | §5.7: chart `initAdminPassword.existingSecret` seeding, create-only at source; handoff item extended past the probe check (§7) |
 
 ## 9. Follow-ups (each its own issue/PR, none block this one)
 
 1. Move the chart pin to the canonical `oci://ghcr.io/casdoor/helm-charts/casdoor`
    (Approach B; container name becomes `casdoor`; update Renovate depName).
-2. Adopt chart `initData` / `initAdminPassword.existingSecret` (named in #375).
+   **Filed: #390.**
+2. Adopt chart `initData` (declarative init via Secret; also rewrite or
+   retire the `.claude/skills/casdoor-export` skill, which still targets the
+   removed init_data.json approach). **Filed: #391.**
+   *(Post-review: `initAdminPassword.existingSecret` moved OUT of this
+   follow-up — the upgrade made it load-bearing, it landed as §5.7. Its
+   further promotion to a per-cluster secret-backed credential is #392.)*
 3. Optionally add `_pragma=busy_timeout(5000)` (busy-timeout only, **not**
    WAL) to the `dataSourceName` env override as NFS lock-contention
    hardening — independent of this upgrade.
@@ -336,3 +385,7 @@ thumbs-up on the rollout.
 | Dev-cluster trial before merge | recommended, not gating | Repo norm (FLUX_WORKFLOW.md) when reachable; #375's checklist doesn't demand it |
 | Post-rollout checks | maintainer handoff, not implementer-run | Production kubeconfigs are off-limits to agent sessions per repo skills |
 | Bootstrap reach of real clusters | assumed to follow releases; flagged | Wiring is out-of-band (flux bootstrap); pinned/suspended clusters need the usual manual bump |
+| *(post-review r1, Important 2)* Durable lockstep guard | CI assertion (`scripts/check-version-lockstep.sh` + `version-lockstep` job + `infrastructure/system-apps/**` trigger), not a Renovate extension | At grouped-PR time the new artifact tag does not exist yet, so the flux manager cannot put the third pin in the bump PR; the assertion turns a partial bump red instead. Chart equality is opt-in via a `# lockstep:` marker — blanket equality false-positives on independently versioned charts (cert-manager, traefik, immich, reflector) |
+| *(post-review r2, Critical 1)* Fresh-install admin seeding | chart `initAdminPassword.existingSecret` from a committed factory constant; not the welcome-page flow, not a per-cluster secret | Restores the 3.x contract both consumers already assume (controller mint, UI wizard) with zero code changes and zero new boot-time dependencies; verified create-only at source, so initialized clusters are untouched. Welcome page hardens the credential but breaks the headless claim flow; per-cluster generation is real design work → #392 |
+| *(post-review r2, Minor 3)* Marker set guarded | `EXPECTED_LOCKSTEP_APPS` list in the script, not tag==version detection | A lost `# lockstep:` marker made check 2 fail-open; coincidental equality exists (flux-operator-mcp 0.44.0/0.44.0 on an upstream chart), so structural detection would false-positive today |
+| *(post-review r2, Minors 4–5)* Workflow triggers | master `push` trigger (repo-level jobs only, `detect-changes` event-gated) + `scripts/**` paths | Publish workflows fire on push, so the invariants must not be PR-only; the guard's own harness should gate PRs that touch it |
