@@ -121,7 +121,8 @@ Every step's prompt also says, overriding the interactive skills where they'd st
 
 Models and effort *(builder's call)*: each step passes a `profile` from `FACTORY8_BANDS`, read once at the run's start
 through factory8's existing `shipConfig` activity (`proxyActivities` from `@temporalio/workflow`, type-only import of
-the activities) — design and plan use `bands.design`, build and fix `bands.implement[0]`, review `bands.review`. So the
+the activities) — design and plan use `bands.design`, build `bands.implement[0]`, fix rounds `bands.implement[1]`
+(falling back to `[0]` if the list has one entry), review `bands.review`. So the
 effort levels in `.factory8/worker.yaml` apply here as they do to `ship`.
 
 Run state (the `state` query) carries `pr` once known. (The spec and plan paths are the agent's choice and live in

@@ -12,7 +12,7 @@ const { shipConfig } = proxyActivities<{
 
 export async function superpowersWorkflow(input: RunInput): Promise<Outcome> {
   const { bands } = await shipConfig();
-  const profiles: Record<Band, Profile> = { design: bands.design, implement: bands.implement[0], review: bands.review };
+  const profiles: Record<Band, Profile> = { design: bands.design, implement: bands.implement[0], fix: bands.implement[1] ?? bands.implement[0], review: bands.review };
   const { state, step, ask } = run(input, { pr: undefined as string | undefined });
   try {
     return await superpowersRun({

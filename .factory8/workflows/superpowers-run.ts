@@ -1,7 +1,7 @@
 // The superpowers flow's logic: prompts, summary parsing and the review/fix/escalation loop. No runtime imports, so it
 // runs under `node --test` with a fake Io; superpowers.ts binds it to factory8's run() and the FACTORY8_BANDS profiles.
 
-export type Band = 'design' | 'implement' | 'review';
+export type Band = 'design' | 'implement' | 'fix' | 'review';
 export interface Io {
   step(stage: string, prompt: string, band: Band): Promise<string>;
   ask(question: string): Promise<string>;
@@ -24,7 +24,7 @@ export function verdict(summary: string): 'ready' | 'changes' {
   return m[1].toLowerCase() as 'ready' | 'changes';
 }
 
-export const isStop = (reply: string) => reply.trim().toLowerCase() === 'stop';
+export const isStop = (reply: string) => /^stop[.!]?$/i.test(reply.trim());
 
 export const escalation = (url: string) =>
   `Review still has Important findings after ${FIX_ROUNDS} fix rounds: ${url}. Reply with guidance for another fix round, or "stop".`;
@@ -90,6 +90,6 @@ export async function superpowersRun(io: Io, runId: string, issue: number): Prom
       guidance = reply;
     }
     fixes++;
-    await io.step(`fix-${fixes}`, prompts.fix(runId, issue, guidance), 'implement');
+    await io.step(`fix-${fixes}`, prompts.fix(runId, issue, guidance), 'fix');
   }
 }

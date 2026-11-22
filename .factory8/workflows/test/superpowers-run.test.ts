@@ -35,7 +35,7 @@ test('ready on first review', async () => {
 test('two fixes then ready', async () => {
   const f = fake(['changes', 'changes', 'ready']);
   assert.equal((await superpowersRun(f.io, 'k3x9qa', 12)).outcome, 'ready');
-  assert.deepEqual(f.calls, [...start, 'review-1 review', 'fix-1 implement', 'review-2 review', 'fix-2 implement', 'review-3 review']);
+  assert.deepEqual(f.calls, [...start, 'review-1 review', 'fix-1 fix', 'review-2 review', 'fix-2 fix', 'review-3 review']);
   assert.deepEqual(f.questions, []);
 });
 
@@ -43,7 +43,7 @@ test('escalates after 2 fix rounds, stop ends', async () => {
   const f = fake(['changes', 'changes', 'changes'], [' STOP ']);
   assert.deepEqual(await superpowersRun(f.io, 'k3x9qa', 12), { outcome: 'stopped', url: URL });
   assert.deepEqual(f.questions, [escalation(URL)]);
-  assert.ok(!f.calls.includes('fix-3 implement'));
+  assert.ok(!f.calls.includes('fix-3 fix'));
 });
 
 test('guidance gets a third fix carrying the reply, then asks again', async () => {
@@ -63,6 +63,8 @@ test('escalation is the verbatim question', () => {
 test('isStop', () => {
   assert.equal(isStop('stop'), true);
   assert.equal(isStop(' Stop\n'), true);
+  assert.equal(isStop('Stop.'), true);
+  assert.equal(isStop('stop!'), true);
   assert.equal(isStop('stop doing X and do Y'), false);
   assert.equal(isStop(''), false);
 });
