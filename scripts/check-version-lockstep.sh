@@ -16,6 +16,12 @@
 #     from the app release itself (chart version == app version, e.g. casdoor
 #     since its chart moved into the app repo); most charts version
 #     independently (cert-manager, traefik, immich, ...) and must not declare it.
+#  3. The marker set itself is guarded: the apps carrying "# lockstep:" must be
+#     exactly EXPECTED_LOCKSTEP_APPS below, so a lost marker (formatter, editor
+#     slip) cannot silently disable check 2 for an app — a no-failing-signal
+#     mode in the very guard built to eliminate them. A list, not tag==version
+#     detection: coincidental equality exists (flux-operator-mcp 0.44.0/0.44.0
+#     on an independently versioned upstream chart).
 #
 # Needs yq v4 (nix-shell shell.nix). Exit 0 = lockstep holds.
 set -euo pipefail
@@ -51,10 +57,13 @@ for f in infrastructure/system-apps/*.yaml; do
   done <<< "$rows"
 done
 
-# --- 2. opt-in chart/app version lockstep --------------------------------------
+# --- 2. opt-in chart/app version lockstep (marker set guarded, check 3) --------
+EXPECTED_LOCKSTEP_APPS="${EXPECTED_LOCKSTEP_APPS:-casdoor}"
+marked=""
 for f in apps/*/base/ocirepository.yaml; do
   grep -q '# lockstep:' "$f" || continue
   app="$(basename "$(dirname "$(dirname "$f")")")"
+  marked="${marked:+$marked$'\n'}$app"
   m="apps/$app/metadata.yaml"
   [ -f "$m" ] || { bad "$f" "lockstep marker present but $m does not exist"; continue; }
   tag=$(yq '.spec.ref.tag // ""' "$f")
@@ -65,6 +74,13 @@ for f in apps/*/base/ocirepository.yaml; do
     bad "$f" "$app: chart tag $tag != apps/$app/metadata.yaml spec.version $version — this chart is tagged from the app release; bump both together"
   fi
 done
+
+# --- 3. the marker set must equal EXPECTED_LOCKSTEP_APPS (fail-closed) ---------
+expected="$(echo "$EXPECTED_LOCKSTEP_APPS" | tr ' ' '\n' | sed '/^$/d' | sort)"
+if [ "$(printf '%s\n' "$marked" | sort)" != "$expected" ]; then
+  echo "::error::apps carrying '# lockstep:' [$(printf '%s' "$marked" | tr '\n' ' ')] != EXPECTED_LOCKSTEP_APPS [$EXPECTED_LOCKSTEP_APPS] — a marker was lost (check 2 goes fail-open for that app) or added; update EXPECTED_LOCKSTEP_APPS in scripts/check-version-lockstep.sh" >&2
+  STATUS=1
+fi
 
 [ "$STATUS" -eq 0 ] && echo "OK"
 exit "$STATUS"

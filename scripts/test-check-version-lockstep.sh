@@ -9,10 +9,12 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
-# Fresh fixture tree: two deployed apps in lockstep, one lockstep-marked chart.
+# Fresh fixture tree: two deployed apps in lockstep, one lockstep-marked chart,
+# one unmarked independently-versioned chart (the fixture's EXPECTED list is
+# "charted", injected by run()).
 new_tree() {
   T="$TMP/tree"; rm -rf "$T"
-  mkdir -p "$T/scripts" "$T/infrastructure/system-apps" "$T/apps/foo" "$T/apps/nfs" "$T/apps/charted/base"
+  mkdir -p "$T/scripts" "$T/infrastructure/system-apps" "$T/apps/foo" "$T/apps/nfs" "$T/apps/charted/base" "$T/apps/loose/base"
   cp "$REPO_ROOT/scripts/check-version-lockstep.sh" "$T/scripts/"
 
   mkmeta() { # <app> <version>
@@ -28,6 +30,7 @@ EOF
   mkmeta foo 1.2.3
   mkmeta nfs 4.0.18
   mkmeta charted 2.0.0
+  mkmeta loose 4.9.0
 
   mksysapp() { # <file> <name> <url-suffix> <tag>
     cat > "$T/infrastructure/system-apps/$1.yaml" <<EOF
@@ -81,9 +84,22 @@ spec:
     # lockstep: chart is tagged from the app release; must equal spec.version
     tag: "2.0.0"
 EOF
+
+  # Unmarked, independently versioned chart: drift here must stay legal.
+  cat > "$T/apps/loose/base/ocirepository.yaml" <<'EOF'
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: loose-helm-charts
+spec:
+  interval: 24h
+  url: oci://registry-1.docker.io/example/loose-helm-charts
+  ref:
+    tag: "5.0.0"
+EOF
 }
 
-run() { ( cd "$T" && bash scripts/check-version-lockstep.sh ) 2>"$TMP/err" >"$TMP/out" && RC=0 || RC=$?; }
+run() { ( cd "$T" && EXPECTED_LOCKSTEP_APPS=charted bash scripts/check-version-lockstep.sh ) 2>"$TMP/err" >"$TMP/out" && RC=0 || RC=$?; }
 expect_fail() { # <label> <stderr pattern>
   local label="$1" pat="$2"
   run
@@ -122,15 +138,26 @@ lockstep_chart_drift_fails() {
 }
 unmarked_chart_drift_passes() {
   new_tree
-  sed -i '/# lockstep:/d' "$T/apps/charted/base/ocirepository.yaml"
-  edit '.spec.ref.tag = "3.0.0"' apps/charted/base/ocirepository.yaml
+  edit '.spec.ref.tag = "6.0.0"' apps/loose/base/ocirepository.yaml
   run
   [ "$RC" -eq 0 ] || fail "unmarked_chart_drift: expected exit 0, got $RC: $(cat "$TMP/err")"
+}
+marker_lost_from_listed_app_fails() {  # fail-open mode: the marker vanished
+  new_tree
+  sed -i '/# lockstep:/d' "$T/apps/charted/base/ocirepository.yaml"
+  expect_fail marker_lost "a marker was lost"
+}
+marker_added_outside_list_fails() {  # new lockstep app must join the list
+  new_tree
+  mkdir -p "$T/apps/other/base"
+  sed 's/charted/other/g' "$T/apps/charted/base/ocirepository.yaml" > "$T/apps/other/base/ocirepository.yaml"
+  expect_fail marker_added "or added"
 }
 
 for t in all_pins_match_passes deploy_pin_drift_fails url_resolves_app_not_filename \
          missing_app_dir_fails missing_deploy_tag_fails unparseable_sysapp_fails \
-         lockstep_chart_drift_fails unmarked_chart_drift_passes; do
+         lockstep_chart_drift_fails unmarked_chart_drift_passes \
+         marker_lost_from_listed_app_fails marker_added_outside_list_fails; do
   "$t"; echo "ok $t"
 done
 echo PASS
