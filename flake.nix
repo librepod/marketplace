@@ -24,10 +24,20 @@
       packages.x86_64-linux.sandbox-image = factory8.lib.sandboxImage {
         # Every step loads the superpowers skills. The package itself is wrapped: a separate `claude` script would
         # collide with claude-code's in the image's /bin. The name keeps getName = "claude-code" for the unfree predicate.
+        # It also carries /etc/claude-code/managed-settings.json: managed env outranks every other settings level, so
+        # the tier aliases superpowers' sub-agents use (opus/sonnet/haiku) resolve to models the gateway serves.
+        # shortcut: the model names are the installation's, not this repo's; move them to the sandbox Secret once
+        # factory8's sandbox pod mounts managed settings from it.
         pkgs = pkgs.extend (_: prev: {
           claude-code = prev.symlinkJoin {
             name = "claude-code-${prev.claude-code.version}";
-            paths = [ prev.claude-code ];
+            paths = [ prev.claude-code (prev.writeTextDir "etc/claude-code/managed-settings.json" (builtins.toJSON {
+              env = {
+                ANTHROPIC_DEFAULT_OPUS_MODEL = "glm-5.3[1m]";
+                ANTHROPIC_DEFAULT_SONNET_MODEL = "glm-5.3-flash[1m]";
+                ANTHROPIC_DEFAULT_HAIKU_MODEL = "glm-5.3-flash[1m]";
+              };
+            })) ];
             nativeBuildInputs = [ prev.makeWrapper ];
             postBuild = "wrapProgram $out/bin/claude --add-flags '--plugin-dir ${superpowers}'";
           };
