@@ -16,7 +16,7 @@ spec:
       serviceAccountName: factory8-worker
       containers:
         - name: worker
-          image: marketplace-worker:jnq44qy1r1549x3rwdy8srs90y4v66xi
+          image: marketplace-worker:gqnak1y1npd0rshydm87msffnb64c2wg
           imagePullPolicy: Never
           env:
             - name: TEMPORAL_ADDRESS
@@ -26,14 +26,14 @@ spec:
             - name: FACTORY8_REVIEW_MODEL
               value: glm-5.3
             - name: FACTORY8_IMAGES
-              value: '{"https://github.com/librepod/marketplace": "marketplace-sandbox:zbgnzpna9wmnjy4c79w4blvnzw3gwdii"}'
+              value: '{"https://github.com/librepod/marketplace": "marketplace-sandbox:215hib0ifv74a2pzl9an728qhbmb51rh"}'
             - name: FACTORY8_PLUGIN
               value: https://github.com/factory8/factory8
             - name: FACTORY8_BANDS
               value: >-
-                {"design": {"model": "glm-5.3", "effort": "high"},
-                "acceptance": {"model": "glm-5.3", "effort": "high"},
-                "implement": [{"model": "glm-5.3", "effort": "medium"}, {"model": "glm-5.3", "effort": "high"}],
-                "review": {"model": "glm-5.3", "effort": "high"},
-                "diagnose": {"model": "glm-5.3", "effort": "high"},
+                {"design": {"model": "glm-5.3", "effort": "xhigh"},
+                "acceptance": {"model": "glm-5.3", "effort": "xhigh"},
+                "implement": [{"model": "glm-5.3", "effort": "medium"}, {"model": "glm-5.3", "effort": "xhigh"}],
+                "review": {"model": "glm-5.3", "effort": "xhigh"},
+                "diagnose": {"model": "glm-5.3", "effort": "xhigh"},
                 "finish": {"model": "glm-5.3-flash"}}
