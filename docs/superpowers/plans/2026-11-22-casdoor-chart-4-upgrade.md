@@ -147,11 +147,12 @@ Expected (spec §2/§3): `version: 4.29.0` and `appVersion: 4.29.0` (the lockste
 diff -u /tmp/casdoor-upgrade/render-3.106.0.yaml /tmp/casdoor-upgrade/render-4.29.0.yaml || true
 ```
 
-Expected hunks — and nothing else (spec §3's exhaustive list):
+Expected hunks — and nothing else (spec §3's exhaustive list, plus one execution-time addition):
 
 1. version labels + image tag (`helm.sh/chart: casdoor-helm-charts-4.29.0`, `app.kubernetes.io/version: "4.29.0"`, `image: casbin/casdoor:4.29.0`)
 2. the probe fix (bare `livenessProbe` on `/` → startup/liveness/readiness on `/api/health`)
 3. `dataSourceName` in ConfigMap `casdoor-config` gaining `&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)` — harmless, our env override wins
+4. *(expected and derived, verified during execution)* the pod-template `checksum/config` annotation changes — the chart computes it as `sha256` of the rendered config (`templates/deployment.yaml:17` is identical in both versions), `templates/configmap.yaml` is identical, and the only feeding delta is hunk 3's dataSourceName pragma from `_helpers.tpl`'s sqlite fallback. The checksum hunk is a consequence of hunk 3, not a fourth behavior change; no extra reconciliation needed.
 
 Any other hunk → STOP and reconcile against spec §3 before committing; if genuinely new, report it in the PR rather than absorbing it silently.
 
@@ -182,7 +183,7 @@ EOF
 
 **Interfaces:**
 - Consumes: Task 1's commit (the guard's no-postRender branch already demonstrated PASS in Task 1 Step 5).
-- Produces: no `scripts/test-casdoor-probe-patch.sh`; a `validate-apps.yaml` whose `validate` job has exactly 3 steps (checkout, install-nix, build+lint+flux render) and no `casdoor` mention anywhere under `.github/workflows/`.
+- Produces: no `scripts/test-casdoor-probe-patch.sh`; a `validate-apps.yaml` whose `validate` job has exactly 3 steps (checkout, install-nix, build+lint+flux render) and no casdoor mention in `validate-apps.yaml`.
 
 - [ ] **Step 1: Delete the guard script**
 
@@ -208,12 +209,20 @@ Nothing else in the workflow changes, and no replacement step is added (CLAUDE.m
 - [ ] **Step 3: Verify no dangling references**
 
 ```bash
-if grep -rn "test-casdoor-probe-patch" . --exclude-dir=.git; then echo "FAIL: dangling reference"; exit 1; else echo "ok: no references"; fi
-grep -rn "casdoor" .github/workflows/ || echo "ok: no casdoor-specific CI left"
+# V1: functional references only. Scoped exclusion of docs/superpowers/ — the
+# plan and spec prose name the script they delete, so an unscoped grep is
+# unrunnable as written. (NB: gitignored-but-tracked files under docs/ are
+# skipped by some grep implementations and not others — ugrep honors
+# gitignore, GNU grep does not — so the exclusion must be explicit to behave
+# the same across toolchains.)
+if grep -rn "test-casdoor-probe-patch" . --exclude-dir=.git --exclude-dir=docs; then echo "FAIL: dangling reference"; exit 1; else echo "ok: no references"; fi
+# V2: validate-apps.yaml only. Other workflows carry pre-existing, out-of-scope
+# casdoor-sso-controller image CI; a directory-wide grep hits those.
+grep -n "casdoor" .github/workflows/validate-apps.yaml || echo "ok: no casdoor-specific CI left in validate-apps.yaml"
 yq '.jobs.validate.steps | length' .github/workflows/validate-apps.yaml   # 3
 ```
 
-Expected: `ok: no references`; `ok: no casdoor-specific CI left`; `3`.
+Expected: `ok: no references`; `ok: no casdoor-specific CI left in validate-apps.yaml`; `3`.
 
 - [ ] **Step 4: Commit**
 
@@ -237,7 +246,7 @@ EOF
 
 **Interfaces:**
 - Consumes: Task 1 + Task 2 commits; the renders at `/tmp/casdoor-upgrade/` (re-run Task 1 Steps 1 and 6 if cleared); spec §7's checklist.
-- Produces: an open PR to `master` titled `feat(casdoor): chart 3.106.0 → 4.29.0, drop postRender probe patch` that closes #375 on merge, carrying the verification evidence and the maintainer handoff.
+- Produces: the existing open PR #389 (base `master`, head `factory8/x8luwu`) retitled `feat(casdoor): chart 3.106.0 → 4.29.0, drop postRender probe patch` with a full implementation body that closes #375 on merge, carrying the verification evidence and the maintainer handoff.
 
 - [ ] **Step 1: Endpoint sweep, part 1 — collect the endpoints this repo actually calls**
 
@@ -269,11 +278,13 @@ Expected: every Step 1 endpoint matches a route registration under `routers/` (o
 
 Spec §7's recorded call: recommended when reachable, static-only fallback is pre-authorized. If `~/.kube/librepod-dev.config` exists and the cluster answers (`kubectl --kubeconfig ~/.kube/librepod-dev.config get ns`), follow `docs/FLUX_WORKFLOW.md`'s dev procedure to deploy this PR's `pr-N` app artifact (publish-apps publishes it automatically on PR open) and observe: the casdoor HelmRelease upgrades to 4.29.0, the pod reaches Ready with restart count 0, casdoor-sso-controller stays healthy. Otherwise record in the PR that the trial was skipped and why. NB: dev's casdoor DB is already initialized — this exercises the upgrade path only, not the fresh-install (#366) path.
 
-- [ ] **Step 4: Push and open the PR**
+- [ ] **Step 4: Push and update the existing PR**
+
+*Execution-time correction:* PR #389 (base `master`, head `factory8/x8luwu`) already exists — it carried the spec at plan-writing time. Do **not** create a duplicate PR; push the branch, then edit #389 in place with the implementation title and body.
 
 ```bash
 git push -u origin HEAD
-gh pr create --base master \
+gh pr edit 389 \
   --title "feat(casdoor): chart 3.106.0 → 4.29.0, drop postRender probe patch" \
   --body-file /tmp/casdoor-upgrade/pr-body.md
 ```
