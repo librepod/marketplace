@@ -25,9 +25,10 @@ const TIMEOUT_MS = 10_000;
 
 /**
  * Casdoor's admin API as the built-in admin — Casdoor's superuser, LibrePod's
- * `admin`. Casdoor v3.106 accepts only its own beego session cookie on
- * /api/set-password, so every operation starts with signIn() (POST /api/login,
- * the login page's anonymous endpoint) and replays the cookie it returns.
+ * `admin`. Casdoor accepts only its own beego session cookie on /api/set-password
+ * (verified on v3.106 and v4.29.0), so every operation starts with signIn()
+ * (POST /api/login, the login page's anonymous endpoint) and replays the cookie
+ * it returns.
  * Casdoor answering 5xx or non-JSON means "down" (503), never "wrong password".
  */
 @Injectable()
@@ -74,7 +75,7 @@ export class CasdoorAdminService {
       });
       const json = await this.parse(res, '/api/login');
       if (json.status === 'ok') {
-        // The password matched (MFA runs after it — 3.106 checkMfaEnable), so no other
+        // The password matched (MFA runs after it — checkMfaEnable), so no other
         // candidate can help; but the session was NOT signed in. Returning the cookie
         // here would make every admin call die as "Unauthorized operation" far from
         // the cause, so name it where it happens.
@@ -123,17 +124,18 @@ export class CasdoorAdminService {
     return json.data === 'NextMfa' || json.data === 'RequiredMfa';
   }
 
-  /** Verified against Casdoor 3.106: a signed-in admin needs no old password, and a stale
-   * one counts toward the sign-in lockout when two first runs race to set the same value. */
+  /** Verified against Casdoor 3.106 and 4.29.0: a signed-in admin needs no old password,
+   * and a stale one counts toward the sign-in lockout when two first runs race to set the same value. */
   async setAdminPassword(session: CasdoorSession, newPassword: string): Promise<void> {
     await this.setPassword(session, 'built-in', 'admin', '', newPassword);
   }
 
   /** The platform org. Nothing else creates it on a fresh device (casdoor-sso-controller
    * only adds applications to it), so this is its real creation. Organizations belong
-   * to "admin". add-organization leaves passwordType empty, and Casdoor then refuses
-   * every password sign-in in the org ("unsupported password type"); bcrypt is what
-   * Casdoor's own UI gives a new org. */
+   * to "admin". Casdoor 3.106's add-organization left passwordType empty, and Casdoor
+   * then refused every password sign-in in the org ("unsupported password type");
+   * 4.29.0 defaults a missing one to bcrypt itself. Sending bcrypt explicitly is what
+   * Casdoor's own UI gives a new org and stays correct on both. */
   async ensureOrganization(session: CasdoorSession): Promise<void> {
     if (await this.getJson(session, `/api/get-organization?id=admin/${encodeURIComponent(this.org)}`)) return;
     await this.postJson(session, '/api/add-organization', {

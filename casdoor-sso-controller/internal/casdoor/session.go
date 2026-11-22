@@ -92,8 +92,8 @@ func (c *SessionClient) CreateAccessKey(ctx context.Context, name, accessKey, ac
 }
 
 // DeleteAccessKey removes a key by name with a minimal {owner,name} body
-// (verified to work on Casdoor 3.106.0, unlike delete-application which needs
-// the full object). Used to clear a stale same-name key before re-creating it.
+// (verified on Casdoor 3.106.0 and 4.29.0, unlike delete-application which
+// needs the full object). Used to clear a stale same-name key before re-creating it.
 func (c *SessionClient) DeleteAccessKey(ctx context.Context, name string) error {
 	body := map[string]any{"owner": "built-in", "name": name}
 	var resp apiResp
