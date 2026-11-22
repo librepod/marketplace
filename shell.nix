@@ -13,5 +13,6 @@ pkgs.mkShell {
     pkgs.curl
     pkgs.jq
     pkgs.yq-go
+    pkgs.nodejs_24
   ];
 }
