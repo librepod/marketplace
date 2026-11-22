@@ -10,6 +10,20 @@ on:
       - 'apps/*/components/**'
       - 'components/**'
       - 'infrastructure/system-apps/**'
+      - 'scripts/**'
+  # Direct pushes to master also run the repo-level jobs (version-lockstep in
+  # particular): PRs are the usual gate, but the publish workflows fire on push
+  # too, so the invariants must not be PR-only (PR #389 review round 2, Minor 4).
+  push:
+    branches: [master]
+    paths:
+      - 'apps/*/metadata.yaml'
+      - 'apps/*/base/**'
+      - 'apps/*/overlays/**'
+      - 'apps/*/components/**'
+      - 'components/**'
+      - 'infrastructure/system-apps/**'
+      - 'scripts/**'
 
 jobs:
   # Closed category vocabulary gate (#314): a category outside this list is
@@ -55,6 +69,10 @@ jobs:
           echo "No remote http(s) bases under apps/."
 
   detect-changes:
+    # PR-only: it diffs against the PR base. On push events it is skipped, and
+    # the skipped `needs` cascades to the app-matrix jobs (validate, e2e) —
+    # only the repo-level jobs are meant to run there.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     outputs:
       apps: ${{ steps.changes.outputs.apps }}
