@@ -7,4 +7,8 @@ spec:
   interval: 24h
   url: oci://registry-1.docker.io/casbin/casdoor-helm-charts
   ref:
+    # lockstep: casdoor's chart lives in the app repo and is tagged from the app
+    # release, so chart version == app version — this tag must move in the same
+    # commit as spec.version in apps/casdoor/metadata.yaml (enforced by
+    # scripts/check-version-lockstep.sh).
     tag: "4.29.0"

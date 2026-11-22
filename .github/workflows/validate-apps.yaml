@@ -9,6 +9,7 @@ on:
       - 'apps/*/overlays/**'
       - 'apps/*/components/**'
       - 'components/**'
+      - 'infrastructure/system-apps/**'
 
 jobs:
   # Closed category vocabulary gate (#314): a category outside this list is
@@ -114,6 +115,21 @@ jobs:
           nix_path: nixpkgs=channel:nixos-unstable
       - name: Check app/shared-component compatibility
         run: nix-shell shell.nix --run 'bash scripts/check-app-components.sh'
+
+  # Version-pin lockstep (PR #389 review, Important 2): Renovate maintains only
+  # apps/*/metadata.yaml and apps/*/base/ocirepository.yaml; the
+  # infrastructure/system-apps deploy pin is hand-maintained. A partial bump
+  # strands every cluster on the old artifact with no failing signal, so CI
+  # owns the invariant instead of trusting the bumper.
+  version-lockstep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - name: Check version pin lockstep
+        run: nix-shell shell.nix --run 'bash scripts/check-version-lockstep.sh'
 
   e2e:
     needs: detect-changes
