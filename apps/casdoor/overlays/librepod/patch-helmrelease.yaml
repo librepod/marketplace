@@ -4,6 +4,20 @@ metadata:
   name: casdoor
 spec:
   values:
+    # First-start seed for built-in/admin (PR #389 review, Critical 1): 4.x no
+    # longer hardcodes the factory password "123" — without this, a fresh
+    # install comes up with NO admin password (welcome-page flow) and both
+    # in-repo consumers that assume the factory credential fail silently
+    # (controller's key mint, marketplace-ui's wizard). existingSecret, not the
+    # inline `value` the chart marks "for local tests only"; the Secret is the
+    # secretGenerator in this overlay reading init-admin.env. Create-only at
+    # source (initBuiltInUser returns early when the admin exists): a no-op on
+    # any initialized cluster. Details in init-admin.env; promotion to a real
+    # per-cluster credential is #392.
+    initAdminPassword:
+      existingSecret: casdoor-init-admin
+      existingSecretKey: initAdminPassword
+
     # Override app.conf keys via env vars (Casdoor supports per-key env override
     # of app.conf). All keys from the casdoor-env ConfigMap are loaded with a
     # single envFrom entry:
