@@ -18,8 +18,8 @@ export function prUrl(summary: string): string {
 }
 
 export function verdict(summary: string): 'ready' | 'changes' {
-  const last = summary.split('\n').map(l => l.replace(/[*`]/g, '').trim()).filter(Boolean).pop() ?? '';
-  const m = /^verdict:\s*(ready|changes)\b/i.exec(last);
+  // The last Verdict line, not the last line: a trailing "Comment: <link>" mustn't fail a run hours in.
+  const m = summary.split('\n').map(l => /^verdict:\s*(ready|changes)\b/i.exec(l.replace(/[*`_]/g, '').trim())).filter(Boolean).pop();
   if (!m) throw new Error('no Verdict line in the review summary');
   return m[1].toLowerCase() as 'ready' | 'changes';
 }
@@ -44,7 +44,7 @@ const issueRef = (issue: number) => `GitHub issue #${issue} (read it with \`gh i
 export const prompts = {
   design: (runId: string, issue: number) => `Use superpowers:brainstorming on ${issueRef(issue)}.
 Decide everything yourself from the issue and the repo: pick the approach and record the alternatives in the spec's
-Approaches section. Write the spec to docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md, commit it and push.
+Approaches section. Run the builder check. Write the spec to docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md, commit it and push.
 Then open a draft PR with \`gh pr create --draft\`: title = the issue's title; the body ends with the two lines
 \`Run: ${runId}\` and \`Fixes #${issue}\`.
 Don't write a plan or any code in this step. Your summary's last line is the PR's URL.
@@ -58,15 +58,15 @@ ${rules}`,
   build: (runId: string, issue: number) => `Execute the plan committed on this branch for ${issueRef(issue)} (run ${runId}) with
 superpowers:subagent-driven-development (fall back to superpowers:executing-plans), test-first. Run the repo's checks
 and fix failures, then push. If the work departs from the plan, update the plan in the same commit.
-Your summary includes the checks' final output.
+The PR already exists: skip superpowers:finishing-a-development-branch. Your summary includes the checks' final output.
 ${rules}`,
 
   review: (runId: string, issue: number) => `You didn't write this change. Review this branch's PR (run ${runId}) against ${issueRef(issue)},
 its spec under docs/superpowers/specs/ and its plan under docs/superpowers/plans/, with superpowers:requesting-code-review
 and the repo's conventions. No human approved the spec and plan, so also check the spec and plan themselves against the
 issue: a spec that misreads the issue is an Important finding.
-Change no file. Post your findings as one PR comment, ranked Important / Nit.
-If there are no Important findings, run \`gh pr ready\` and end your summary with the line \`Verdict: ready\`;
+Change no file. Post your findings as one PR comment, ranked Critical / Important / Minor.
+If there are no Critical or Important findings, run \`gh pr ready\` and end your summary with the line \`Verdict: ready\`;
 otherwise end it with the line \`Verdict: changes\`.
 ${rules}`,
 

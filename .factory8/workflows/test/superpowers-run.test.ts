@@ -73,6 +73,17 @@ test('verdict', () => {
   assert.throws(() => verdict('looks good'), /no Verdict line/);
 });
 
+test('verdict tolerates _emphasis_ and a trailing line after it', () => {
+  assert.equal(verdict('x\n_Verdict: ready_'), 'ready');
+  assert.equal(verdict('Verdict: changes\nComment: https://github.com/o/r/pull/7#issuecomment-1'), 'changes');
+});
+
+test('prompts fence off the interactive skills\' human gates', () => {
+  assert.match(prompts.design('k3x9qa', 12), /builder check/i);
+  assert.match(prompts.review('k3x9qa', 12), /no Critical or Important findings/);
+  assert.match(prompts.build('k3x9qa', 12), /skip superpowers:finishing-a-development-branch/);
+});
+
 test('prUrl', () => {
   assert.equal(prUrl('https://github.com/o/r/pull/1 then https://github.com/o/r/pull/2.'), 'https://github.com/o/r/pull/2');
   assert.throws(() => prUrl('no link'), /no PR URL/);
