@@ -27,7 +27,7 @@
         # It also carries /etc/claude-code/managed-settings.json: managed env outranks every other settings level, so
         # the tier aliases superpowers' sub-agents use (opus/sonnet/haiku) resolve to models the gateway serves.
         # shortcut: the model names are the installation's, not this repo's; move them to the sandbox Secret once
-        # factory8's sandbox pod mounts managed settings from it.
+        # factory8's sandbox pod mounts managed settings from it (factory8/factory8#27).
         pkgs = pkgs.extend (_: prev: {
           claude-code = prev.symlinkJoin {
             name = "claude-code-${prev.claude-code.version}";
