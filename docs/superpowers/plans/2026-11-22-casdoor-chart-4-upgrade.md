@@ -25,7 +25,7 @@
 - **The Renovate comment in metadata.yaml stays as-is** (same `depName=registry-1.docker.io/casbin/casdoor-helm-charts` under Approach A).
 - **Public-repo privacy (CLAUDE.md):** no personal device names, hostnames, domains, or incident narratives in commits, the PR, or docs — say "the production cluster", "the nightly backup".
 - **Non-interactive shell (CLAUDE.md):** `rm -f`, `cp -f`, `mv -f`.
-- **Commits:** conventional-commit prefixes; end each message with `Co-Authored-By: Claude Code <noreply@anthropic.com>`.
+- **Commits:** conventional-commit prefixes; end each message with `Co-Authored-By: Claude Code <noreply@anthropic.com>`. Repo tooling appends a `Factory8-Run:` trailer after it on every commit — expected, leave it.
 - **Tooling:** helm/kustomize/kubectl/yq/flux are on PATH (or via `nix-shell shell.nix --run '…'`). `helm template` pulls the OCI chart and kubeconform fetches its CRD catalog — both need network.
 - **The PR stays open for review** and ends with the attribution line `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 
@@ -214,8 +214,10 @@ Nothing else in the workflow changes, and no replacement step is added (CLAUDE.m
 # unrunnable as written. (NB: gitignored-but-tracked files under docs/ are
 # skipped by some grep implementations and not others — ugrep honors
 # gitignore, GNU grep does not — so the exclusion must be explicit to behave
-# the same across toolchains.)
-if grep -rn "test-casdoor-probe-patch" . --exclude-dir=.git --exclude-dir=docs; then echo "FAIL: dangling reference"; exit 1; else echo "ok: no references"; fi
+# the same across toolchains.) .superpowers/ is excluded too: the SDD scratch
+# space quotes the deleted script's name in briefs/review packages, and GNU
+# grep does not skip it on its own. *(execution-time correction)*
+if grep -rn "test-casdoor-probe-patch" . --exclude-dir=.git --exclude-dir=docs --exclude-dir=.superpowers; then echo "FAIL: dangling reference"; exit 1; else echo "ok: no references"; fi
 # V2: validate-apps.yaml only. Other workflows carry pre-existing, out-of-scope
 # casdoor-sso-controller image CI; a directory-wide grep hits those.
 grep -n "casdoor" .github/workflows/validate-apps.yaml || echo "ok: no casdoor-specific CI left in validate-apps.yaml"
@@ -250,15 +252,19 @@ EOF
 
 - [ ] **Step 1: Endpoint sweep, part 1 — collect the endpoints this repo actually calls**
 
+*(execution-time correction:* the UI side originally swept only the onboarding admin service; the SSO sign-in service `ui/packages/server/src/auth/casdoor.service.ts` calls two OAuth endpoints as well, so the grep now covers both files with a slash/underscore-aware pattern. Final review caught the omission; both endpoints are verified in v4.29.0 — see part 2.)
+
 ```bash
 grep -rhoE '"/api/[a-zA-Z-]+"' casdoor-sso-controller --include='*.go' | tr -d '"' | sort -u
-grep -nhoE 'api/[a-zA-Z-]+' ui/packages/server/src/onboarding/casdoor-admin.service.ts | sed 's/^[0-9]*://' | sort -u
+grep -nhoE 'api/[a-zA-Z/_-]+' ui/packages/server/src/onboarding/casdoor-admin.service.ts \
+  ui/packages/server/src/auth/casdoor.service.ts | sed 's/^[0-9]*://' | sort -u
 ```
 
 Expected at plan-writing time (any extra endpoint that appears joins part 2 — that is the point of re-running):
 
 - controller: `add-application`, `add-key`, `delete-application`, `delete-key`, `get-application`, `login`, `update-application`
-- UI service: `get-organization`, `add-organization`, `get-group`, `add-group`, `get-user`, `update-user`, `add-user`, `set-password`, `login`
+- UI admin service: `get-organization`, `add-organization`, `get-group`, `add-group`, `get-user`, `update-user`, `add-user`, `set-password`, `login`
+- UI auth service: `login/oauth/access_token`, `userinfo` (the output also shows `auth/callback` — the marketplace-ui redirect_uri embedded in the authorize URL, a UI-side path, not a casdoor call, so skip it in part 2. The browser-facing `/login/oauth/authorize` redirect has no `api/` prefix and is not an API call; the handoff's live sign-in check covers it.)
 
 - [ ] **Step 2: Endpoint sweep, part 2 — verify each against casdoor v4.29.0 source**
 
@@ -289,11 +295,13 @@ gh pr edit 389 \
   --body-file /tmp/casdoor-upgrade/pr-body.md
 ```
 
+(NB: `gh pr edit` needs a full-scope token; on a restricted token it fails — use `gh api -X PATCH repos/librepod/marketplace/pulls/389 -F body="$(cat /tmp/casdoor-upgrade/pr-body.md)"` instead.)
+
 Write `/tmp/casdoor-upgrade/pr-body.md` with, in this order:
 
 1. **What/why** — one paragraph from spec §1: chart 4.23.0+ ships the probe fix natively with identical numbers; the patch's recorded deletion condition is met; `Closes #375`.
 2. **The change** — the three lockstep pins (naming `infrastructure/system-apps/casdoor.yaml` explicitly — the issue's checklist missed it), postRenderers deleted, guard script + CI step deleted, no values changes.
-3. **Render evidence** — the Task 1 Step 7 diff summary (only version labels + image tag, the probe fix, the dataSourceName pragma), the probe values from Step 6, container name still `casdoor-helm-charts` on the docker-hub chart (the issue's "`casdoor`" expectation is true only of the ghcr chart — spec Approach B follow-up), resource names unchanged.
+3. **Render evidence** — the Task 1 Step 7 diff summary (all four hunks: version labels + image tag, the probe fix, the dataSourceName pragma, and the derived `checksum/config` annotation), the probe values from Step 6, container name still `casdoor-helm-charts` on the docker-hub chart (the issue's "`casdoor`" expectation is true only of the ghcr chart — spec Approach B follow-up), resource names unchanged.
 4. **Endpoint sweep** — the Step 1/2 results as a table (endpoint → where it is verified in v4.29.0), plus the `accessKey` transport check.
 5. **Dev-cluster trial** — status per Step 3, or the recorded skip.
 6. **Follow-ups** (spec §9, none blocking): move to the canonical ghcr chart; adopt `initData`/`initAdminPassword.existingSecret`; optional busy-timeout-only pragma hardening.
