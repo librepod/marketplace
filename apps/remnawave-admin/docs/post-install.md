@@ -35,6 +35,31 @@ Remnawave node. The panel builds the install command:
 Agents connect back via WebSocket to `/api/v2/agent/ws` on this panel's public
 domain.
 
+### Tailnet-only nodes
+
+Nodes with no route to the cluster — only a shared tailnet — cannot use the
+public domain. Install the app with the **Tailscale** component: the sidecar
+lands on web-backend, which serves the collector endpoints
+(`POST /api/v2/collector/*`, WebSocket `/api/v2/agent/ws`, port `8081`), and
+point agents at its MagicDNS name instead:
+
+- `AGENT_COLLECTOR_URL`: `http://remnawave-admin.ts.<your-domain>:8081`
+
+The backend must also carry a tailnet tag, because headscale ACL dsts are
+tag-scoped and cannot name the FQDN directly:
+
+- Advertise `tag:remnawave-admin` from the sidecar — TS_EXTRA_ARGS
+  `--advertise-tags=tag:remnawave-admin` (Apps → remnawave-admin → component
+  settings) or a pre-tagged headscale preauth key as TS_AUTHKEY. Tags apply
+  when the node first joins: an already-enrolled node must be re-enrolled
+  (delete it in headscale or wipe the `tailscale-state` PVC) to pick one up.
+- Allow the agents through in the headscale ACL policy (DB mode, managed in
+  Headplane — not this repo): a tag-scoped dst such as
+  `tag:remnawave-node → tag:remnawave-admin:8081`. The tailnet is
+  default-deny, so agents stay unreachable until this rule exists —
+  `curl http://remnawave-admin.ts.<your-domain>:8081/api/v2/health` from a
+  node is the check that it does.
+
 ## Settings reference
 
 All install questions (bot token, panel API token, admin Telegram IDs, bot
