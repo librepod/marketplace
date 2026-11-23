@@ -19,6 +19,7 @@ spec:
     path: ./overlays/librepod
 
   settings:
+    allowCustom: true
     items:
       - name: COLLIE_PUBLIC_URL
         label: "Lead address for crew members"
