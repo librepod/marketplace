@@ -7,6 +7,7 @@ resources:
 - ../../base
 - ingressroute.yaml
 - networkpolicy.yaml
+- externalsecret-ca.yaml
 
 images:
 - name: ghcr.io/cyxou/collie-lead
@@ -16,3 +17,4 @@ patches:
 - path: ./patch-storage-class.yaml
   target:
     kind: PersistentVolumeClaim
+- path: ./deployment-ca-patch.yaml

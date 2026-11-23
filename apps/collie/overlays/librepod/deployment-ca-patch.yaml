@@ -1,0 +1,59 @@
+# Trust the LibrePod root CA for collie's own outbound HTTPS, e.g. a durable
+# program attached by URL under the base domain. Without it those calls fail
+# with UNABLE_TO_GET_ISSUER_CERT_LOCALLY.
+#
+# The init container runs collie's own image (tag pinned by the overlay's
+# images transformer), so the merged bundle starts from the bundle collie
+# already trusts. The result is mounted over that bundle in the collie
+# container only; the tailscale sidecar is untouched.
+#
+# collie is a Bun binary: Bun honors both SSL_CERT_FILE and
+# NODE_EXTRA_CA_CERTS. They are set here, next to the mount they point at,
+# so SSL_CERT_FILE explicitly overrides the image's own value.
+#
+# Needs secret/step-certificates-certs in this namespace: externalsecret-ca.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: collie
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: merge-ca-bundle
+          image: ghcr.io/cyxou/collie-lead
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              cat /etc/ssl/certs/ca-bundle.crt > /mnt/merged-ca/ca-bundle.crt
+              printf '\n# LibrePod Root CA\n' >> /mnt/merged-ca/ca-bundle.crt
+              cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-bundle.crt
+          volumeMounts:
+            - name: root-ca-cert
+              mountPath: /mnt/root-ca
+              readOnly: true
+            - name: merged-ca-bundle
+              mountPath: /mnt/merged-ca
+      containers:
+        - name: collie
+          volumeMounts:
+            - name: merged-ca-bundle
+              mountPath: /etc/ssl/certs/ca-bundle.crt
+              subPath: ca-bundle.crt
+              readOnly: true
+          env:
+            - name: SSL_CERT_FILE
+              value: /etc/ssl/certs/ca-bundle.crt
+            - name: NODE_EXTRA_CA_CERTS
+              value: /etc/ssl/certs/ca-bundle.crt
+      volumes:
+        - name: root-ca-cert
+          secret:
+            secretName: step-certificates-certs
+            items:
+              - key: root_ca.crt
+                path: root_ca.crt
+        - name: merged-ca-bundle
+          emptyDir: {}
