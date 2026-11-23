@@ -44,7 +44,6 @@ appsets/**/charts
 *.secret.env
 /.planning
 /.claude/settings.local.json
-docs/superpowers/
 /.k3d-data
 /.claude/scheduled_tasks.lock
 /.vite/vitest/results.json
