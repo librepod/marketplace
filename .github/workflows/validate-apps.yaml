@@ -102,7 +102,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: cachix/install-nix-action@v31
         with:
-          nix_path: nixpkgs=channel:nixos-unstable
+          nix_path: nixpkgs=channel:nixos-26.05
       - name: Build + lint + flux render
         run: |
           nix-shell shell.nix --run '
@@ -128,7 +128,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: cachix/install-nix-action@v31
         with:
-          nix_path: nixpkgs=channel:nixos-unstable
+          nix_path: nixpkgs=channel:nixos-26.05
       - name: Check app/shared-component compatibility
         run: nix-shell shell.nix --run 'bash scripts/check-app-components.sh'
 
@@ -146,7 +146,7 @@ jobs:
           fetch-depth: 0
       - uses: cachix/install-nix-action@v31
         with:
-          nix_path: nixpkgs=channel:nixos-unstable
+          nix_path: nixpkgs=channel:nixos-26.05
       - name: Check version pin lockstep
         run: nix-shell shell.nix --run 'bash scripts/check-version-lockstep.sh'
 
@@ -164,7 +164,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: cachix/install-nix-action@v31
         with:
-          nix_path: nixpkgs=channel:nixos-unstable
+          nix_path: nixpkgs=channel:nixos-26.05
       - name: Ephemeral k3d deploy + smoke test
         run: |
           echo "On-demand e2e for ${{ matrix.app }} (label renovate-e2e present)."
