@@ -64,6 +64,11 @@ Existing examples: `cut-release.sh` + `test-cut-release.sh`,
 Keep in YAML only what YAML must hold: step names, `env:` wiring, permissions,
 and one-line `run:` calls.
 
+A workflow file GitHub can't parse shows up as a **failed run with zero jobs** on
+every push, even when its `paths:` filter wouldn't match; a valid file whose
+paths don't match creates no run at all. So a zero-job failure means "fix the
+YAML", not "the job failed".
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:46cd31e7 -->
 ## Beads Issue Tracker
 
