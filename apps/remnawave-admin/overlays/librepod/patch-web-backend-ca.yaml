@@ -1,0 +1,75 @@
+# Strategic-merge patch: give the web-backend pod trust for the private
+# LibrePod root+intermediate CA so its server-side OIDC code exchange and
+# userinfo fetch against https://id.${BASE_DOMAIN} pass TLS verification
+# (httpx in web/backend/core/oauth_svc.py — without this the OAuth callback
+# fails certificate verification).
+#
+# Canonical LibrePod CA-trust pattern (same as remnawave/litellm/headscale):
+# an init container (alpine) fuses alpine's CA bundle with the LibrePod root
+# AND intermediate CA (from secret/step-certificates-certs, synced from
+# openbao apps/step-ca), then the web-backend container mounts the merged
+# bundle over the system bundle path. Trust env var for the Python stack:
+# SSL_CERT_FILE — httpx checks it first when trust_env is on (its default;
+# httpx/_config.py), and OpenSSL's default verify paths read it too, so
+# aiogram/aiohttp (Telegram, public CAs) keep working off the same bundle.
+#
+# Only the web-backend is patched: the OIDC flow lives there; the frontend is
+# static files and the bot never talks to id.${BASE_DOMAIN}.
+#
+# Composes with the tailscale component's install-time patch on this same
+# Deployment (librepod.org/component-target): distinct container/volume/
+# initContainer names — root-ca-cert, merged-ca-bundle, merge-ca-bundle — so
+# the strategic merges do not collide.
+#
+# Known cosmetic effect (strategic-merge list reordering): the CA items land
+# before the base's items in volumeMounts/volumes. Functionally inert — k8s
+# treats the order as irrelevant — but the pod-template hash changes, so the
+# pod restarts once when this patch is first applied.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remnawave-admin-web-backend
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: merge-ca-bundle
+          image: alpine:3.19
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              cat /etc/ssl/certs/ca-certificates.crt > /mnt/merged-ca/ca-certificates.crt
+              echo "" >> /mnt/merged-ca/ca-certificates.crt
+              echo "# LibrePod Root CA" >> /mnt/merged-ca/ca-certificates.crt
+              cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+              echo "" >> /mnt/merged-ca/ca-certificates.crt
+              echo "# LibrePod Intermediate CA" >> /mnt/merged-ca/ca-certificates.crt
+              cat /mnt/root-ca/intermediate_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+          volumeMounts:
+            - name: root-ca-cert
+              mountPath: /mnt/root-ca
+              readOnly: true
+            - name: merged-ca-bundle
+              mountPath: /mnt/merged-ca
+      containers:
+        - name: remnawave-admin-web-backend
+          volumeMounts:
+            - name: merged-ca-bundle
+              mountPath: /etc/ssl/certs/ca-certificates.crt
+              subPath: ca-certificates.crt
+              readOnly: true
+          env:
+            - name: SSL_CERT_FILE
+              value: /etc/ssl/certs/ca-certificates.crt
+      volumes:
+        - name: root-ca-cert
+          secret:
+            secretName: step-certificates-certs
+            items:
+              - key: root_ca.crt
+                path: root_ca.crt
+              - key: intermediate_ca.crt
+                path: intermediate_ca.crt
+        - name: merged-ca-bundle
+          emptyDir: {}

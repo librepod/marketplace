@@ -6,6 +6,8 @@ namespace: remnawave-admin
 resources:
 - ../../base
 - ingressroute.yaml
+- ssoclient.yaml
+- externalsecret-ca.yaml
 
 images:
 # Upstream publishes no semver image tags — only `latest` + unordered commit
@@ -30,3 +32,7 @@ images:
 # metadata.name (patches.target is not allowed with multi-doc patch files).
 patches:
 - path: ./patch-storage-class.yaml
+# Inject the LibrePod root+intermediate CA trust (init container + volumes)
+# into the web-backend pod so its server-side OIDC exchange to
+# id.${BASE_DOMAIN} passes TLS verification (see patch-web-backend-ca.yaml).
+- path: ./patch-web-backend-ca.yaml

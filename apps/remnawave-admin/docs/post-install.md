@@ -9,7 +9,14 @@ admin account** — there is no default password. If access is ever lost, the
 password resets from the CLI (see upstream
 [troubleshooting](https://case211.github.io/remnawave-admin/en/guide/troubleshooting#lost-access-to-the-panel)).
 
-## 2. BotFather domain (required for Telegram login)
+## 2. Single sign-on (optional)
+
+The panel's login page can offer Casdoor SSO alongside the password login.
+The Casdoor application is provisioned automatically; the one-time panel
+setup (paste the client credentials, link your admin account) is described
+in [sso-setup.md](sso-setup.md).
+
+## 3. BotFather domain (required for Telegram login)
 
 Telegram login on the panel only works after the panel domain is registered
 with the bot:
@@ -18,7 +25,7 @@ with the bot:
 2. Bot Settings → Domain
 3. Enter `remnawave-admin.<your-domain>` (HTTPS is served by the cluster)
 
-## 3. Panel notifications (optional)
+## 4. Panel notifications (optional)
 
 To have the bot relay panel events (renewals, user changes), point the
 Remnawave panel at the bot's in-cluster webhook:
@@ -27,7 +34,7 @@ Remnawave panel at the bot's in-cluster webhook:
   (works when the Remnawave panel runs in the same cluster)
 - Secret: the auto-generated `WEBHOOK_SECRET` (Apps → remnawave-admin → Settings)
 
-## 4. Node agents (optional)
+## 5. Node agents (optional)
 
 Anti-abuse, host metrics, terminal and torrent detection need an agent on each
 Remnawave node. The panel builds the install command:
