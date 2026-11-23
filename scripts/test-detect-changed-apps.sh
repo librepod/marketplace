@@ -15,11 +15,19 @@ mkdir -p "$T/scripts" "$T/apps/foo/overlays/librepod" "$T/apps/bar/overlays/libr
 cp "$REPO_ROOT/scripts/detect-changed-apps.sh" "$T/scripts/"
 for a in foo bar nfs; do printf 'spec:\n  version: "1.0.0"\n' > "$T/apps/$a/metadata.yaml"; done
 
+# Multi-doc: one file deploying two apps — both must resolve.
 cat > "$T/infrastructure/system-apps/storage.yaml" <<'EOF'
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
 spec:
   url: oci://ghcr.io/librepod/marketplace/apps/nfs
+  ref:
+    tag: "1.0.0"
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+spec:
+  url: oci://ghcr.io/librepod/marketplace/apps/bar
   ref:
     tag: "1.0.0"
 EOF
@@ -36,12 +44,12 @@ G="git -c user.name=t -c user.email=t@t"
 ( cd "$T" && git init -q && $G add -A && $G commit -qm base )
 BASE=$( cd "$T" && git rev-parse HEAD )
 
-# Mixed change: an apps/ edit plus a system-apps pin bump (resolved from URL,
-# not filename) must both land in the matrix; untouched bar must not.
+# Mixed change: an apps/ edit plus a multi-doc system-apps pin bump (both apps
+# resolved from URLs, not the filename) must all land in the matrix.
 ( cd "$T" && sed -i 's/1.0.0/1.1.0/' infrastructure/system-apps/storage.yaml &&
   printf 'x\n' >> apps/foo/metadata.yaml && $G add -A && $G commit -qm change )
 out=$( cd "$T" && bash scripts/detect-changed-apps.sh "$BASE" )
-[ "$out" = '["foo","nfs"]' ] || fail "mixed change: expected [\"foo\",\"nfs\"], got: $out"
+[ "$out" = '["bar","foo","nfs"]' ] || fail "mixed change: expected [\"bar\",\"foo\",\"nfs\"], got: $out"
 
 # A non-app system-apps edit (catalog) maps to nothing.
 BASE=$( cd "$T" && git rev-parse HEAD )

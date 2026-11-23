@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
 # Usage: bash scripts/detect-changed-apps.sh <base-sha>
-# Prints the JSON array of apps changed since <base-sha>, consumed by the PR
-# matrix in validate-apps.yaml. Two sources, one gate: an app counts as changed
-# when files under apps/<app>/ moved (the usual app PR), or when an
-# infrastructure/system-apps/*.yaml that deploys it moved — the rollout PR of
-# the two-phase flow often touches nothing else and must run the same
-# validate/e2e matrix. The app is resolved from the OCI registry URL, not the
-# filename (storage.yaml deploys nfs-provisioner); non-app repositories (the
-# catalog) resolve to nothing. Only apps with metadata.yaml and
-# overlays/librepod are emitted — what the validate matrix can actually run.
+# Prints the JSON array of apps changed since <base-sha>, for the PR matrix in
+# validate-apps.yaml. An app counts when files under apps/<app>/ moved (the
+# usual app PR) or when a system-apps/*.yaml deploying it moved (the rollout
+# PR of the two-phase flow — see check-version-lockstep.sh). App is resolved
+# from the OCI URL, not the filename (storage.yaml deploys nfs-provisioner);
+# only apps with metadata.yaml + overlays/librepod are emitted.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -20,13 +17,15 @@ for p in $(git diff --name-only "$BASE" HEAD -- apps/ infrastructure/system-apps
   [ -f "$p" ] || continue  # deleted since BASE: nothing to resolve
   case "$p" in
     infrastructure/system-apps/*.yaml)
-      app=$(sed -nE "s#.*${APPS_REGISTRY}([a-z0-9-]+).*#\1#p" "$p" | head -1) ;;
+      found=$(sed -nE "s#.*${APPS_REGISTRY}([a-z0-9-]+).*#\1#p" "$p") ;;  # multi-doc: all apps
     apps/*)
-      app=${p#apps/}; app=${app%%/*} ;;
+      found=${p#apps/}; found=${found%%/*} ;;
+    *) continue ;;
   esac
-  [ -n "${app:-}" ] || continue
-  [ -f "apps/$app/metadata.yaml" ] && [ -d "apps/$app/overlays/librepod" ] || continue
-  apps="$apps $app"
+  for app in $found; do
+    [ -f "apps/$app/metadata.yaml" ] && [ -d "apps/$app/overlays/librepod" ] || continue
+    apps="$apps $app"
+  done
 done
 
-for a in $apps; do echo "$a"; done | sort -u | jq -R . | jq -sc .
+for a in $apps; do echo "$a"; done | sort -u | jq -Rnc '[inputs]'

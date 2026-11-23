@@ -17,8 +17,8 @@
 #     tag). The app is resolved from the URL, not the filename (storage.yaml
 #     deploys nfs-provisioner). Entries pulling anything else (the catalog's
 #     oci://.../marketplace/catalog) are out of scope. Mismatches warn while
-#     the drift is younger than LOCKSTEP_GRACE_DAYS (default 14) and fail
-#     after; age = last commit touching the app's metadata.yaml, so CI needs
+#     the drift is younger than 14 days (GRACE below) and fail after; age =
+#     last commit touching the app's metadata.yaml, so CI needs
 #     fetch-depth: 0 (unknown age degrades to a warning, never a silent pass).
 #  2. Every apps/*/base/ocirepository.yaml carrying a "# lockstep:" comment must
 #     pin ref.tag equal to spec.version. Opt-in per app, only for charts tagged
@@ -43,12 +43,12 @@ bad() { echo "::error file=$1::$1: $2" >&2; STATUS=1; }
 shopt -s nullglob
 
 # --- 1. system-apps deploy pins == app metadata versions ----------------------
-GRACE="${LOCKSTEP_GRACE_DAYS:-14}"
+GRACE=14
 bump_age_days() { # <path> — days since the last commit touching it; empty = unknowable
   local d
-  d=$(git log -1 --format=%cs -- "$1" 2>/dev/null) || return 0
+  d=$(git log -1 --format=%ct -- "$1" 2>/dev/null) || return 0
   [ -n "$d" ] || return 0
-  echo $(( ( $(date +%s) - $(date -d "$d" +%s) ) / 86400 ))
+  echo $(( ( $(date +%s) - d ) / 86400 ))
 }
 for f in infrastructure/system-apps/*.yaml; do
   rows=$(yq '. | select(.kind == "OCIRepository") | [.spec.url // "", .spec.ref.tag // ""] | @tsv' "$f" 2>/dev/null) \
