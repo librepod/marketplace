@@ -31,9 +31,9 @@ spec:
               value: https://github.com/factory8/factory8
             - name: FACTORY8_BANDS
               value: >-
-                {"design": {"model": "glm-5.3", "effort": "xhigh"},
-                "acceptance": {"model": "glm-5.3", "effort": "xhigh"},
-                "implement": [{"model": "glm-5.3", "effort": "medium"}, {"model": "glm-5.3", "effort": "xhigh"}],
-                "review": {"model": "glm-5.3", "effort": "xhigh"},
-                "diagnose": {"model": "glm-5.3", "effort": "xhigh"},
+                {"design": {"model": "glm-5.3", "effort": "high"},
+                "acceptance": {"model": "glm-5.3", "effort": "high"},
+                "implement": [{"model": "glm-5.3", "effort": "medium"}, {"model": "glm-5.3", "effort": "high"}],
+                "review": {"model": "glm-5.3", "effort": "high"},
+                "diagnose": {"model": "glm-5.3", "effort": "high"},
                 "finish": {"model": "glm-5.3-flash"}}
