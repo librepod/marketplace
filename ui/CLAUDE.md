@@ -461,6 +461,16 @@ There is no `.env` file committed; `ConfigModule` reads `process.env` directly.
   in `catalog.yaml` are the literal file bodies; the installer only does `${VAR}` substitution.
   To change an app's install shape, change its `metadata.yaml` `templates:` (upstream of the
   catalog), not this code.
+- **Installed apps stay on their install-time version.** `install` renders `templates.source`
+  with `ref.tag` = the catalog version at that moment, and there is no update endpoint (only
+  install/uninstall). A version bump moves the catalog, not installed apps. Uninstall removes
+  the app's dir from user-apps → Flux prunes it → the app's **namespace** is garbage-collected
+  with every Secret in it (NFS data survives). Never suggest "reinstall to update" for a
+  stateful app.
+- **`npm ci` breaks on a new `@types/node` 22.x with no repo change** (`lock file's
+  @types/node@X does not satisfy @types/node@Y`): npm 11 resolves that optional peer against
+  the registry. Update only the `node_modules/@types/node` entry in `package-lock.json`
+  (version, resolved, integrity); a full `--package-lock-only` relock adds unrelated churn.
 - **`@librepod/shared` has no build.** It's raw `.ts`; both packages resolve it via tsconfig
   `paths` (server) / Vite (client). Adding runtime (non-type) code there will break the server
   build.

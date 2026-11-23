@@ -31,9 +31,18 @@ Pass it explicitly to every `flux`, `kubectl`, and `helm` call:
 --kubeconfig ~/.kube/librepod-dev.config
 ```
 
-**Key names** (already provisioned on the dev cluster):
-- GitRepository: `librepod-apps` in namespace `flux-system`
-- Default branch tracked by cluster: `master`
+**How a cluster syncs** (all objects in `flux-system`). There is no GitRepository for
+this repo on a cluster — everything comes from signed OCI artifacts in GHCR:
+- OCIRepository `marketplace-bootstrap` — `oci://ghcr.io/librepod/marketplace/bootstrap:latest`,
+  rebuilt by `publish-bootstrap.yaml` on master; it carries `clusters/<cluster>/` and
+  `infrastructure/`. The `system-apps` and `system-configs` Kustomizations build from it.
+- One OCIRepository + Kustomization per system app, both named `<app>`, defined in
+  `infrastructure/system-apps/<app>.yaml`. The OCIRepository pins
+  `oci://ghcr.io/librepod/marketplace/apps/<app>` at `ref.tag` and verifies it with the
+  project's cosign **public key** (`verify.secretRef: cosign-pub`).
+- User-installed apps — `marketplace-<app>` objects that marketplace-ui writes into the
+  on-cluster Gogs repo; Flux reads that repo through GitRepository `user-apps-source`.
+  Their OCIRepositories do **not** verify signatures.
 
 ---
 
@@ -123,38 +132,39 @@ Once all Kustomizations show `READY=True`, the cluster is fully bootstrapped.
 
 ---
 
-## Step 1 — Validate manifests locally (no cluster contact needed)
+## Step 1 — Validate manifests locally
 
-Build the rendered YAML for any kustomization using `--local-sources` to
-substitute the live GitRepository with the current working tree. This applies
-all patches and variable substitutions exactly as FluxCD would.
+`--local-sources` replaces a Kustomization's OCI source with a directory of the
+working tree, so the build applies all patches and variable substitutions
+exactly as FluxCD would — but with your local files.
 
 ```bash
-# Top-level infrastructure apps kustomization
+# The system-apps chain (no cluster contact: --dry-run + an explicit kustomization file)
 flux build kustomization system-apps \
-  --kubeconfig ~/.kube/librepod-dev.config \
   --path ./infrastructure/system-apps \
   --kustomization-file ./clusters/librepod-dev/system-apps.yaml \
-  --local-sources GitRepository/flux-system/librepod-apps=./
+  --local-sources OCIRepository/flux-system/marketplace-bootstrap=./ \
+  --dry-run
 
-# Individual app (substitute <app-name> and <kustomization-name>)
-flux build kustomization <kustomization-name> \
+# A single app, offline (plain Kustomize, as CI's validate-apps does)
+kustomize build ./apps/<app-name>/overlays/librepod
+
+# A system app with Flux's substitutions, using the live Kustomization's spec
+flux build kustomization <app-name> \
   --kubeconfig ~/.kube/librepod-dev.config \
   --path ./apps/<app-name>/overlays/librepod \
-  --local-sources GitRepository/flux-system/librepod-apps=./
+  --local-sources OCIRepository/flux-system/<app-name>=./apps/<app-name>
 ```
 
-Validate the rendered output with `kubeconform` to catch schema errors early:
+Validate the rendered output with `kubeconform` to catch schema errors early
+(`-ignore-missing-schemas` covers in-house CRDs with no public schema):
 
 ```bash
-flux build kustomization <kustomization-name> \
-  --kubeconfig ~/.kube/librepod-dev.config \
-  --path ./apps/<app-name>/overlays/librepod \
-  --local-sources GitRepository/flux-system/librepod-apps=./ \
+kustomize build ./apps/<app-name>/overlays/librepod \
   | kubeconform \
       -schema-location default \
       -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
-      -strict -summary
+      -strict -ignore-missing-schemas -summary
 ```
 
 ---
@@ -166,18 +176,18 @@ state were applied. A clean diff (no output) means the cluster already matches
 local changes.
 
 ```bash
-# Diff infra-apps kustomization
+# Diff the system-apps chain
 flux diff kustomization system-apps \
   --kubeconfig ~/.kube/librepod-dev.config \
   --path ./infrastructure/system-apps \
   --kustomization-file ./clusters/librepod-dev/system-apps.yaml \
-  --local-sources GitRepository/flux-system/librepod-apps=./
+  --local-sources OCIRepository/flux-system/marketplace-bootstrap=./
 
-# Diff a specific app kustomization
-flux diff kustomization <kustomization-name> \
+# Diff a system app
+flux diff kustomization <app-name> \
   --kubeconfig ~/.kube/librepod-dev.config \
   --path ./apps/<app-name>/overlays/librepod \
-  --local-sources GitRepository/flux-system/librepod-apps=./
+  --local-sources OCIRepository/flux-system/<app-name>=./apps/<app-name>
 ```
 
 Exit code `1` with diff output means there are pending changes. Exit code `0`
@@ -185,66 +195,37 @@ means no drift.
 
 ---
 
-## Step 3 — Test on the dev cluster from a feature branch
+## Step 3 — Test on a cluster before merging
 
-This is the recommended path to actually apply and test changes end-to-end
-through the FluxCD reconciliation loop, without merging to `master`.
+A cluster only runs what is published to GHCR, so a branch is tested through the
+artifacts CI publishes for its pull request. Open a PR: `publish-apps.yaml` pushes
+every changed app as `oci://ghcr.io/librepod/marketplace/apps/<app>:pr-<N>` and
+comments the tags on the PR.
 
-### 3a. Push changes to a feature branch
+### 3a. User-installed apps — use the `pr-<N>` artifact
 
-```bash
-git checkout -b feature/<description>
-git add .
-git commit -m "feat: <description>"
-git push origin feature/<description>
-```
+User-app OCIRepositories don't verify signatures, so the `pr-<N>` artifact
+installs as-is. The `verify-app` skill (`.claude/skills/verify-app/`) renders the
+app's templates with that tag, commits them to the cluster's Gogs `user-apps`
+repo, lets Flux reconcile, and checks the result.
 
-### 3b. Temporarily point the GitRepository at your branch
+### 3b. System apps and the bootstrap — `pr-<N>` will not verify
 
-Use a JSON patch to **replace** the entire `ref` object. A merge patch (`--type merge`)
-adds fields but doesn't remove existing ones, which can cause both `branch` and
-`name` fields to coexist unexpectedly:
+PR artifacts are signed **keylessly** (no access to the signing key from a PR),
+while system-app OCIRepositories verify against the project's public key. Pointing
+one at `pr-<N>` fails with `no matching signatures were found`. For a system-app or
+`infrastructure/` change:
 
-```bash
-kubectl --kubeconfig ~/.kube/librepod-dev.config \
-  patch gitrepository librepod-apps \
-  -n flux-system \
-  --type json \
-  -p '[{"op": "replace", "path": "/spec/ref", "value": {"branch": "feature/<description>"}}]'
-```
+- validate and diff it locally (Steps 1–2) against a cluster that runs master;
+- for a full fresh-install check, boot a throwaway k3d cluster — `clusters/librepod-k3d`
+  is the target the Tier 2 e2e suite uses (see `ui/CLAUDE.md`, "E2E Tier 2");
+- after merge, master publishes signed `:latest` artifacts, and a released version
+  moves a cluster only when its pin in `infrastructure/system-apps/<app>.yaml` moves.
 
 ### 3c. Force reconciliation
 
-Trigger an immediate re-fetch of the source and reconcile the target
-kustomization:
-
-```bash
-# Reconcile source + a top-level kustomization together
-flux reconcile kustomization system-apps \
-  --kubeconfig ~/.kube/librepod-dev.config \
-  --with-source
-
-# Or reconcile source first, then kustomization separately
-flux reconcile source git librepod-apps \
-  --kubeconfig ~/.kube/librepod-dev.config
-
-flux reconcile kustomization <kustomization-name> \
-  --kubeconfig ~/.kube/librepod-dev.config
-```
-
-### 3d. Restore the GitRepository to master when done
-
-```bash
-kubectl --kubeconfig ~/.kube/librepod-dev.config \
-  patch gitrepository librepod-apps \
-  -n flux-system \
-  --type json \
-  -p '[{"op": "replace", "path": "/spec/ref", "value": {"branch": "master"}}]'
-
-flux reconcile kustomization system-apps \
-  --kubeconfig ~/.kube/librepod-dev.config \
-  --with-source
-```
+To pick up a republished tag now instead of at the next interval, see
+"Stale OCI artifacts" under Troubleshooting.
 
 ---
 
@@ -262,7 +243,7 @@ flux get kustomizations \
 ```
 
 Expected output: all relevant kustomizations show `READY=True` and the revision
-matches the expected branch/commit.
+matches the expected artifact tag and digest.
 
 ### Inspect the resource tree
 
@@ -376,11 +357,11 @@ flux pull artifact oci://ghcr.io/<path>:<tag> -o /tmp/artifact
 | Goal | Command |
 |------|---------|
 | Bootstrap clean cluster | `helm install flux-operator oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator ...` then `helm install flux-instance oci://ghcr.io/controlplaneio-fluxcd/charts/flux-instance --set instance.sync.*` |
-| Preview rendered manifests locally | `flux build kustomization <name> ... --local-sources GitRepository/flux-system/librepod-apps=./` |
-| Show drift vs cluster | `flux diff kustomization <name> ... --local-sources GitRepository/flux-system/librepod-apps=./` |
+| Preview rendered manifests locally | `kustomize build ./apps/<app>/overlays/librepod`, or `flux build kustomization <app> ... --local-sources OCIRepository/flux-system/<app>=./apps/<app>` |
+| Show drift vs cluster | `flux diff kustomization <app> ... --local-sources OCIRepository/flux-system/<app>=./apps/<app>` |
 | Force reconcile (source + kustomization) | `flux reconcile kustomization <name> --kubeconfig ... --with-source` |
 | Check all kustomization statuses | `flux get kustomizations --kubeconfig ... -n flux-system` |
 | View resource tree | `flux tree kustomization <name> --kubeconfig ...` |
 | View reconciliation logs | `flux logs --kubeconfig ... --kind=Kustomization --name=<name> -n flux-system --tail=30` |
-| Switch GitRepository branch | `kubectl patch gitrepository librepod-apps -n flux-system --type json -p '[{"op": "replace", "path": "/spec/ref", "value": {"branch": "<branch>"}}]'` |
+| Test a branch on a cluster | open a PR, then install its `pr-<N>` artifact with the `verify-app` skill (user apps only — see Step 3) |
 | Force re-pull OCI artifact | `flux reconcile source oci <name> -n flux-system` |

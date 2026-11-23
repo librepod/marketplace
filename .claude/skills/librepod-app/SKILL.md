@@ -1159,6 +1159,17 @@ Base PVC has no `storageClassName`. The `patch-storage-class.yaml` in the overla
 
 Base deployment has `image: nginx` (no tag). Overlay sets `images[].newTag: 1.25-alpine`. Helm-type apps have no equivalent — the chart's baked tag is the version (see "Image versions" under the patch-helmrelease.yaml section).
 
+### Removing a ServiceAccount — set `serviceAccountName: default`, don't delete the field
+
+Deleting `serviceAccountName` from a pod template does not unset it on a live
+Deployment: the API server refills it from the deprecated `serviceAccount` alias
+(under client- and server-side apply alike). Flux then prunes the SA, and the
+upgraded pods fail with `serviceaccount "<name>" not found`, a full outage with
+`strategy: Recreate`. Fresh installs and `kustomize build` never show it. When a
+change drops the SA a pod used, set `serviceAccountName: default` (or the new SA)
+explicitly, with a comment saying why, and test it as an upgrade over the old
+version.
+
 ### Domain — always use variable substitution
 
 ```yaml
