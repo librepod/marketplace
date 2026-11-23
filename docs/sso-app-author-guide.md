@@ -75,7 +75,7 @@ Notes:
   application `name` (its DB primary key, looked up as `admin/<name>`) and the
   OIDC `client_id`. Pick it once and don't rename it.
 - **No committed secret.** Leave the Casdoor `clientSecret` generation to the
-  controller — do not seed one in `init_data.json` or hardcode one in the chart.
+  controller — do not hardcode one in the chart or commit one anywhere.
 - **`issuer` is the discovery URL.** The controller writes the full
   `https://id.<BASE_DOMAIN>/.well-known/openid-configuration` endpoint into the
   Secret's `issuer` key — exactly what clients like open-webui's
@@ -430,8 +430,9 @@ reconciler backs off and retries until the Secret is populated.
      --from-literal=accessSecret='<accessSecret>'
    ```
 
-> The key is **not** seeded via `init_data.json`: Casdoor's `-export` does not
-> dump the `keys` table, and provisioning the key out-of-band avoids committing
-> the `accessSecret`. For the dev pilot the key + Secret are created manually;
-> production automation (e.g. a one-shot Job that mints the key via the admin
-> API) is the remaining open item. See the pilot runbook.
+> Nothing committed: the controller's bootstrap mints the key itself (its init
+> container signs in as the built-in admin and calls the admin API, then writes
+> `Secret/casdoor-api-credentials`); the manual steps above are the fallback
+> for a cluster where that login can no longer succeed. Casdoor's `-export`
+> never dumped the `keys` table, so no export-to-repo flow ever carried this
+> key.

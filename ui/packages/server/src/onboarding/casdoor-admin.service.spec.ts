@@ -149,8 +149,9 @@ describe('CasdoorAdminService', () => {
       );
       await new CasdoorAdminService().ensureOrganization(session);
       expect(calls[1].url).toBe('/api/add-organization');
-      // Casdoor 3.106's add-organization leaves passwordType empty; its users then can't
-      // sign in ("unsupported password type"). bcrypt is Casdoor's own UI default.
+      // Casdoor 3.106's add-organization left passwordType empty; its users then couldn't
+      // sign in ("unsupported password type"). 4.29.0 defaults a missing one to bcrypt —
+      // sending it explicitly is right on both. bcrypt is Casdoor's own UI default.
       expect(JSON.parse(calls[1].body!)).toMatchObject({ owner: 'admin', name: 'librepod', passwordType: 'bcrypt' });
     });
 
