@@ -1,0 +1,40 @@
+# Declares the remnawave-admin OIDC client. The casdoor-sso-controller
+# reconciles this CR into a Casdoor Application (owner/name =
+# admin/remnawave-admin) and writes clientId / clientSecret / issuer into
+# Secret/remnawave-admin-sso in THIS namespace.
+#
+# The panel's OAuth settings live in its own database (web UI → Settings →
+# OAuth → OIDC), NOT in env vars — so the app cannot consume the Secret
+# directly. The credentials are pasted into the panel UI once, by hand, as
+# described in apps/remnawave-admin/docs/sso-setup.md. The Casdoor side of
+# the wiring (application, redirect URI, token format) is fully automated
+# here.
+#
+# Provider shape: the web backend's "oidc" provider is discovery-based —
+# issuer URL only, authorize/token/userinfo endpoints come from
+# /.well-known/openid-configuration (web/backend/core/oauth_svc.py), unlike
+# remnawave's generic connector which needs explicit URLs. The server-side
+# code exchange and userinfo fetch (httpx) run in the web-backend pod, which
+# is why it needs LibrePod CA trust (patch-web-backend-ca.yaml +
+# externalsecret-ca.yaml).
+apiVersion: marketplace.librepod.org/v1alpha1
+kind: SSOClient
+metadata:
+  name: remnawave-admin-sso
+  namespace: remnawave-admin
+spec:
+  clientId: remnawave-admin         # Casdoor app name (id=admin/remnawave-admin) AND OIDC client_id
+  organization: librepod            # platform org (created at bootstrap); login users must live here
+  redirectUris:
+    - "https://remnawave-admin.${BASE_DOMAIN}/oauth/callback"  # {origin}/oauth/callback — upstream default
+  grantTypes: [authorization_code]  # code exchange only; the panel keeps its own JWT sessions
+  tokenFormat: JWT-Standard         # claims are read from the userinfo endpoint (not the ID token), but
+                                    # keep the known-good Casdoor token shape (remnawave precedent)
+  expireInHours: 168                # 7 days
+  output:
+    secretName: remnawave-admin-sso  # written to THIS namespace (remnawave-admin)
+    keys:
+      clientId: CLIENT_ID           # pasted into the panel UI (Settings → OAuth → OIDC)
+      clientSecret: CLIENT_SECRET
+      issuer: ISSUER                # discovery URL; pasted as the OIDC issuer
+  casdoorPolicy: retain             # keep the Casdoor app if this CR is deleted
