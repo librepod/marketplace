@@ -80,10 +80,10 @@ for f in infrastructure/system-apps/*.yaml; do
 done
 
 # --- 2. opt-in chart/app version lockstep (marker set guarded, check 3) --------
-# Empty default: no app on master carries the marker yet. The first app whose
-# chart is tagged from its own release adds the marker AND this default in the
-# same PR (check 3 fails until both move together).
-EXPECTED_LOCKSTEP_APPS="${EXPECTED_LOCKSTEP_APPS:-}"
+# casdoor is the marker app: its chart is tagged from the app release, so chart
+# version == app version. Independently-versioned charts (cert-manager,
+# traefik, immich, ...) must not declare the marker.
+EXPECTED_LOCKSTEP_APPS="${EXPECTED_LOCKSTEP_APPS:-casdoor}"
 marked=""
 for f in apps/*/base/ocirepository.yaml; do
   grep -q '# lockstep:' "$f" || continue
