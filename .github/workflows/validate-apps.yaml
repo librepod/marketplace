@@ -9,6 +9,26 @@ on:
       - 'apps/*/overlays/**'
       - 'apps/*/components/**'
       - 'components/**'
+      - 'infrastructure/system-apps/**'
+      - 'scripts/**'
+  # Direct pushes to master also run the repo-level jobs (version-lockstep in
+  # particular): PRs are the usual gate, but the publish workflows fire on push
+  # too, so the invariants must not be PR-only.
+  push:
+    branches: [master]
+    paths:
+      - 'apps/*/metadata.yaml'
+      - 'apps/*/base/**'
+      - 'apps/*/overlays/**'
+      - 'apps/*/components/**'
+      - 'components/**'
+      - 'infrastructure/system-apps/**'
+      - 'scripts/**'
+  # Weekly sweep of the repo-level jobs: a forgotten rollout PR leaves the pin
+  # drift stale without any commit touching the watched paths, so only a
+  # scheduled run can fail it (check-version-lockstep.sh grace period).
+  schedule:
+    - cron: '13 6 * * 1'
 
 jobs:
   # Closed category vocabulary gate (#314): a category outside this list is
@@ -54,6 +74,10 @@ jobs:
           echo "No remote http(s) bases under apps/."
 
   detect-changes:
+    # PR-only: it diffs against the PR base. On push events it is skipped, and
+    # the skipped `needs` cascades to the app-matrix jobs (validate, e2e) —
+    # only the repo-level jobs are meant to run there.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     outputs:
       apps: ${{ steps.changes.outputs.apps }}
@@ -62,16 +86,9 @@ jobs:
         with:
           fetch-depth: 0
       - id: changes
-        run: |
-          BASE="${{ github.event.pull_request.base.sha }}"
-          CHANGED=$(git diff --name-only "${BASE}" HEAD -- 'apps/' | cut -d'/' -f2 | sort -u)
-          APPS="[]"
-          for app in $CHANGED; do
-            [ -f "apps/$app/metadata.yaml" ] || continue
-            [ -d "apps/$app/overlays/librepod" ] || continue
-            APPS=$(echo "$APPS" | jq --arg a "$app" '. + [$a]')
-          done
-          echo "apps=$(echo "$APPS" | jq -c .)" >> "$GITHUB_OUTPUT"
+        # apps/<app>/ diffs AND system-apps pin bumps (app resolved from the OCI
+        # URL) feed the matrix — the rollout PR must run the same gates.
+        run: echo "apps=$(bash scripts/detect-changed-apps.sh "${{ github.event.pull_request.base.sha }}")" >> "$GITHUB_OUTPUT"
 
   validate:
     needs: detect-changes
@@ -120,6 +137,24 @@ jobs:
           nix_path: nixpkgs=channel:nixos-unstable
       - name: Check app/shared-component compatibility
         run: nix-shell shell.nix --run 'bash scripts/check-app-components.sh'
+
+  # Version-pin lockstep, two-phase flow: PR 1 bumps the app (metadata +
+  # artifact); PR 2 bumps the system-apps deploy pin and rolls the fleet (e2e +
+  # CODEOWNERS review). Renovate only automates PR 1, so CI owns the coupling:
+  # drift warns while fresh, fails once older than the grace period — the fleet
+  # must not be stranded on a stale artifact with no failing signal.
+  version-lockstep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Full history: drift age = last commit touching apps/<app>/metadata.yaml
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - name: Check version pin lockstep
+        run: nix-shell shell.nix --run 'bash scripts/check-version-lockstep.sh'
 
   e2e:
     needs: detect-changes

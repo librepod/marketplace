@@ -1,0 +1,3 @@
+# Rollout PRs of the two-phase release flow: a system-apps deploy-pin bump is
+# what moves every cluster to the new artifact — always a human decision.
+infrastructure/system-apps/ @cyxou
