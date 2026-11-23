@@ -254,6 +254,20 @@ exactly the #366 failure class. The fix, landed in 8fbe476:
 - Consumer comment blocks (controller env, marketplace-ui ConfigMap) now
   cite the seed source; renders byte-identical.
 
+**#392 resolution (post-fold, declined).** Per-cluster promotion of the seed
+was scoped and declined (DECISIONS_LOG row 15): the exposure is a bounded,
+precedented window — `admin/123` is valid only in-cluster, only from first
+boot until the wizard replaces it, and 3.x hardcoded the same value in the
+binary with no override. The promotion's cost is disproportionate: a
+cross-namespace Secret-distribution Job (+RBAC writing into two other apps'
+namespaces) or an openbao producer-push that would end casdoor's
+zero-runtime-dependency boot; release choreography for both self-built
+consumers (a mixed-version fresh-boot window where the controller mint and
+the wizard fail until both artifacts re-release); and a fresh-bootstrap
+ordering change on the #366-prone path. Revisit if the pre-claim threat
+model changes — devices claimed on untrusted networks, or casdoor reachable
+beyond the owner's LAN before the wizard runs.
+
 **5.8 (fold of #391). Chart `initData`: evaluated and declined — seeding
 stays imperative.** Issue #391 asked whether chart 4.x's `initData` should
 succeed the removed init_data.json mount. Mechanism (chart 4.29.0
@@ -424,6 +438,8 @@ thumbs-up on the rollout.
    further promotion to a per-cluster secret-backed credential is #392.)*
    *(Resolved in this PR by the #391 fold: `initData` evaluated and
    declined — §5.8; the casdoor-export skill is retired with it.)*
+   *(#392 also resolved in this PR: promotion evaluated and declined —
+   §5.7's post-fold note + DECISIONS_LOG row 15.)*
 3. Optionally add `_pragma=busy_timeout(5000)` (busy-timeout only, **not**
    WAL) to the `dataSourceName` env override as NFS lock-contention
    hardening — independent of this upgrade.
@@ -447,3 +463,4 @@ thumbs-up on the rollout.
 | *(post-review r2, Minor 3)* Marker set guarded | `EXPECTED_LOCKSTEP_APPS` list in the script, not tag==version detection | A lost `# lockstep:` marker made check 2 fail-open; coincidental equality exists (flux-operator-mcp 0.44.0/0.44.0 on an upstream chart), so structural detection would false-positive today |
 | *(post-review r2, Minors 4–5)* Workflow triggers | master `push` trigger (repo-level jobs only, `detect-changes` event-gated) + `scripts/**` paths | Publish workflows fire on push, so the invariants must not be PR-only; the guard's own harness should gate PRs that touch it |
 | *(#391 fold)* Declarative init data | Decline `initData`; seeding stays imperative (SSOClient CRs + marketplace-ui's every-start ensures + controller bootstrap); retire the casdoor-export skill | Applications already have a stronger declarative layer (SSOClient CRs, continuous reconciliation); the org — asked at review — is created by marketplace-ui's idempotent every-start `ensureOrganization`, not the controller, and the org name is `CASDOOR_ORG_NAME` config a committed blob can't follow; `watchInterval`/`merge` re-apply races live writers; credentials are §5.7/#392 |
+| *(#392)* Per-cluster seed credential | Decline; keep the committed factory constant (DECISIONS_LOG row 15) | Bounded, precedented exposure (in-cluster only, dead once the wizard replaces it; 3.x hardcoded the same value in the binary); promotion costs a cross-ns distribution mechanism or an IdP→openbao dep, mixed-version fresh-boot choreography for both consumers, and a bootstrap-ordering change on the #366-prone path |
