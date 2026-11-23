@@ -35,6 +35,10 @@ release; its tag is the collie version.
 |---|---|
 | `COLLIE_PUBLIC_URL` | The address crew members join at (`http://<lead tailnet name or IP>:8787`). |
 
+Custom variables (e.g. a durable program's token for
+`collie durable attach … --token-env <VAR>`) reach the collie container's
+environment. Paired phones can read them with `env` in a shell there.
+
 The tailnet settings (auth key, extra `tailscale up` flags, hostname) belong to
 the shared `tailscale` component and appear under Components in the install
 dialog; the hostname defaults to `collie-lead`.

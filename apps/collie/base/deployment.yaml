@@ -56,15 +56,15 @@ spec:
           envFrom:
             - configMapRef:
                 name: collie
-          # Not the whole settings Secret via envFrom: it also holds the
-          # tailnet auth key, and paired phones can run `env` in a shell here.
-          env:
-            - name: COLLIE_PUBLIC_URL
-              valueFrom:
-                secretKeyRef:
-                  name: collie-settings
-                  key: COLLIE_PUBLIC_URL
-                  optional: true
+            # LAST: settings (incl. allowCustom vars) override the .env
+            # defaults. Optional: every item may be blank, and ESO then
+            # creates no Secret. Paired phones can run `env` here, so only
+            # app settings belong in it; the tailnet auth key lives in
+            # tailscale-settings (apps/<instance>/tailscale), read only by
+            # the sidecar.
+            - secretRef:
+                name: collie-settings
+                optional: true
           volumeMounts:
             - name: state
               mountPath: /state
