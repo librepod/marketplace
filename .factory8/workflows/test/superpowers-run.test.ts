@@ -104,6 +104,7 @@ test('prompts', () => {
   assert.ok(r.includes('gh pr ready'));
   for (const s of [d, p, prompts.build('k3x9qa', 12), r, prompts.fix('k3x9qa', 12), prompts.fix('k3x9qa', 12, 'g')]) {
     assert.ok(s.includes('f8-ask'));
+    assert.ok(s.includes('.claude/skills/') && s.includes('librepod-app'), 'every step is pointed at the repo skills');
     assert.match(s, /never push to the default branch/i);
   }
 });
