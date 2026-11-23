@@ -167,8 +167,11 @@ fi
 
 # The version sentinel is __VERSION__ (substituted above). "<version>" is the
 # misspelling the app-authoring skill used to document — it matches nothing and
-# ships verbatim, breaking installs with a literally-named OCI tag.
-if grep -qE '__VERSION__|<version>' "$CATALOG_FILE"; then
+# ships verbatim, breaking installs with a literally-named OCI tag. Sentinels
+# live in VALUES (ref.tag); comment prose legitimately mentions them — the
+# skill's canonical template comment spells out "(e.g. "<version>")" and apps
+# copy it verbatim (hermes-agent, #378) — so inspect non-comment lines only.
+if grep -vE '^[[:space:]]*#' "$CATALOG_FILE" | grep -qE '__VERSION__|<version>'; then
   echo "ERROR: version sentinel leaked into catalog.yaml (unsubstituted __VERSION__ or <version>)" >&2; exit 1
 fi
 

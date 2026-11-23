@@ -208,3 +208,21 @@ if bash "$TMP/scripts/generate-catalog.sh" >/dev/null 2>"$TMP/err"; then
 fi
 grep -q 'unknown component "ghost"' "$TMP/err" || fail "stderr lacks the unknown-component error: $(cat "$TMP/err")"
 echo "PASS test 7"
+
+echo "== test 8: sentinel-shaped PROSE in comments does not trip the leak check =="
+# hermes-agent (#378) copies the app-authoring skill's canonical comment, which
+# names the misspelling it warns about; substitution rewrites __VERSION__ inside
+# the comment but the '(e.g. "<version>")' prose survives. That must pass.
+sed -i 's/- name: ghost/- name: demo-net/' "$TMP/apps/demo/metadata.yaml"
+sed -i 's|^          tag: "__VERSION__"|          # __VERSION__ is the generate-catalog.sh sentinel; any other\n          # spelling (e.g. "<version>") leaks through unsubstituted.\n          tag: "__VERSION__"|' "$TMP/apps/demo/metadata.yaml"
+bash "$TMP/scripts/generate-catalog.sh" >/dev/null 2>"$TMP/err" || fail "comment prose tripped the sentinel leak check: $(cat "$TMP/err")"
+grep -q '(e.g. "<version>")' "$TMP/catalog.yaml" || fail "fixture no longer exercises the prose case"
+echo "PASS test 8"
+
+echo "== test 9: a real value-level <version> sentinel still fails generation =="
+sed -i 's|^          tag: "__VERSION__"|          tag: "<version>"|' "$TMP/apps/demo/metadata.yaml"
+if bash "$TMP/scripts/generate-catalog.sh" >/dev/null 2>"$TMP/err"; then
+  fail "generator accepted a value-level <version> sentinel"
+fi
+grep -q 'version sentinel leaked' "$TMP/err" || fail "stderr lacks the sentinel-leak error: $(cat "$TMP/err")"
+echo "PASS test 9"
