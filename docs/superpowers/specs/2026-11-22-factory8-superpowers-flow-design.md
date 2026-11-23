@@ -10,7 +10,7 @@ Why: the built-in `sdlc` flow commits a throwaway `.factory8/runs/<runId>/plan.m
 repo doesn't otherwise use. This repo already keeps its design history in `docs/superpowers/specs/` and
 `docs/superpowers/plans/`; factory8 runs should produce the same artifacts, in the same place, by the same process.
 Factory8's point is removing distractions, so the human is involved only to merge the finished PR, or when review
-still has Important findings after two fix rounds.
+still has Critical or Important findings after two fix rounds.
 
 ## Goals
 
@@ -103,12 +103,12 @@ design ──▶ plan ──▶ build ──▶ review ──ready──▶ PR r
 4. **review** (reviewer, fresh sandbox): "You didn't write this change." Review the PR against the issue, spec and plan
    (superpowers:requesting-code-review / the repo's conventions) — and check the spec and plan themselves against the
    issue, since no human approved them: a spec that misreads the issue is an Important finding. Change no file; post
-   findings as one PR comment ranked Important / Nit. Last line `Verdict: ready` (and run `gh pr ready`) or
+   findings as one PR comment ranked Critical / Important / Minor; `ready` means no Critical or Important ones. Last line `Verdict: ready` (and run `gh pr ready`) or
    `Verdict: changes`.
-5. **fix** (author) on `changes`: address the Important findings from the latest review comment (and the human's
+5. **fix** (author) on `changes`: address every in-scope finding (Critical, Important and Minor) from the latest review comment, listing out-of-scope ones with why in a PR comment (and the human's
    guidance, when there is one), run checks, push; then review again.
 6. **escalation**: when review says `changes` after 2 fix rounds, the workflow asks
-   `Review still has Important findings after 2 fix rounds: <PR URL>. Reply with guidance for another fix round, or "stop".`
+   `Review still has Critical or Important findings after 2 fix rounds: <PR URL>. Reply with guidance for another fix round, or "stop".`
    - `stop` (trimmed, case-insensitive) → the run ends; the PR stays a draft.
    - anything else → one more fix round with the reply as guidance, then review; if that review still says `changes`,
      ask again. No cap — the human is in the loop and can `stop`.

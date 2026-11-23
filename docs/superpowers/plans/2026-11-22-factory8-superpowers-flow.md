@@ -21,7 +21,7 @@ sandbox image by wrapping `claude-code` with `--plugin-dir`.
 - Project flow files import at runtime only `@temporalio/workflow` and `@factory8/worker/flow` (the image installs nothing else); `import type` of anything is fine.
 - superpowers pinned at `v7.0.2`: rev `22f0b463e7a5e579904dd6211a520321035526f7`, hash `sha256-rP5YsyGuPd9YSW/Fj3aukrq1bLuV+nwwQMK4JaZQgkI=`.
 - Spec path `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`; plan path `docs/superpowers/plans/YYYY-MM-DD-<topic>.md`.
-- At most 2 fix rounds before asking the human. Escalation question, verbatim: ``Review still has Important findings after 2 fix rounds: <PR URL>. Reply with guidance for another fix round, or "stop".``
+- At most 2 fix rounds before asking the human. Escalation question, verbatim: ``Review still has Critical or Important findings after 2 fix rounds: <PR URL>. Reply with guidance for another fix round, or "stop".``
 - `stop` is matched trimmed and case-insensitive; any other reply is guidance.
 - No model mapping in this public repo (sub-agent tiers are the installation's gateway's job). No personal hostnames/IPs in code, comments or commits.
 - `.factory8/worker.yaml` has an uncommitted local change (effort levels → `xhigh`); keep it — only touch the image tags.

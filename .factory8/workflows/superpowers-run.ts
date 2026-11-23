@@ -27,7 +27,7 @@ export function verdict(summary: string): 'ready' | 'changes' {
 export const isStop = (reply: string) => /^stop[.!]?$/i.test(reply.trim());
 
 export const escalation = (url: string) =>
-  `Review still has Important findings after ${FIX_ROUNDS} fix rounds: ${url}. Reply with guidance for another fix round, or "stop".`;
+  `Review still has Critical or Important findings after ${FIX_ROUNDS} fix rounds: ${url}. Reply with guidance for another fix round, or "stop".`;
 
 // Every step runs unattended, so these override the interactive skills wherever they'd stop for a human.
 const rules = `
@@ -69,8 +69,10 @@ If there are no Critical or Important findings, run \`gh pr ready\` and end your
 otherwise end it with the line \`Verdict: changes\`.
 ${rules}`,
 
-  fix: (runId: string, issue: number, guidance?: string) => `Address the Important findings in the latest review comment on this
-branch's PR (run ${runId}, ${issueRef(issue)}). Run the repo's checks, fix failures, commit and push.${guidance === undefined ? '' : `
+  fix: (runId: string, issue: number, guidance?: string) => `Address every finding in the latest review comment on this branch's
+PR (run ${runId}, ${issueRef(issue)}) — Critical, Important and Minor — that is within the scope of this change: the issue,
+its spec and its plan. Leave findings outside that scope unchanged and list them, each with why, in one PR comment.
+Run the repo's checks, fix failures, commit and push.${guidance === undefined ? '' : `
 A human replied to the review with this guidance; follow it:
 ${guidance}`}
 ${rules}`,

@@ -57,7 +57,7 @@ test('guidance gets a third fix carrying the reply, then asks again', async () =
 });
 
 test('escalation is the verbatim question', () => {
-  assert.equal(escalation(URL), `Review still has Important findings after 2 fix rounds: ${URL}. Reply with guidance for another fix round, or "stop".`);
+  assert.equal(escalation(URL), `Review still has Critical or Important findings after 2 fix rounds: ${URL}. Reply with guidance for another fix round, or "stop".`);
 });
 
 test('isStop', () => {
@@ -84,6 +84,8 @@ test('prompts fence off the interactive skills\' human gates', () => {
   assert.match(prompts.design('k3x9qa', 12), /builder check/i);
   assert.match(prompts.review('k3x9qa', 12), /no Critical or Important findings/);
   assert.match(prompts.build('k3x9qa', 12), /skip superpowers:finishing-a-development-branch/);
+  // Not only the findings that block "ready": fix-1 on a live run skipped a Critical because the prompt said "Important".
+  assert.match(prompts.fix('k3x9qa', 12), /every finding[\s\S]*Critical, Important and Minor[\s\S]*scope/);
 });
 
 test('prUrl', () => {
