@@ -49,7 +49,8 @@ class.
 
 - Adopting chart 4.x's new `initData` (declarative init via Secret) or
   `initAdminPassword.existingSecret` — issue #375 names both as separate
-  follow-ups.
+  follow-ups. *(The #391 fold later resolved the first: evaluated and
+  declined — §5.8.)*
 - Moving the chart source OCI repository (see Approach B).
 - Touching casdoor-sso-controller or marketplace-ui code.
 - Tuning probe numbers away from the chart defaults.
@@ -253,6 +254,60 @@ exactly the #366 failure class. The fix, landed in 8fbe476:
 - Consumer comment blocks (controller env, marketplace-ui ConfigMap) now
   cite the seed source; renders byte-identical.
 
+**5.8 (fold of #391). Chart `initData`: evaluated and declined — seeding
+stays imperative.** Issue #391 asked whether chart 4.x's `initData` should
+succeed the removed init_data.json mount. Mechanism (chart 4.29.0
+`values.yaml` `initData:` block; `templates/deployment.yaml:61-68,109-113,
+140-144`): a Secret-mounted YAML/JSON blob (`initData.existingSecret`)
+applied at Casdoor startup — organizations, applications, users, providers,
+roles, permissions — with `merge` field semantics (declared fields enforced,
+undeclared fields keep UI-edited values) and an optional `watchInterval`
+re-apply (default 30 s) without pod restarts. Disabled by default; this repo
+renders none of it. Declined on four grounds:
+
+1. **Applications already have a stronger declarative layer.** They are
+   declared as `SSOClient` CRs and reconciled continuously by
+   casdoor-sso-controller (create/update/delete, per-object ownership, drift
+   correction). `initData` is a weaker second declarative writer over the
+   same objects: blob re-apply with no delete and no per-object lifecycle.
+2. **First-boot state is produced by writers whose inputs cannot live in
+   git.** marketplace-ui's onboarding owns the platform org, the `admins`
+   group, the admin password, and the recorded account
+   (`onboarding.service.ts` `prepareCasdoor()`); the controller bootstrap
+   owns the M2M key (`/api/add-key`). Credentials are #392's scope by
+   #391's own note; the credential seed is §5.7.
+3. **Re-apply races the imperative writers.** Default `watchInterval: 30`
+   re-applies declared fields every 30 s (a UI-edited declared field — e.g.
+   `displayName` — silently reverts); `merge: false` deletes and re-creates
+   objects on every apply. The only conflict-free configuration
+   (`watchInterval: 0`, `merge: true`, nothing either writer touches)
+   declares nothing.
+4. **The org specifically (raised at review): its creator is marketplace-ui,
+   not the controller — and that creator is already convergence-based.**
+   `ensureOrganization` (`casdoor-admin.service.ts`) is get-then-create and
+   runs from `onModuleInit` on **every** marketplace-ui start with backoff
+   (`startCasdoor`), so it re-creates the org after DB loss on the next pod
+   restart; nothing needs the org earlier (the controller's key mint uses
+   only `built-in`; `SSOClient`s post-date onboarding, which gates app
+   installs). Pre-declaring it would also fork the definition — the org
+   name is `CASDOOR_ORG_NAME` config — so a committed blob hardcoding
+   `librepod` double-creates on any non-default name while the wizard's
+   ensure must stay regardless.
+
+**Revisit trigger:** a static, non-credential, controller-unmanaged object
+with a repo-fixed name that must exist before marketplace-ui starts — none
+exists today; adopt with `watchInterval: 0` + `merge: true` +
+`existingSecret` if one appears.
+
+**casdoor-export skill retired:** `.claude/skills/casdoor-export/` is
+deleted — its only purpose was regenerating the removed `init_data.json`
+(upstream's `/server -export` still exists, but nothing in this repo
+consumes an export; backups run through the nightly borgmatic PVC backup).
+Stale references fixed with it: `apps/casdoor/README.md` (dead
+"casdoor-export flow" pointer), `docs/sso-app-author-guide.md` (two
+`init_data.json` mentions), `docs/FLUX_ARCHITECTURE.md` (overlay snippet's
+init-data configMapGenerator, removed with the mount).
+
 ## 6. Rollout and rollback
 
 **Rollout** (automatic after merge): publish-apps publishes artifact
@@ -367,6 +422,8 @@ thumbs-up on the rollout.
    *(Post-review: `initAdminPassword.existingSecret` moved OUT of this
    follow-up — the upgrade made it load-bearing, it landed as §5.7. Its
    further promotion to a per-cluster secret-backed credential is #392.)*
+   *(Resolved in this PR by the #391 fold: `initData` evaluated and
+   declined — §5.8; the casdoor-export skill is retired with it.)*
 3. Optionally add `_pragma=busy_timeout(5000)` (busy-timeout only, **not**
    WAL) to the `dataSourceName` env override as NFS lock-contention
    hardening — independent of this upgrade.
@@ -389,3 +446,4 @@ thumbs-up on the rollout.
 | *(post-review r2, Critical 1)* Fresh-install admin seeding | chart `initAdminPassword.existingSecret` from a committed factory constant; not the welcome-page flow, not a per-cluster secret | Restores the 3.x contract both consumers already assume (controller mint, UI wizard) with zero code changes and zero new boot-time dependencies; verified create-only at source, so initialized clusters are untouched. Welcome page hardens the credential but breaks the headless claim flow; per-cluster generation is real design work → #392 |
 | *(post-review r2, Minor 3)* Marker set guarded | `EXPECTED_LOCKSTEP_APPS` list in the script, not tag==version detection | A lost `# lockstep:` marker made check 2 fail-open; coincidental equality exists (flux-operator-mcp 0.44.0/0.44.0 on an upstream chart), so structural detection would false-positive today |
 | *(post-review r2, Minors 4–5)* Workflow triggers | master `push` trigger (repo-level jobs only, `detect-changes` event-gated) + `scripts/**` paths | Publish workflows fire on push, so the invariants must not be PR-only; the guard's own harness should gate PRs that touch it |
+| *(#391 fold)* Declarative init data | Decline `initData`; seeding stays imperative (SSOClient CRs + marketplace-ui's every-start ensures + controller bootstrap); retire the casdoor-export skill | Applications already have a stronger declarative layer (SSOClient CRs, continuous reconciliation); the org — asked at review — is created by marketplace-ui's idempotent every-start `ensureOrganization`, not the controller, and the org name is `CASDOOR_ORG_NAME` config a committed blob can't follow; `watchInterval`/`merge` re-apply races live writers; credentials are §5.7/#392 |

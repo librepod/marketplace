@@ -17,9 +17,12 @@ lifetime, which is an org-level Casdoor setting NOT managed by this repo:
 3. Raise the token/session expiry fields to the desired duration and Save.
 
 This is a one-time manual step per cluster. It is intentionally not codified:
-the `librepod` organization is created by the marketplace-ui first-run wizard
-with Casdoor's defaults (bcrypt passwords), and its session settings are not
-provisioned as code. To capture them reproducibly, use the `casdoor-export` flow.
+the `librepod` organization is created and re-ensured by marketplace-ui's
+onboarding (idempotent, on every server start), with Casdoor's defaults
+(bcrypt passwords), and its session settings are not provisioned as code.
+There is no export-to-repo flow — declarative seeding via chart `initData`
+was evaluated and declined (see the chart-4 upgrade design spec §5.8 under
+`docs/superpowers/specs/`).
 
 **Security note:** silent cross-app auto sign-in means anyone with an active
 Casdoor session on the network completes app logins with no re-auth. This is the

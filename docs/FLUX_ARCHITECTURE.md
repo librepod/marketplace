@@ -270,11 +270,20 @@ resources:
 - ingressroute.yaml
 
 configMapGenerator:
-- name: init-data
-  files:
-    - ./init_data.json
-  options:
-    disableNameSuffixHash: true
+  - name: casdoor-env
+    envs:
+      - casdoor.env
+    options:
+      disableNameSuffixHash: true
+
+# Stable name (no hash suffix): the HelmRelease values reference it as the
+# chart's initAdminPassword.existingSecret.
+secretGenerator:
+  - name: casdoor-init-admin
+    envs:
+      - init-admin.env
+    options:
+      disableNameSuffixHash: true
 
 patches:
 - path: ./patch-helmrelease.yaml
