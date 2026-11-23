@@ -1,16 +1,25 @@
 #!/usr/bin/env bash
 # Usage: bash scripts/check-version-lockstep.sh
-# Asserts the version-pin lockstep that app-bump automation only partially
-# maintains: Renovate covers apps/*/metadata.yaml and apps/*/base/ocirepository.yaml,
-# but the infrastructure/system-apps deploy pin is hand-maintained — a partial
-# bump strands every cluster on the old artifact with no failing signal.
+# Asserts the version-pin invariants of the two-PR release flow:
+#   PR 1 (app bump): apps/<app>/metadata.yaml + base/ocirepository.yaml +
+#     manifest changes — publishes the new artifact. Renovate automates this
+#     side. Drift against the deploy pin is LEGAL here (check 1 warns).
+#   PR 2 (rollout): the infrastructure/system-apps/<app>.yaml pin bump — this
+#     is what updates the fleet; it gets e2e + mandatory review (CODEOWNERS on
+#     infrastructure/system-apps/). Past the grace period the drift goes from
+#     warning to failure: the fleet is stranded on the old artifact. The weekly
+#     schedule on validate-apps.yaml re-runs this check so a forgotten PR 2
+#     fails even when no commit touches the watched paths.
 #
 #  1. Every infrastructure/system-apps/*.yaml OCIRepository pulling
 #     oci://ghcr.io/librepod/marketplace/apps/<app> must pin ref.tag equal to
 #     apps/<app>/metadata.yaml spec.version (published artifact tag == deployed
 #     tag). The app is resolved from the URL, not the filename (storage.yaml
 #     deploys nfs-provisioner). Entries pulling anything else (the catalog's
-#     oci://.../marketplace/catalog) are out of scope.
+#     oci://.../marketplace/catalog) are out of scope. Mismatches warn while
+#     the drift is younger than LOCKSTEP_GRACE_DAYS (default 14) and fail
+#     after; age = last commit touching the app's metadata.yaml, so CI needs
+#     fetch-depth: 0 (unknown age degrades to a warning, never a silent pass).
 #  2. Every apps/*/base/ocirepository.yaml carrying a "# lockstep:" comment must
 #     pin ref.tag equal to spec.version. Opt-in per app, only for charts tagged
 #     from the app release itself (chart version == app version, e.g. casdoor
@@ -34,6 +43,13 @@ bad() { echo "::error file=$1::$1: $2" >&2; STATUS=1; }
 shopt -s nullglob
 
 # --- 1. system-apps deploy pins == app metadata versions ----------------------
+GRACE="${LOCKSTEP_GRACE_DAYS:-14}"
+bump_age_days() { # <path> — days since the last commit touching it; empty = unknowable
+  local d
+  d=$(git log -1 --format=%cs -- "$1" 2>/dev/null) || return 0
+  [ -n "$d" ] || return 0
+  echo $(( ( $(date +%s) - $(date -d "$d" +%s) ) / 86400 ))
+}
 for f in infrastructure/system-apps/*.yaml; do
   rows=$(yq '. | select(.kind == "OCIRepository") | [.spec.url // "", .spec.ref.tag // ""] | @tsv' "$f" 2>/dev/null) \
     || { bad "$f" "cannot parse YAML"; continue; }
@@ -50,7 +66,13 @@ for f in infrastructure/system-apps/*.yaml; do
         if [ -z "$tag" ]; then
           bad "$f" "$app: OCIRepository has no ref.tag (apps/$app/metadata.yaml pins $version)"
         elif [ "$tag" != "$version" ]; then
-          bad "$f" "$app: deploys tag $tag but apps/$app/metadata.yaml pins $version — bump both in one commit or clusters stay on the old artifact"
+          age=$(bump_age_days "$m")
+          msg="$app: deploys tag $tag but apps/$app/metadata.yaml pins $version"
+          if [ -n "$age" ] && [ "$age" -gt "$GRACE" ]; then
+            bad "$f" "$msg — drift is ${age}d old (grace ${GRACE}d): ship the rollout PR (bump this pin) or revert the app bump"
+          else
+            echo "::warn file=$f::$msg — rollout PR due within ${GRACE}d${age:+ (drift age: ${age}d)}" >&2
+          fi
         fi
         ;;
     esac

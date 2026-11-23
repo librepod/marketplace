@@ -13,7 +13,7 @@ fail() { echo "FAIL: $1" >&2; exit 1; }
 # one unmarked independently-versioned chart (the fixture's EXPECTED list is
 # "charted", injected by run()).
 new_tree() {
-  T="$TMP/tree"; rm -rf "$T"
+  T="$TMP/tree"; rm -rf "$T"; EXTRA=
   mkdir -p "$T/scripts" "$T/infrastructure/system-apps" "$T/apps/foo" "$T/apps/nfs" "$T/apps/charted/base" "$T/apps/loose/base"
   cp "$REPO_ROOT/scripts/check-version-lockstep.sh" "$T/scripts/"
 
@@ -99,7 +99,7 @@ spec:
 EOF
 }
 
-run() { ( cd "$T" && EXPECTED_LOCKSTEP_APPS=charted bash scripts/check-version-lockstep.sh ) 2>"$TMP/err" >"$TMP/out" && RC=0 || RC=$?; }
+run() { ( cd "$T" && env EXPECTED_LOCKSTEP_APPS=charted ${EXTRA:-} bash scripts/check-version-lockstep.sh ) 2>"$TMP/err" >"$TMP/out" && RC=0 || RC=$?; }
 expect_fail() { # <label> <stderr pattern>
   local label="$1" pat="$2"
   run
@@ -107,17 +107,42 @@ expect_fail() { # <label> <stderr pattern>
   grep -q -- "$pat" "$TMP/err" || fail "$label: stderr lacks '$pat': $(cat "$TMP/err")"
 }
 edit() { yq -i "$1" "$T/$2"; }
+gitify() { # <iso-date> — fixture becomes a git repo; drift age reads from this commit
+  ( cd "$T" && git init -q && git -c user.name=t -c user.email=t@t add -A &&
+    GIT_COMMITTER_DATE="$1" GIT_AUTHOR_DATE="$1" git -c user.name=t -c user.email=t@t commit -qm fixture )
+}
 
 all_pins_match_passes() {
   new_tree; run
   [ "$RC" -eq 0 ] && grep -q '^OK$' "$TMP/out" || fail "all_pins_match: exit $RC: $(cat "$TMP/err")"
 }
-deploy_pin_drift_fails() {
+deploy_pin_drift_without_git_warns() {  # no history: age unknowable → warn, not fail
   new_tree; edit '.spec.ref.tag = "1.2.2"' infrastructure/system-apps/foo.yaml
-  expect_fail deploy_pin_drift "deploys tag 1.2.2.*pins 1.2.3"
+  run
+  [ "$RC" -eq 0 ] || fail "drift_without_git: expected exit 0, got $RC ($(cat "$TMP/err"))"
+  grep -q '::warn.*deploys tag 1.2.2.*pins 1.2.3' "$TMP/err" || fail "drift_without_git: no warn: $(cat "$TMP/err")"
+}
+deploy_pin_drift_fresh_warns() {  # PR-1 state: bump committed now → warn only
+  new_tree; edit '.spec.ref.tag = "1.2.2"' infrastructure/system-apps/foo.yaml
+  gitify "$(date --iso-8601=seconds)"
+  run
+  [ "$RC" -eq 0 ] || fail "drift_fresh: expected exit 0, got $RC ($(cat "$TMP/err"))"
+  grep -q '::warn' "$TMP/err" || fail "drift_fresh: no warn: $(cat "$TMP/err")"
+}
+deploy_pin_drift_stale_fails() {  # forgotten rollout: bump 300d old → past grace
+  new_tree; edit '.spec.ref.tag = "1.2.2"' infrastructure/system-apps/foo.yaml
+  gitify "$(date -d '-300 days' --iso-8601=seconds)"
+  expect_fail deploy_pin_drift_stale "deploys tag 1.2.2.*drift is [0-9]*d old"
+}
+grace_env_extends_window() {  # same 300d-old bump, grace raised → warn again
+  new_tree; edit '.spec.ref.tag = "1.2.2"' infrastructure/system-apps/foo.yaml
+  gitify "$(date -d '-300 days' --iso-8601=seconds)"
+  EXTRA="LOCKSTEP_GRACE_DAYS=400" run
+  [ "$RC" -eq 0 ] || fail "grace_env: expected exit 0, got $RC ($(cat "$TMP/err"))"
 }
 url_resolves_app_not_filename() {  # storage.yaml drift must name nfs, not storage
   new_tree; edit '.spec.ref.tag = "4.0.17"' infrastructure/system-apps/storage.yaml
+  gitify "$(date -d '-300 days' --iso-8601=seconds)"
   expect_fail url_resolves_app "nfs: deploys tag 4.0.17"
 }
 missing_app_dir_fails() {
@@ -154,7 +179,9 @@ marker_added_outside_list_fails() {  # new lockstep app must join the list
   expect_fail marker_added "or added"
 }
 
-for t in all_pins_match_passes deploy_pin_drift_fails url_resolves_app_not_filename \
+for t in all_pins_match_passes deploy_pin_drift_without_git_warns \
+         deploy_pin_drift_fresh_warns deploy_pin_drift_stale_fails \
+         grace_env_extends_window url_resolves_app_not_filename \
          missing_app_dir_fails missing_deploy_tag_fails unparseable_sysapp_fails \
          lockstep_chart_drift_fails unmarked_chart_drift_passes \
          marker_lost_from_listed_app_fails marker_added_outside_list_fails; do
