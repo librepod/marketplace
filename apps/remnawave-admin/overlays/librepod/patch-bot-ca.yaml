@@ -1,0 +1,64 @@
+# Strategic-merge patch: give the bot pod the same LibrePod root+intermediate
+# CA trust as the web-backend (see patch-web-backend-ca.yaml for the pattern).
+#
+# Why the bot needs it: API_BASE_URL is a user-facing setting (Apps →
+# remnawave-admin → Settings) and any https://<host>.<BASE_DOMAIN> value is
+# served by Traefik with the private LibrePod CA. The bot health-checks the
+# panel directly with that URL (GET /api/system/health); without the bundle
+# every check dies with `[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local
+# issuer certificate` and the bot reports the panel down forever. The default
+# (in-cluster http://remnawave.remnawave.svc.cluster.local) needs no TLS, but
+# a custom https URL must keep working — verified against a live install
+# 2026-11-23: same python image, same URL; handshake fails without the CA,
+# verifies with it.
+#
+# Telegram/MaxMind traffic (public CAs) keeps working: the merged bundle
+# retains the system CAs and SSL_CERT_FILE is read by OpenSSL default paths.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remnawave-admin-bot
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: merge-ca-bundle
+          image: alpine:3.19
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              cat /etc/ssl/certs/ca-certificates.crt > /mnt/merged-ca/ca-certificates.crt
+              echo "" >> /mnt/merged-ca/ca-certificates.crt
+              echo "# LibrePod Root CA" >> /mnt/merged-ca/ca-certificates.crt
+              cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+              echo "" >> /mnt/merged-ca/ca-certificates.crt
+              echo "# LibrePod Intermediate CA" >> /mnt/merged-ca/ca-certificates.crt
+              cat /mnt/root-ca/intermediate_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+          volumeMounts:
+            - name: root-ca-cert
+              mountPath: /mnt/root-ca
+              readOnly: true
+            - name: merged-ca-bundle
+              mountPath: /mnt/merged-ca
+      containers:
+        - name: remnawave-admin-bot
+          volumeMounts:
+            - name: merged-ca-bundle
+              mountPath: /etc/ssl/certs/ca-certificates.crt
+              subPath: ca-certificates.crt
+              readOnly: true
+          env:
+            - name: SSL_CERT_FILE
+              value: /etc/ssl/certs/ca-certificates.crt
+      volumes:
+        - name: root-ca-cert
+          secret:
+            secretName: step-certificates-certs
+            items:
+              - key: root_ca.crt
+                path: root_ca.crt
+              - key: intermediate_ca.crt
+                path: intermediate_ca.crt
+        - name: merged-ca-bundle
+          emptyDir: {}

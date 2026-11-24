@@ -34,5 +34,8 @@ patches:
 - path: ./patch-storage-class.yaml
 # Inject the LibrePod root+intermediate CA trust (init container + volumes)
 # into the web-backend pod so its server-side OIDC exchange to
-# id.${BASE_DOMAIN} passes TLS verification (see patch-web-backend-ca.yaml).
+# id.${BASE_DOMAIN} passes TLS verification (see patch-web-backend-ca.yaml),
+# and into the bot pod so a custom https API_BASE_URL (Traefik, private CA)
+# verifies too (see patch-bot-ca.yaml).
 - path: ./patch-web-backend-ca.yaml
+- path: ./patch-bot-ca.yaml

@@ -13,8 +13,9 @@
 # httpx/_config.py), and OpenSSL's default verify paths read it too, so
 # aiogram/aiohttp (Telegram, public CAs) keep working off the same bundle.
 #
-# Only the web-backend is patched: the OIDC flow lives there; the frontend is
-# static files and the bot never talks to id.${BASE_DOMAIN}.
+# The frontend is static files — no CA trust needed. The bot gets the same
+# treatment separately (patch-bot-ca.yaml): it talks to id.${BASE_DOMAIN}
+# never, but a custom https API_BASE_URL (private CA) must verify.
 #
 # Composes with the tailscale component's install-time patch on this same
 # Deployment (librepod.org/component-target): distinct container/volume/
