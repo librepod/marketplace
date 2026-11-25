@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: synch
+
+resources:
+- ../../base
+- ingressroute.yaml
+- ssoclient.yaml
+- externalsecret-ca.yaml
+
+images:
+# Upstream publishes no version tags: ghcr.io/hjinco/synch-api has only
+# `latest` and `sha-<full-commit-SHA>` tags, built per push to main (release
+# commits do not reliably get an image). Pin rule: the newest sha-* build whose
+# commit date is at/below the release date of the version advertised in
+# metadata.yaml spec.version — move BOTH in the same change.
+# sha-6f1332ad... = main commit 2026-11-16, newest build before the 0.5.7
+# release (published 2026-11-17). spec.version = 0.5.7.
+- name: ghcr.io/hjinco/synch-api
+  newTag: sha-6f1332ad9dd3aae89a12606a85815e8fe168e789
+
+patches:
+- path: ./patch-storage-class.yaml
+  target:
+    kind: PersistentVolumeClaim
+- path: ./deployment-ca-patch.yaml
+  target:
+    kind: Deployment

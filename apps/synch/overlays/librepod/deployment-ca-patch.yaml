@@ -1,0 +1,49 @@
+# Trust the LibrePod private CA for synch's server-side HTTPS calls to
+# https://id.<BASE_DOMAIN> — OIDC discovery, token exchange, userinfo (docs/
+# sso-app-author-guide.md §4). Without it those calls fail with
+# UNABLE_TO_GET_ISSUER_CERT_LOCALLY and SSO sign-in returns 503 OIDC_UNAVAILABLE.
+#
+# An alpine init container fuses the system CA bundle with the LibrePod root
+# CA into an emptyDir mounted over the system bundle path. synch is a Node.js
+# app (node fetch ignores SSL_CERT_FILE), so NODE_EXTRA_CA_CERTS is set
+# alongside SSL_CERT_FILE (both live in base/synch.env per the guide).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: synch
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: merge-ca-bundle
+          image: alpine:3.19
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              cat /etc/ssl/certs/ca-certificates.crt > /mnt/merged-ca/ca-certificates.crt
+              echo "" >> /mnt/merged-ca/ca-certificates.crt
+              echo "# LibrePod Root CA" >> /mnt/merged-ca/ca-certificates.crt
+              cat /mnt/root-ca/root_ca.crt >> /mnt/merged-ca/ca-certificates.crt
+          volumeMounts:
+            - name: root-ca-cert
+              mountPath: /mnt/root-ca
+              readOnly: true
+            - name: merged-ca-bundle
+              mountPath: /mnt/merged-ca
+      containers:
+        - name: synch
+          volumeMounts:
+            - name: merged-ca-bundle
+              mountPath: /etc/ssl/certs/ca-certificates.crt
+              subPath: ca-certificates.crt
+              readOnly: true
+      volumes:
+        - name: root-ca-cert
+          secret:
+            secretName: step-certificates-certs
+            items:
+              - key: root_ca.crt
+                path: root_ca.crt
+        - name: merged-ca-bundle
+          emptyDir: {}

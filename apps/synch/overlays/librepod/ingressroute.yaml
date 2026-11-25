@@ -1,0 +1,21 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: synch
+  annotations:
+    # synch serves no landing page at / (it 404s); /signin is the only
+    # browser-facing door. Per the launch-path policy this is the sanctioned
+    # "path annotation" case — re-check the path still serves on every
+    # app-version bump.
+    librepod.org/launch: "/signin"
+spec:
+  entryPoints:
+  - web
+  - websecure
+  routes:
+  - kind: Rule
+    match: Host(`synch.${BASE_DOMAIN:=libre.pod}`)
+    priority: 1
+    services:
+    - name: synch
+      port: 80
