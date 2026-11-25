@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: synch
+spec:
+  replicas: 1
+  strategy:
+    # SQLite (app DB + one file per vault) on an NFS-backed PVC: a RollingUpdate
+    # surge pod would put two writers on the same database files.
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: synch
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: synch
+    spec:
+      containers:
+        - name: synch
+          # Tag is set in the overlay (images[].newTag) — upstream publishes no
+          # version tags, only sha-<commit> builds.
+          image: ghcr.io/hjinco/synch-api
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8787
+          envFrom:
+            - configMapRef:
+                name: synch
+            # Controller-issued OIDC credentials; keys are named to match synch's
+            # env vars (see overlays/librepod/ssoclient.yaml). synch is fail-closed
+            # on OIDC: all three arrive together from this one Secret.
+            - secretRef:
+                name: synch-sso
+            # LAST: install settings (incl. allowCustom) override the .env defaults.
+            - secretRef:
+                name: synch-settings
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: synch-data

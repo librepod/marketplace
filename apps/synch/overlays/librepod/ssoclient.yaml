@@ -1,0 +1,33 @@
+# The casdoor-sso-controller reconciles this CR: it provisions the Casdoor
+# OIDC Application (clientId "synch") and writes the client id/secret + issuer
+# into Secret/synch-sso in this namespace. The output keys are named to match
+# synch's env vars so the Deployment can envFrom the Secret directly:
+#   OIDC_DISCOVERY_URL  <- issuer (full discovery URL, exactly what synch wants)
+#   OIDC_CLIENT_ID / OIDC_CLIENT_SECRET
+# synch registers the redirect URI {PUBLIC_URL}/api/auth/callback/oidc on its
+# sign-in flow, so this list must keep matching PUBLIC_URL + that path.
+# tokenFormat JWT-Standard (not plain JWT): spec-compliant OIDC claims only.
+# NOTE: synch rejects sign-ins whose email the provider hasn't verified
+# (email_verified claim). If Casdoor users have unverified emails, sign-in
+# fails with an explanatory message; password sign-in (gated by
+# AUTH_ALLOWED_EMAILS) remains available as a fallback.
+apiVersion: marketplace.librepod.org/v1alpha1
+kind: SSOClient
+metadata:
+  name: synch-sso
+  namespace: synch
+spec:
+  clientId: synch
+  organization: librepod
+  redirectUris:
+    - "https://synch.${BASE_DOMAIN}/api/auth/callback/oidc"
+  grantTypes: [authorization_code, refresh_token]
+  tokenFormat: JWT-Standard
+  expireInHours: 168
+  output:
+    secretName: synch-sso
+    keys:
+      clientId: OIDC_CLIENT_ID
+      clientSecret: OIDC_CLIENT_SECRET
+      issuer: OIDC_DISCOVERY_URL
+  casdoorPolicy: retain

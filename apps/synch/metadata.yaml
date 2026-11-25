@@ -1,0 +1,102 @@
+apiVersion: marketplace/v1
+kind: AppDefinition
+metadata:
+  name: synch
+spec:
+  displayName: "Synch"
+  description: "End-to-end encrypted sync for Obsidian vaults"
+  icon: "https://synch.run/favicon.ico"
+  category: "Productivity"
+  website: "https://synch.run"
+
+  # The upstream app version the pinned image was built at/before — see the
+  # images[] comment in overlays/librepod/kustomization.yaml for the pin rule
+  # (upstream publishes no version tags, only sha-<commit> builds). Renovate
+  # watches this field via github-releases; when it opens a bump PR, re-pin
+  # the image newTag in that same PR per the pin rule.
+  # renovate: datasource=github-releases depName=hjinco/synch
+  version: "0.5.7"
+
+  source:
+    type: oci-kustomize
+    url: "oci://ghcr.io/librepod/marketplace/apps/synch"
+    path: ./overlays/librepod
+
+  settings:
+    # Upstream supports env vars beyond what this app pins (S3 blob storage,
+    # REQUEST_TIMEOUT_MS, CORS_ORIGIN, OIDC_SCOPES, ...) — surface the lever.
+    allowCustom: true
+    items:
+      - name: AUTH_ALLOWED_EMAILS
+        label: "Allowed email addresses"
+        description: "Comma-separated list of the exact email addresses allowed to create password accounts (e.g. you@example.com,family@example.com). The only gate on password sign-up, which stays enabled alongside SSO as a fallback."
+        required: true
+      - name: BETTER_AUTH_SECRET
+        sensitive: true
+        generate:
+          length: 64
+      - name: SYNC_TOKEN_SECRET
+        sensitive: true
+        generate:
+          length: 64
+
+  dependencies:
+    required:
+      - kind: IngressController
+        description: "Traefik (provided by traefik app)"
+      - kind: StorageClass
+        description: "nfs-client (provided by nfs-provisioner app)"
+      - kind: SSOProvider
+        description: "Casdoor SSO (provided by casdoor-sso-controller)"
+
+  templates:
+    source: |
+      apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: marketplace-synch
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "synch"
+      spec:
+        interval: 10m
+        url: oci://ghcr.io/librepod/marketplace/apps/synch
+        ref:
+          tag: "__VERSION__"
+    release: |
+      apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: marketplace-synch
+        namespace: flux-system
+        labels:
+          marketplace.io/managed: "true"
+          marketplace.io/app: "synch"
+      spec:
+        dependsOn:
+          - name: traefik
+          - name: storage
+          # The Flux Kustomization that ships the SSOClient CRD + controller —
+          # NOT "casdoor" (no such Kustomization exists; hard-fails
+          # DependencyNotReady).
+          - name: casdoor-sso-controller
+        force: true
+        interval: 1h
+        retryInterval: 2m
+        timeout: 5m
+        sourceRef:
+          kind: OCIRepository
+          name: marketplace-synch
+        path: ./overlays/librepod
+        prune: true
+        wait: true
+        postBuild:
+          substitute:
+            BASE_DOMAIN: "${BASE_DOMAIN}"
+    kustomization: |
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      resources:
+        - source.yaml
+        - release.yaml
