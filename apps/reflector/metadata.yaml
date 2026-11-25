@@ -11,7 +11,7 @@ spec:
 
   # renovate: datasource=docker depName=ghcr.io/emberstack/helm-charts/reflector
   # serge: notesRepo=emberstack/kubernetes-reflector
-  version: "10.0.0"
+  version: "10.0.81"
 
   source:
     type: oci-kustomize
