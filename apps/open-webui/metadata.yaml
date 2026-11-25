@@ -11,7 +11,7 @@ spec:
 
   # renovate: datasource=docker depName=ghcr.io/open-webui/open-webui
   # serge: notesRepo=open-webui/open-webui
-  version: "0.10.2"
+  version: "v0.13.5"
 
   source:
     type: oci-kustomize
