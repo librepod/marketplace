@@ -186,7 +186,10 @@ export class CasdoorAdminService {
     return (await this.getJson(session, `/api/get-user?id=${id}`)) as { name: string } | null;
   }
 
-  /** A personal user, `<name>@<base-domain>`: admin of the platform org, not of Casdoor. */
+  /** A personal user, `<name>@<base-domain>`: admin of the platform org, not of Casdoor.
+   * The email is operator-assigned (sign-up is closed), so the platform vouches for it:
+   * strict OIDC consumers reject an IdP that doesn't assert `email_verified` — Casdoor
+   * omits the claim from the ID token while the user flag is false (omitempty). */
   async addUser(session: CasdoorSession, name: string, password: string, groups: string[] = []): Promise<void> {
     await this.postJson(session, '/api/add-user', {
       owner: this.org,
@@ -196,8 +199,31 @@ export class CasdoorAdminService {
       password,
       isAdmin: true,
       type: 'normal-user',
+      emailVerified: true,
       groups,
     });
+  }
+
+  /** Converges a user created before emails were marked verified at creation. A no-op when
+   * the user is gone (prepareCasdoor skips deleted accounts) or already verified. */
+  async ensureEmailVerified(
+    session: CasdoorSession,
+    name: string,
+  ): Promise<void> {
+    const id = `${encodeURIComponent(this.org)}/${encodeURIComponent(name)}`;
+    const user = (await this.getJson(session, `/api/get-user?id=${id}`)) as {
+      emailVerified?: boolean;
+    } | null;
+    if (user && !user.emailVerified) {
+      await this.postJson(
+        session,
+        `/api/update-user?id=${id}&columns=emailVerified`,
+        {
+          ...user,
+          emailVerified: true,
+        },
+      );
+    }
   }
 
   /** Casdoor's admin needs no old password to set another user's. */
