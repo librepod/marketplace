@@ -11,7 +11,7 @@ spec:
 
   # renovate: datasource=helm depName=external-secrets registryUrl=https://charts.external-secrets.io
   # serge: notesRepo=external-secrets/external-secrets
-  version: "2.11.0"
+  version: "2.15.0"
 
   source:
     type: oci-kustomize
