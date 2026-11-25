@@ -11,7 +11,7 @@ spec:
 
   # renovate: datasource=docker depName=litellm/litellm
   # serge: notesRepo=BerriAI/litellm
-  version: "v1.106.3"
+  version: "v1.111.0"
 
   source:
     type: oci-kustomize
