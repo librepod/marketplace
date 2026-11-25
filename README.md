@@ -327,7 +327,6 @@ spec:
 | ✍️ obsidian-livesync | Obsidian note sync via CouchDB |
 | 🧠 litellm | LLM proxy gateway |
 | 📅 baikal | CalDAV/CardDAV server |
-| 🎉 happy-server | Fun web service |
 
 ---
 
