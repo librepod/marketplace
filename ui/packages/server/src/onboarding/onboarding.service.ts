@@ -119,7 +119,12 @@ export class OnboardingService implements OnModuleInit, OnModuleDestroy {
     await this.casdoor.ensureGroup(session);
     const { account } = await this.stored(this.store.record());
     // The account may have been deleted from Casdoor by hand: skip, don't retry forever.
-    if (account) await this.casdoor.ensureInGroup(session, account);
+    // emailVerified converges accounts created before the platform asserted it — strict
+    // OIDC apps (synch, anything better-auth/openidconnect-based) reject the missing claim.
+    if (account) {
+      await this.casdoor.ensureInGroup(session, account);
+      await this.casdoor.ensureEmailVerified(session, account);
+    }
     return session;
   }
 

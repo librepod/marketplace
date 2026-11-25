@@ -182,6 +182,51 @@ describe('CasdoorAdminService', () => {
       });
     });
 
+    it('addUser marks the operator-assigned email verified — strict OIDC apps reject a missing claim', async () => {
+      const calls = recordFetch(() => jsonRes({ status: 'ok' }));
+      await new CasdoorAdminService().addUser(session, 'alex', 'personal-pass-12');
+      // Casdoor omits email_verified from the ID token while the flag is false
+      // (omitempty), and consumers like better-auth read that as "unverified".
+      // The platform assigns these addresses; it is the verifying authority.
+      expect(JSON.parse(calls[0].body!)).toMatchObject({ emailVerified: true });
+    });
+
+    it('ensureEmailVerified converges an unverified account via update-user columns=emailVerified', async () => {
+      const user = {
+        owner: 'librepod',
+        name: 'owner',
+        email: 'owner@libre.pod',
+        groups: ['librepod/family'],
+        emailVerified: false,
+      };
+      const calls = recordFetch((url) =>
+        jsonRes({
+          status: 'ok',
+          data: url.includes('get-user') ? user : undefined,
+        }),
+      );
+      await new CasdoorAdminService().ensureEmailVerified(session, 'owner');
+      expect(calls[1].url).toBe(
+        '/api/update-user?id=librepod/owner&columns=emailVerified',
+      );
+      expect(JSON.parse(calls[1].body!)).toEqual({
+        ...user,
+        emailVerified: true,
+      });
+    });
+
+    it('ensureEmailVerified makes no update when already verified or the user is gone', async () => {
+      let calls = recordFetch(() =>
+        jsonRes({ status: 'ok', data: { name: 'owner', emailVerified: true } }),
+      );
+      await new CasdoorAdminService().ensureEmailVerified(session, 'owner');
+      expect(calls).toHaveLength(1);
+      vi.restoreAllMocks();
+      calls = recordFetch(() => jsonRes({ status: 'ok', data: null }));
+      await new CasdoorAdminService().ensureEmailVerified(session, 'ghost');
+      expect(calls).toHaveLength(1);
+    });
+
     it('setUserPassword needs no old password (the caller is Casdoor\'s admin)', async () => {
       const calls = recordFetch(() => jsonRes({ status: 'ok' }));
       await new CasdoorAdminService().setUserPassword(session, 'alex', 'brand-new-pass-12');

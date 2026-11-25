@@ -8,9 +8,12 @@
 # sign-in flow, so this list must keep matching PUBLIC_URL + that path.
 # tokenFormat JWT-Standard (not plain JWT): spec-compliant OIDC claims only.
 # NOTE: synch rejects sign-ins whose email the provider hasn't verified
-# (email_verified claim). If Casdoor users have unverified emails, sign-in
-# fails with an explanatory message; password sign-in (gated by
-# AUTH_ALLOWED_EMAILS) remains available as a fallback.
+# (email_verified claim) — Casdoor omits the claim entirely while a user's
+# emailVerified flag is false (omitempty). The platform marks accounts
+# emailVerified at creation (onboarding addUser) and converges the recorded
+# account on every marketplace-ui start, so SSO works out of the box; only
+# users hand-created in the Casdoor admin UI could still carry an unverified
+# email. Password sign-in (gated by AUTH_ALLOWED_EMAILS) remains as a fallback.
 apiVersion: marketplace.librepod.org/v1alpha1
 kind: SSOClient
 metadata:

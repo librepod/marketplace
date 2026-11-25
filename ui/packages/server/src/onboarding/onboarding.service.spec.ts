@@ -266,6 +266,12 @@ describe('OnboardingService', () => {
       expect(t.state.admins.has('owner')).toBe(true);
     });
 
+    it('prepareCasdoor converges the recorded account to a verified email (strict OIDC apps need the claim)', async () => {
+      const t = await claimedWithAccount('owner');
+      await t.service.prepareCasdoor();
+      expect(t.casdoor.ensureEmailVerified).toHaveBeenCalledWith(expect.anything(), 'owner');
+    });
+
     it('prepareCasdoor resolves when the recorded account was deleted from Casdoor', async () => {
       const t = await claimedWithAccount('owner');
       t.state.users.delete('owner');

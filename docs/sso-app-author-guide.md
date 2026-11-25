@@ -170,6 +170,20 @@ The Secret name is `spec.output.secretName` and the keys are the
 (wherever it lives) pointing at the same callback URL as `spec.redirectUris` —
 OIDC requires them to match.
 
+## Verified emails: the platform asserts `email_verified`
+
+Strict OIDC consumers (better-auth apps like synch; Rust's `openidconnect` crate)
+reject sign-ins unless the ID token asserts `email_verified: true` — and Casdoor
+**omits the claim entirely** while a user's `emailVerified` flag is false (Go
+`omitempty` on the claim struct), which reads as "unverified" downstream. No
+Casdoor mail-verification flow can ever set the flag here (sign-up is closed;
+addresses are operator-assigned `<name>@<base-domain>`), so the platform is the
+verifying authority by construction: onboarding creates users with
+`emailVerified: true` and `prepareCasdoor()` converges the recorded account on
+every marketplace-ui start. Users created by hand in the Casdoor admin UI are
+the one gap — mark them verified individually (synch's self-hosting docs
+prescribe the same for Pocket ID's `EMAILS_VERIFIED`).
+
 ## 3. Order your app after `casdoor-sso-controller`
 
 Add a Flux dependency so your app's Kustomization reconciles after the CRD and
