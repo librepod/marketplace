@@ -19,7 +19,11 @@
         // datasource + depName are required; registryUrl + extractVersion are
         // optional trailing fields (used by the classic-helm and github-releases
         // apps). Order after depName is fixed: [registryUrl] then [extractVersion].
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: registryUrl=(?<registryUrl>\\S+))?(?: extractVersion=(?<extractVersion>\\S+))?\\s+version:\\s*\"?(?<currentValue>[^\"\\s]+)\"?",
+        // (?:#[^\n]*\s+)* lets full comment lines sit between the marker and
+        // version: — the serge notes bot stamps "# serge: ..." directly after
+        // the marker, which broke the contiguous match for 22 of 32 apps
+        // (silently: renovate reads a non-match as "nothing to do").
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: registryUrl=(?<registryUrl>\\S+))?(?: extractVersion=(?<extractVersion>\\S+))?\\s+(?:#[^\\n]*\\s+)*version:\\s*\"?(?<currentValue>[^\"\\s]+)\"?",
       ],
     },
   ],
