@@ -11,7 +11,7 @@ spec:
 
   # renovate: datasource=docker depName=vaultwarden/server
   # serge: notesRepo=dani-garcia/vaultwarden
-  version: "1.37.4"
+  version: "1.37.5"
 
   source:
     type: oci-kustomize
