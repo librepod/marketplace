@@ -11,7 +11,7 @@ resources:
 
 images:
 - name: ghcr.io/cyxou/collie-lead
-  newTag: 1.29.1
+  newTag: 1.30.1
 
 patches:
 - path: ./patch-storage-class.yaml
