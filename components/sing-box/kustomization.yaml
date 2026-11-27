@@ -17,7 +17,9 @@ patches:
   # client is pointed at it. Point the app container (containers/0) at the
   # sidecar so its HTTP clients (Bun, Go, curl — not Node's fetch, which needs
   # NODE_USE_ENV_PROXY=1 app-side) egress via sing-box; cluster-local traffic
-  # stays direct via NO_PROXY.
+  # stays direct via NO_PROXY. The device's own domain is cluster-local too:
+  # the SSO server and sibling apps answer on *.<BASE_DOMAIN>, but NO_PROXY
+  # matches on the hostname and a tunnel's far end cannot reach them.
   # ponytail: append-only — JSON Patch has no upsert; an app defining these
   # env names itself, or lacking an env list, fails the component build (caught
   # by check-app-components.sh).
@@ -39,4 +41,4 @@ patches:
         path: /spec/template/spec/containers/0/env/-
         value:
           name: NO_PROXY
-          value: localhost,127.0.0.1,.svc.cluster.local,.cluster.local,10.42.0.0/16,10.43.0.0/16
+          value: localhost,127.0.0.1,.svc.cluster.local,.cluster.local,10.42.0.0/16,10.43.0.0/16,.${BASE_DOMAIN:=libre.pod}

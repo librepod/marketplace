@@ -2,6 +2,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: litellm
+  # Target for the shared components offered in metadata.yaml (sing-box VPN
+  # egress): the component patches its sidecar and proxy env into this pod.
+  annotations:
+    librepod.org/component-target: "true"
 spec:
   replicas: 1
   strategy:
