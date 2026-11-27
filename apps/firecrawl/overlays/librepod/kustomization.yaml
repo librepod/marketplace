@@ -9,7 +9,7 @@ resources:
 
 images:
 - name: ghcr.io/firecrawl/firecrawl
-  newTag: "2.11.162" # renovate: datasource=docker depName=ghcr.io/firecrawl/firecrawl
+  newTag: "2.11.872" # renovate: datasource=docker depName=ghcr.io/firecrawl/firecrawl
 # playwright-service and nuq-postgres are only ever published as :latest
 # (rebuilt on every upstream push to main) — digest-pinned for
 # reproducibility; renovate refreshes the digests.
