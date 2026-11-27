@@ -10,7 +10,7 @@ spec:
   website: "https://firefly-iii.org/"
 
   # renovate: datasource=docker depName=fireflyiii/core extractVersion=^version-(?<version>.+)$
-  version: "6.7.9"   # tracks fireflyiii/core; postgres/curl pins move by hand
+  version: "6.7.12"   # tracks fireflyiii/core; postgres/curl pins move by hand
 
   source:
     type: oci-kustomize
