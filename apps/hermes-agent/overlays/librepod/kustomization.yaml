@@ -7,6 +7,7 @@ resources:
 - ../../base
 - ingressroute.yaml
 - ssoclient.yaml
+- externalsecret-ca.yaml
 
 # Image = vetted dependency toolkit only; which hermes runs is decided by the
 # PVC checkout, never the image (see metadata.yaml version note) — so bumping
@@ -20,3 +21,4 @@ patches:
 - path: ./patch-storage-class.yaml
   target:
     kind: PersistentVolumeClaim
+- path: ./deployment-ca-patch.yaml
