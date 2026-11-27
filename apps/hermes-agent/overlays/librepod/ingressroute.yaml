@@ -6,13 +6,19 @@ apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: hermes-agent
+  # The app is served at hermes.<BASE_DOMAIN>, not under its own name. The
+  # marketplace computes the launch link from the app name unless a route
+  # carries the launch annotation, so this route declares the host root: the
+  # tile then follows its real Host rule instead of the old hermes-agent host.
+  annotations:
+    librepod.org/launch: "/"
 spec:
   entryPoints:
   - web
   - websecure
   routes:
   - kind: Rule
-    match: Host(`hermes-agent.${BASE_DOMAIN:=libre.pod}`)
+    match: Host(`hermes.${BASE_DOMAIN:=libre.pod}`)
     priority: 1
     services:
     - name: hermes-agent
