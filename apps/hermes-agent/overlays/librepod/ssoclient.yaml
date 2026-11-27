@@ -21,7 +21,7 @@ spec:
   clientId: hermes-agent          # Casdoor app name (id=admin/hermes-agent) AND OIDC client_id
   organization: librepod          # platform org (created at bootstrap); login users must live here
   redirectUris:
-    - "https://hermes-agent.${BASE_DOMAIN}/auth/callback"
+    - "https://hermes.${BASE_DOMAIN}/auth/callback"
   # scopes intentionally omitted: spec.scopes is a no-op on the Casdoor
   # Application (hermes requests openid profile email itself).
   grantTypes: [authorization_code, refresh_token]
