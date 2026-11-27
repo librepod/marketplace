@@ -11,4 +11,4 @@ spec:
     # release, so chart version == app version — this tag must move in the same
     # commit as spec.version in apps/casdoor/metadata.yaml (enforced by
     # scripts/check-version-lockstep.sh).
-    tag: "4.29.0"
+    tag: "4.32.0"
