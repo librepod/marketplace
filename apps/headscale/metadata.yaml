@@ -11,7 +11,7 @@ spec:
 
   # renovate: datasource=docker depName=headscale/headscale
   # serge: notesRepo=juanfont/headscale
-  version: "v0.28.0"
+  version: "v0.29.8"
 
   source:
     type: oci-kustomize
